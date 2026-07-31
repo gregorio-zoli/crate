@@ -529,7 +529,7 @@ label.f{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.7p
 /* ==========================================================
    1. STATO
    ========================================================== */
-const APP_VER='36';
+const APP_VER='37';
 const LS='crate.v1', LSK='crate.lfmkey', LSG='crate.gh', LSS='crate.lastsync', LSP='crate.prefs';
 const LSSP='crate.spot';   /* accesso a Spotify: resta su QUESTO dispositivo */
 let DB={albums:[],deleted:[],cfg:{}};
@@ -888,6 +888,16 @@ let spotAttesaFino=0,spotRallenta=false,spotCode=0;
 /* azzero solo i contatori del giro: una sospensione vera non si cancella
    perche' ho ricominciato da capo, dura quanto dice Spotify */
 function spotRiposa(){spotRallenta=false;spotCode=0}
+/* Se mi rifiuta tre volte di fila con attese cortissime, non e' un intoppo:
+   e' un no. Continuare a riprovare ogni due secondi tiene occupata l'app,
+   non collega niente e allunga la penalita'. Quindi lo metto da parte per un
+   quarto d'ora e lavoro con le altre fonti, che e' quello che vuoi. */
+const SPOT_TREGUA=15*60*1000;
+function spotArrenditi(){
+  spotAttesaFino=Math.max(spotAttesaFino,Date.now()+SPOT_TREGUA);
+  SPOT.attesa=spotAttesaFino;SPOT.rinuncia=Date.now();spotSalva();
+  if(typeof renderSpot==='function')renderSpot();
+}
 function spotFinePausa(){
   if(!spotInCoda())return'';
   const s=spotSecondi();
@@ -895,7 +905,12 @@ function spotFinePausa(){
   if(s<5400)return Math.round(s/60)+' minuti';
   return Math.round(s/360)/10+' ore';
 }
-function spotInCoda(){return Date.now()<spotAttesaFino}
+function spotInCoda(){
+  if(spotAttesaFino&&Date.now()>=spotAttesaFino&&SPOT.rinuncia){
+    SPOT.rinuncia=0;SPOT.attesa=0;spotSalva();   /* tregua finita: si ricomincia */
+  }
+  return Date.now()<spotAttesaFino;
+}
 function spotSecondi(){return Math.max(0,Math.ceil((spotAttesaFino-Date.now())/1000))}
 function erroreCoda(sec){const e=new Error('Spotify in coda per '+sec+'s');e.coda=sec;return e}
 async function spotChiama(percorso,tentativo){
@@ -915,9 +930,12 @@ async function spotChiama(percorso,tentativo){
     spotAttesaFino=Date.now()+detto*1000;
     SPOT.attesa=spotAttesaFino;spotSalva();
     spotRallenta=true;
+    /* tre rifiuti di fila: smetto di insistere per un quarto d'ora */
+    if(spotCode>=3)spotArrenditi();
     if(typeof renderSpot==='function')renderSpot();
-    throw erroreCoda(detto);
+    throw erroreCoda(spotSecondi());
   }
+  if(r.ok)spotCode=0;   /* ha risposto: i rifiuti di prima non contano piu' */
   if(r.status===404)return null;
   /* Se si lamenta di un parametro opzionale, riprovo senza. Mi ha gia'
      fregato due volte (market, poi limit): la terza me la risparmio. */
@@ -937,6 +955,7 @@ async function spotChiama(percorso,tentativo){
 }
 /* aspetto che scada la coda: e' quello che Spotify chiede di fare */
 async function aspettaSpotify(dillo){
+  if(SPOT.rinuncia&&spotInCoda())return false;   /* ho gia' deciso di lasciarlo stare */
   while(spotInCoda()){
     if(spotStop)return false;
     if(dillo)dillo('Spotify mi ha messo in coda: aspetto '+spotSecondi()+'s');
@@ -1737,10 +1756,13 @@ async function bulkSpotify(mode){
     if(spotStop)break;
     stato(a,'');
     bar.style.width=Math.round(done/list.length*100)+'%';
-    /* Un'attesa breve la faccio volentieri. Una lunga no: significa che
-       Spotify ha chiuso i rubinetti, e a quel punto conviene lavorare con le
-       altre fonti invece di guardare un cronometro. */
-    if(spotInCoda()&&spotSecondi()<=8){await aspettaSpotify(m=>stato(a,m));if(spotStop)break}
+    /* Un'attesa breve la faccio volentieri, ma UNA volta sola per giro: se
+       mi ha gia' rifiutato piu' d'una richiesta, aspettare due secondi alla
+       volta per ogni album e' solo un modo elaborato di perdere tempo. */
+    if(spotInCoda()&&spotSecondi()<=8&&spotCode<2){
+      await aspettaSpotify(m=>stato(a,m));
+      if(spotStop)break;
+    }
     /* Con l'account collegato non serve aspettare nessuno: Spotify concede
        250 richieste ogni 30 secondi. Senza account, Odesli e' la fonte che
        azzecca di piu', e allora il suo credito lo aspetto. */
@@ -1779,11 +1801,11 @@ async function bulkSpotify(mode){
   resolveListen.soloLink=false;
   renderSpotOra();
   const perse=[...motivi.entries()].sort((x,y)=>y[1]-x[1]).slice(0,6);
-  const inCoda=spotCode>2?'<div class="tiny" style="margin-top:8px;color:var(--acc)">'+
-    'Spotify mi ha messo in coda '+spotCode+' volte e ho lavorato soprattutto con le altre '+
-    'fonti. Il tetto di richieste per le app in modalit&agrave; sviluppo &egrave; basso e si '+
-    'riapre da solo: <b>rilancia fra dieci minuti</b> e quelli rimasti dovrebbero collegarsi. '+
-    'Quelli gi&agrave; fatti non li rifa.</div>':'';
+  const inCoda=spotCode>=2?'<div class="tiny" style="margin-top:8px;color:var(--acc)">'+
+    'Spotify mi ha rifiutato '+spotCode+' richieste, quindi ho lavorato con archivio, '+
+    'Wikidata e Odesli.'+(spotInCoda()?' L&rsquo;ho messo da parte per altri '+spotFinePausa()+
+    ': <b>rilancia dopo</b> e quelli rimasti dovrebbero collegarsi.':'')+
+    ' Quelli gi&agrave; fatti non li rifa.</div>':'';
   txt.innerHTML='<b>'+(spotStop?'Fermato.':'Finito.')+'</b> '+presi+' collegati a Spotify'+
     (altrove?', '+altrove+' solo su altre piattaforme':'')+
     (done-presi-altrove>0?', '+(done-presi-altrove)+' senza collegamento':'')+'.'+
@@ -4152,11 +4174,14 @@ function renderSpot(){
   const out=document.getElementById('spotOut');
   if(out)out.style.display=spotCollegato()?'':'none';
   const g=spotGiorni();
+  const mia=SPOT.rinuncia&&spotInCoda();
   const pausa=spotInCoda()?'<div style="margin-top:6px;color:var(--acc)">'+
-    '<b>Spotify mi ha sospeso</b> per altri '+spotFinePausa()+'. Non &egrave; un guasto e non '+
-    'devi fare niente: le app in modalit&agrave; sviluppo hanno un tetto basso, e ogni richiesta '+
-    'mandata prima della scadenza allunga la sospensione &mdash; quindi sto fermo. '+
-    'Nel frattempo uso archivio, Wikidata e Odesli.</div>':'';
+    '<b>Spotify in pausa</b> per altri '+spotFinePausa()+'.'+
+    (mia?' Mi ha rifiutato tre richieste di fila, quindi ho smesso di insistere: '+
+         'continuare a bussare allunga la sospensione e non collega niente.'
+        :' Ogni richiesta mandata prima della scadenza allungherebbe l\'attesa, quindi sto fermo.')+
+    ' Non devi fare niente e non si perde nulla: nel frattempo l\'app usa archivio, '+
+    'Wikidata e Odesli. Riprende da sola.</div>':'';
   st.innerHTML=pausa+spotCollegato()
     ? '<span style="color:var(--ok,#4ade80)">&#10003; collegato</span>'+
       (SPOT.nome?' come <b>'+esc(SPOT.nome)+'</b>':'')+
