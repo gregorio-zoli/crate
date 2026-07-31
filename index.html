@@ -14,9 +14,11 @@
 <style>
 .piatt{display:flex;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line)}
 .piatt.off{opacity:.45}
-.frec{width:34px;height:34px;flex:none;border:1px solid var(--line);border-radius:9px;
+/* nome lungo di proposito: ".frec" era gia' delle freccine dei filtri, e
+   rubandoglielo le avevo trasformate in due quadrati vuoti */
+.piatt .frecPiatt{width:34px;height:34px;flex:none;border:1px solid var(--line);border-radius:9px;
   background:transparent;color:var(--fg);font-size:11px;line-height:1;cursor:pointer;padding:0}
-.frec[disabled]{opacity:.25}
+.piatt .frecPiatt[disabled]{opacity:.25}
 :root{
   --bg:#0d0d10; --bg2:#14141a; --bg3:#1b1b23; --line:#2a2a35;
   --fg:#eceaf0; --fg2:#9b98a8; --fg3:#6b6878;
@@ -43,6 +45,9 @@ header{position:sticky;top:0;z-index:50;background:rgba(13,13,16,.86);backdrop-f
 nav{display:flex;gap:4px;margin-left:auto;flex-wrap:wrap}
 nav button{padding:8px 14px;border-radius:99px;color:var(--fg2);font-weight:600;font-size:14px;transition:.15s}
 nav button.on{background:var(--fg);color:#111}
+nav button i{font-style:normal;line-height:1;display:inline-flex;vertical-align:-3px;margin-right:6px}
+nav button i svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.9;
+  stroke-linecap:round;stroke-linejoin:round}
 .syncb{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--fg3);border:1px solid var(--line);background:var(--bg2);padding:5px 10px;border-radius:99px}
 .syncb .d{width:7px;height:7px;border-radius:50%;background:var(--fg3);flex:none}
 .syncb.idle .d{background:var(--ok);box-shadow:0 0 8px var(--ok)}
@@ -207,7 +212,8 @@ label.f{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.7p
       background:rgba(16,16,20,.96);backdrop-filter:blur(16px);border-top:1px solid var(--line);
       padding:6px 4px calc(6px + var(--safeb))}
   nav button{border-radius:10px;padding:8px 2px;font-size:11px;display:flex;flex-direction:column;align-items:center;gap:3px;font-weight:700}
-  nav button i{font-size:19px;font-style:normal;line-height:1}
+  nav button i{display:block;margin:0}
+  nav button i svg{width:21px;height:21px;display:block}
   nav button.on{background:transparent;color:var(--acc)}
   .grid{grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:13px}
   .mhead{flex-direction:column;align-items:center;text-align:center;gap:12px;padding:18px}
@@ -226,10 +232,10 @@ label.f{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.7p
     <div class="logo"><span class="dot"></span>Crate</div>
     <button class="syncb" id="syncb" title="Stato sincronizzazione"><span class="d"></span><span id="synctxt">locale</span></button>
     <nav>
-      <button data-v="add" class="on"><i>&#43;</i>Aggiungi</button>
-      <button data-v="lib"><i>&#9634;</i>Libreria</button>
-      <button data-v="rand"><i>&#127922;</i>Random</button>
-      <button data-v="set"><i>&#9881;</i>Opzioni</button>
+      <button data-v="add" class="on"><i><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></i>Aggiungi</button>
+      <button data-v="lib"><i><svg viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="7.2" height="7.2" rx="2.1"/><rect x="13.3" y="3.5" width="7.2" height="7.2" rx="2.1"/><rect x="3.5" y="13.3" width="7.2" height="7.2" rx="2.1"/><rect x="13.3" y="13.3" width="7.2" height="7.2" rx="2.1"/></svg></i>Libreria</button>
+      <button data-v="rand"><i><svg viewBox="0 0 24 24"><rect x="3.4" y="3.4" width="17.2" height="17.2" rx="4.4"/><circle cx="8.9" cy="8.9" r="1.5" fill="currentColor" stroke="none"/><circle cx="15.1" cy="15.1" r="1.5" fill="currentColor" stroke="none"/></svg></i>Random</button>
+      <button data-v="set"><i><svg viewBox="0 0 24 24"><path d="M4 7.5h8M16.5 7.5H20M4 16.5h3.5M12 16.5h8"/><circle cx="14.2" cy="7.5" r="2.4"/><circle cx="9.7" cy="16.5" r="2.4"/></svg></i>Opzioni</button>
     </nav>
   </div>
 </header>
@@ -288,7 +294,7 @@ label.f{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.7p
       <button data-s="all" class="on">Tutti</button>
       <button data-s="todo">Da ascoltare</button>
       <button data-s="done">Ascoltati</button>
-      <button data-s="fav">&#9829;</button>
+      <button data-s="fav" id="fFav"></button>
       <button data-s="pending" id="bPend" style="display:none">? Da identificare</button>
     </div>
     <select id="fSort">
@@ -495,7 +501,7 @@ label.f{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.7p
 /* ==========================================================
    1. STATO
    ========================================================== */
-const APP_VER='18';
+const APP_VER='19';
 const LS='crate.v1', LSK='crate.lfmkey', LSG='crate.gh', LSS='crate.lastsync', LSP='crate.prefs';
 let DB={albums:[],deleted:[]};
 
@@ -534,6 +540,18 @@ function vis(k){return P.mode==='min'?!!MIN_KEEP[k]:P.show[k]!==false}
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7)}
 function now(){return Date.now()}
 function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('on');clearTimeout(t._x);t._x=setTimeout(()=>t.classList.remove('on'),2400)}
+/* Un cuore disegnato invece del carattere del font, che nei font di sistema
+   viene stretto e appuntito. Questo e' largo quasi quanto e' alto, con i due
+   lobi pieni e la punta corta. */
+function cuore(pieno,lato){
+  const d='M12 20.6C12 20.6 3.6 15.4 3.6 9.9C3.6 7 5.8 4.8 8.5 4.8'+
+    'C10.1 4.8 11.4 5.6 12 6.8C12.6 5.6 13.9 4.8 15.5 4.8'+
+    'C18.2 4.8 20.4 7 20.4 9.9C20.4 15.4 12 20.6 12 20.6Z';
+  const s=lato||16;
+  return '<svg viewBox="0 0 24 24" width="'+s+'" height="'+s+'" aria-hidden="true" '+
+    'style="vertical-align:-2px;fill:'+(pieno?'currentColor':'none')+
+    ';stroke:currentColor;stroke-width:'+(pieno?0:1.8)+';stroke-linejoin:round"><path d="'+d+'"/></svg>';
+}
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 /* Cover Art Archive risponde 404 quando la copertina non c'e': nascondo
    l'immagine rotta invece di lasciare l'icona di errore del browser */
@@ -2597,7 +2615,7 @@ function openAlbum(id,keepScroll){
       '<div class="row" style="margin-top:12px;gap:7px">'+
         (a.pending?'<button class="btn sm acc" id="bIdent">Identifica l\'album</button>':
         '<button class="btn sm '+(a.listened?'':'gh')+'" id="bLis">'+(a.listened?'&#10003; Ascoltato':'Segna ascoltato')+'</button>')+
-        '<button class="btn sm gh" id="bFav" style="'+(a.fav?'border-color:var(--acc);color:var(--acc)':'')+'">'+(a.fav?'&#9829;':'&#9825;')+' Preferito</button>'+
+        '<button class="btn sm gh" id="bFav" style="'+(a.fav?'border-color:var(--acc);color:var(--acc)':'')+'">'+cuore(a.fav)+' Preferito</button>'+
         (a.pending||!vis('listen')?'':'<button class="btn sm gh" id="bSpot">&#9654; '+
           esc(a.listenUrl?(a.platform||'Ascolta'):(a.spotify?(a.platName||'Spotify'):'Spotify'))+'</button>')+
       '</div></div></div>'+
@@ -2978,7 +2996,7 @@ function renderLib(){
     d.innerHTML='<div class="cov">'+
       (a.cover?'<img src="'+esc(a.cover)+'" alt="" loading="lazy" onerror="crateImgFail(this)">':'<div class="ph">&#127925;</div>')+
       '<div class="badges">'+(a.rating?'<span class="pill r">'+a.rating+'</span>':'')+
-        (a.fav?'<span class="pill f">&#9829;</span>':'')+
+        (a.fav?'<span class="pill f">'+cuore(true,11)+'</span>':'')+
         (a.pending?'<span class="pill q">?</span>':'')+
         (a.kind==='singolo'||a.kind==='EP'?'<span class="pill" style="color:var(--fg2)">'+a.kind+'</span>':'')+'</div>'+
       (a.listened?'<div class="lis">&#10003; ascoltato</div>':'')+
@@ -3156,7 +3174,7 @@ function renderRec(){
     d.innerHTML='<div class="cov">'+
       (a.cover?'<img src="'+esc(a.cover)+'" alt="" loading="lazy" onerror="crateImgFail(this)">':'<div class="ph">&#127925;</div>')+
       '<div class="badges">'+(a.rating?'<span class="pill r">'+a.rating+'</span>':'')+
-      (a.fav?'<span class="pill f">&#9829;</span>':'')+'</div>'+
+      (a.fav?'<span class="pill f">'+cuore(true,11)+'</span>':'')+'</div>'+
       (a.listened?'<div class="lis">&#10003; ascoltato</div>':'')+
       '</div><div class="t">'+esc(a.title)+'</div><div class="a">'+esc(a.artist||'—')+'</div>'+
       '<div class="tiny muted" style="margin-top:2px">'+
@@ -3364,8 +3382,8 @@ function renderPiatt(){
     '<span style="min-width:0;flex:1"><span style="font-size:14px">'+esc(p.n)+'</span>'+
       '<span class="tiny muted" style="display:block">'+esc(p.nota)+'</span></span>'+
     (att&&p.k!=='spotify'
-      ? '<button class="frec" data-su="'+p.k+'"'+(i<=1?' disabled':'')+'>&#9650;</button>'+
-        '<button class="frec" data-giu="'+p.k+'"'+(i>=on.length-1?' disabled':'')+'>&#9660;</button>'
+      ? '<button class="frecPiatt" data-su="'+p.k+'"'+(i<=1?' disabled':'')+'>&#9650;</button>'+
+        '<button class="frecPiatt" data-giu="'+p.k+'"'+(i>=on.length-1?' disabled':'')+'>&#9660;</button>'
       : '')+'</div>';
   host.innerHTML=on.map((p,i)=>riga(p,i,true)).join('')+off.map(p=>riga(p,-1,false)).join('');
 }
@@ -3577,6 +3595,7 @@ document.addEventListener('visibilitychange',()=>{
    15. AVVIO
    ========================================================== */
 document.getElementById('verApp').textContent='v'+APP_VER;
+(function(){const f=document.getElementById('fFav');if(f)f.innerHTML=cuore(true,15)})();
 loadLocal();loadPrefs();renderPrefs();
 document.getElementById('lfmKey').value=localStorage.getItem(LSK)||'';
 (()=>{const c=ghCfg();if(c){document.getElementById('ghOwner').value=c.owner;
