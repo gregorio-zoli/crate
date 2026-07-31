@@ -147,6 +147,18 @@ function txtSim(a,b){
 }
 
 let service=null, esiti=[];
+/* il testo deve conservare le andate a capo: pairLines lavora per righe */
+function estraiTesto(res){
+  if(!res)return '';
+  const cand=[res.lines,res.results,res.blocks,Array.isArray(res)?res:null];
+  for(const arr of cand){
+    if(Array.isArray(arr)&&arr.length){
+      const righe=arr.map(x=>typeof x==='string'?x:(x&&(x.text||x.label||''))).filter(Boolean);
+      if(righe.length)return righe.join('\n');
+    }
+  }
+  return String(res.text||'');
+}
 const $=i=>document.getElementById(i);
 const norm=s=>String(s||'').toLowerCase().replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
 function copre(testo,vero){
@@ -172,7 +184,7 @@ $('go').onclick=async()=>{
     return;
   }
   $('stato').textContent='Modello pronto. Elaboro...';
-  let n=0;
+  let n=0, ripetuti=0, ultimoTesto=null;
   for(const f of files){
     n++;
     $('bar').style.width=Math.round(n/files.length*100)+'%';
@@ -184,10 +196,14 @@ $('go').onclick=async()=>{
       const c=document.createElement('canvas');
       c.width=img.naturalWidth||img.width; c.height=img.naturalHeight||img.height;
       c.getContext('2d').drawImage(img,0,0);
-      const res=await service.recognize(c);
-      testo=(res&&res.text)||'';
+      /* noCache: senza questo la libreria restituisce il risultato della
+         PRIMA immagine per tutte le successive (verificato) */
+      const res=await service.recognize(c,{noCache:true});
+      testo=estraiTesto(res);
       URL.revokeObjectURL(img.src);
     }catch(e){ testo=''; }
+    if(testo&&testo===ultimoTesto){ripetuti++}
+    ultimoTesto=testo;
     const t={paddle:testo};
     const coppie=bestPairs(t), cands=mergeCandidates(t);
     const rif=DATI[f.name]||{tess:[],vero:''};
@@ -219,6 +235,11 @@ $('go').onclick=async()=>{
     '<span class="ok">migliorati: '+c.MEGLIO+'</span> &nbsp;·&nbsp; pari: '+c.pari+' &nbsp;·&nbsp; '+
     '<span class="no">peggiorati: '+c.PEGGIO+'</span> &nbsp;·&nbsp; '+
     '<span class="no">persi (prima funzionava, ora no): '+c.PERSO+'</span>';
+  if(ripetuti>2){
+    $('riass').innerHTML+='<br><br><span class="no"><b>ATTENZIONE:</b> '+ripetuti+
+      ' immagini hanno dato testo identico alla precedente. Il confronto non e attendibile: '+
+      'segnalamelo invece di fidarti dei numeri.</span>';
+  }
   $('stato').textContent='Finito. Scarica il JSON e mandamelo per l\'analisi completa.';
   $('dl').disabled=false;
 };
