@@ -530,7 +530,7 @@ label.f{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.7p
 /* ==========================================================
    1. STATO
    ========================================================== */
-const APP_VER='39';
+const APP_VER='40';
 const LS='crate.v1', LSK='crate.lfmkey', LSG='crate.gh', LSS='crate.lastsync', LSP='crate.prefs';
 const LSSP='crate.spot';   /* accesso a Spotify: resta su QUESTO dispositivo */
 let DB={albums:[],deleted:[],cfg:{}};
@@ -895,7 +895,7 @@ function spotRiposa(){spotRallenta=false;spotCode=0;spotPasso=0}
    e' un no. Continuare a riprovare ogni due secondi tiene occupata l'app,
    non collega niente e allunga la penalita'. Quindi lo metto da parte per un
    quarto d'ora e lavoro con le altre fonti, che e' quello che vuoi. */
-const SPOT_TREGUA=15*60*1000;
+const SPOT_TREGUA=30*60*1000;
 function spotArrenditi(){
   spotAttesaFino=Math.max(spotAttesaFino,Date.now()+SPOT_TREGUA);
   SPOT.attesa=spotAttesaFino;SPOT.rinuncia=Date.now();spotSalva();
@@ -937,7 +937,11 @@ async function spotChiama(percorso,tentativo){
        non mi sta bandendo: mi sta dicendo di andare piano, e allora rallento
        e continuo. Se mi chiede minuti o ore e' una sospensione vera, e li'
        insistere la allunga soltanto: mi tolgo di mezzo. */
-    if(detto>SPOT_LUNGA)spotArrenditi();
+    /* Sei rifiuti di fila senza una sola risposta buona non sono un ritmo
+       sbagliato: e' un blocco, e a quel punto ogni altra richiesta lo
+       prolunga soltanto. Il contatore si azzera a ogni risposta valida,
+       quindi qui ci arrivo solo se non ne sta passando davvero nessuna. */
+    if(detto>SPOT_LUNGA||spotCode>=6)spotArrenditi();
     else spotPasso=Math.min(20000,4000+(spotCode-1)*2500);
     if(typeof renderSpot==='function')renderSpot();
     throw erroreCoda(spotSecondi());
@@ -1768,7 +1772,7 @@ async function bulkSpotify(mode){
         txt=document.getElementById('spotTxt');
   box.style.display='block';
   let done=0,presi=0,altrove=0;
-  const motivi=new Map(),rimasti=[],riprovati=new Set();
+  const motivi=new Map(),rimasti=[];
   const stato=(a,extra)=>{txt.innerHTML='<b>'+(done+1)+' / '+list.length+'</b> &middot; '+esc(a.title)+
     (extra?' &middot; <span class="muted">'+esc(extra)+'</span>':'')};
   for(let i=0;i<list.length;i++){
@@ -1795,16 +1799,8 @@ async function bulkSpotify(mode){
       if(spotStop)break;
       stato(a,'');
     }
-    let L=null,coda=false;
-    try{L=await resolveListen(a,mode==='all')}catch(e){coda=!!(e&&e.coda)}
-    /* messo in coda: questo album non ha fallito, e' colpa del ritmo.
-       Aspetto e lo rifaccio, una volta sola per non girare a vuoto. */
-    if(coda&&!riprovati.has(a.id)){
-      riprovati.add(a.id);
-      await aspettaSpotify(m=>stato(a,m));
-      if(spotStop)break;
-      i--;continue;
-    }
+    let L=null;
+    try{L=await resolveListen(a,mode==='all')}catch(e){}
     if(L&&/spotify/i.test(L.name||''))presi++;
     else{
       if(L)altrove++;
@@ -1825,9 +1821,12 @@ async function bulkSpotify(mode){
   renderSpotOra();
   const perse=[...motivi.entries()].sort((x,y)=>y[1]-x[1]).slice(0,6);
   const inCoda=spotCode>=2?'<div class="tiny" style="margin-top:8px;color:var(--acc)">'+
-    'Spotify mi ha chiesto di rallentare '+spotCode+' volte'+
-    (spotPasso?', quindi sono sceso a un album ogni '+Math.round(spotPasso/1000)+' secondi':'')+
-    '.'+(spotInCoda()&&SPOT.rinuncia?' Poi mi ha proprio sospeso: riprendo fra '+spotFinePausa()+'.':'')+
+    (SPOT.rinuncia&&spotInCoda()
+      ? 'Spotify ha rifiutato tutto: non &egrave; questione di ritmo, &egrave; un blocco. '+
+        'Ho smesso di chiedere (insistere lo allunga) e ho lavorato con archivio, Wikidata e '+
+        'Odesli. Riprovo fra '+spotFinePausa()+'.'
+      : 'Spotify mi ha chiesto di rallentare '+spotCode+' volte'+
+        (spotPasso?', quindi sono sceso a un album ogni '+Math.round(spotPasso/1000)+' secondi':'')+'.')+
     ' Quelli gi&agrave; fatti non li rifa.</div>':'';
   txt.innerHTML='<b>'+(spotStop?'Fermato.':'Finito.')+'</b> '+presi+' collegati a Spotify'+
     (altrove?', '+altrove+' solo su altre piattaforme':'')+
@@ -2217,14 +2216,14 @@ async function resolveListen(a,forza){
     let d=null;
     try{d=await spotCerca(a.title,a.artist,esito,resolveListen.soloLink)}
     catch(e){
-      if(e&&e.coda){
-        /* non e' un fallimento dell'album: e' un limite mio. Lo dico e mi
-           fermo qui, cosi' chi mi ha chiamato puo' riprovare fra poco. */
-        resolveListen.motivo='Spotify mi ha messo in coda: da riprovare';
-        MOTIVI.set(a.id,resolveListen.motivo);
-        const err=new Error('coda');err.coda=e.coda;throw err;
-      }
-      esito.push('Spotify: '+(e&&e.message||'errore'));
+      /* Qui stava il guaio grosso. Se Spotify mi metteva in coda interrompevo
+         TUTTA la funzione, e l'album non arrivava mai all'archivio, a
+         Wikidata o a Odesli: restava scollegato con scritto "da riprovare"
+         mentre le altre fonti, che magari ce l'avevano, non venivano nemmeno
+         interpellate. Una coda di Spotify non e' un motivo per rinunciare
+         alle altre quattro strade: e' un motivo per usarle. */
+      if(e&&e.coda)esito.push('Spotify in coda: proseguo con le altre fonti');
+      else esito.push('Spotify: '+(e&&e.message||'errore'));
     }
     if(d&&d.spotify){
       const cur=DB.albums.find(x=>x.id===a.id)||a;
