@@ -432,9 +432,14 @@ label.f{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.7p
     <div class="hint" id="sizeHint"></div>
   </div>
 
-  <div class="card">
+  <div class="card" style="margin-bottom:14px">
     <h2>Zona rossa</h2>
     <button class="btn gh" id="btnWipe" style="border-color:var(--acc);color:var(--acc)">Cancella tutta la libreria</button>
+  </div>
+
+  <div class="tiny muted" style="text-align:center;padding:6px 0 20px">
+    Crate <b id="verApp"></b> &middot; se questo numero non cambia dopo un
+    aggiornamento, stai ancora vedendo la versione vecchia
   </div>
 </section>
 
@@ -463,6 +468,7 @@ label.f{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.7p
 /* ==========================================================
    1. STATO
    ========================================================== */
+const APP_VER='15';
 const LS='crate.v1', LSK='crate.lfmkey', LSG='crate.gh', LSS='crate.lastsync', LSP='crate.prefs';
 let DB={albums:[],deleted:[]};
 
@@ -1151,11 +1157,10 @@ async function ensureSeed(a){
 }
 /* Prima strada: Odesli converte un indirizzo di catalogo in tutti gli altri.
    Gratuito e senza chiavi, ma tollera 10 richieste al minuto. */
-async function daOdesli(a,esito){
-  const seed=await ensureSeed(a);
-  if(!seed){if(esito)esito.push('nessun aggancio a un catalogo');return null}
+async function odesliDaUrl(url,esito){
+  if(!url)return null;
   let r;
-  try{r=await fetch('https://api.song.link/v1-alpha.1/links?url='+encodeURIComponent(seed))}
+  try{r=await fetch('https://api.song.link/v1-alpha.1/links?url='+encodeURIComponent(url))}
   catch(e){if(esito)esito.push('Odesli non raggiungibile');return null}
   if(r.status===429){if(esito)esito.push('Odesli: troppe richieste, riprova fra un minuto');return null}
   if(!r.ok){if(esito)esito.push('Odesli: errore '+r.status);return null}
@@ -1163,49 +1168,78 @@ async function daOdesli(a,esito){
   for(const pair of PLAT_ORDER)if(L[pair[0]]&&L[pair[0]].url)return{url:L[pair[0]].url,name:pair[1]};
   return null;
 }
-/* Seconda strada, indipendente: l'archivio conserva i collegamenti ufficiali
-   alle piattaforme. Nessun limite stretto e copre anche cio' che Odesli manca. */
-async function daArchivio(a){
-  if(!a.title)return null;
-  const q='release:'+JSON.stringify(a.title)+(a.artist?' AND artist:'+JSON.stringify(a.artist):'');
-  const r=await fetch('https://musicbrainz.org/ws/2/release/?fmt=json&limit=5&query='+encodeURIComponent(q));
-  if(!r.ok)return null;
-  const rels=((await r.json()).releases||[]);
-  const scelta=[[/open\.spotify\.com\/album\//,'Spotify'],
-                [/music\.apple\.com\/.+\/album\//,'Apple Music'],
-                [/deezer\.com\/album/,'Deezer'],
-                [/bandcamp\.com/,'Bandcamp'],
-                [/tidal\.com\/.*album/,'Tidal']];
-  for(const rel of rels.slice(0,2)){
-    const r2=await fetch('https://musicbrainz.org/ws/2/release/'+rel.id+'?fmt=json&inc=url-rels');
-    if(!r2.ok)continue;
-    const urls=(((await r2.json()).relations)||[])
-      .map(x=>x&&x.url&&x.url.resource).filter(Boolean);
-    for(const[re,nome]of scelta){
-      const u=urls.find(x=>re.test(x));
-      if(u)return{url:u,name:nome};
+async function daOdesli(a,esito){
+  const seed=await ensureSeed(a);
+  if(!seed){if(esito)esito.push('nessun aggancio a un catalogo');return null}
+  return odesliDaUrl(seed,esito);
+}
+/* Seconda strada: l'archivio conserva i collegamenti ufficiali alle
+   piattaforme. Cerco Spotify su piu' edizioni prima di accontentarmi
+   di un'altra piattaforma: una sola edizione puo' non averlo. */
+const ALTRE_PIATT=[[/music\.apple\.com\/.+\/album\//,'Apple Music'],
+  [/deezer\.com\/album/,'Deezer'],[/bandcamp\.com/,'Bandcamp'],
+  [/tidal\.com\/.*album/,'Tidal'],[/music\.youtube\.com/,'YouTube Music']];
+async function linkArchivio(a){
+  const out={spotify:null,altro:null};
+  const guarda=urls=>{
+    if(!out.spotify){
+      const s=urls.find(u=>/open\.spotify\.com\/album\//.test(u));
+      if(s)out.spotify=s;
     }
-    await sleep(1100);              /* l'archivio vuole una richiesta al secondo */
-  }
-  return null;
+    if(!out.altro)for(const[re,nome]of ALTRE_PIATT){
+      const u=urls.find(x=>re.test(x));
+      if(u){out.altro={url:u,name:nome};break}
+    }
+  };
+  const urlsDa=async u=>{
+    const r=await fetch(u);
+    if(!r.ok)return[];
+    return(((await r.json()).relations)||[]).map(x=>x&&x.url&&x.url.resource).filter(Boolean);
+  };
+  try{
+    if(a.mbid){
+      guarda(await urlsDa('https://musicbrainz.org/ws/2/release-group/'+a.mbid+'?fmt=json&inc=url-rels'));
+      if(out.spotify)return out;
+      await sleep(1100);
+    }
+    if(!a.title)return out;
+    const q='release:'+JSON.stringify(a.title)+(a.artist?' AND artist:'+JSON.stringify(a.artist):'');
+    const r=await fetch('https://musicbrainz.org/ws/2/release/?fmt=json&limit=6&query='+encodeURIComponent(q));
+    if(!r.ok)return out;
+    const rels=((await r.json()).releases||[])
+      .filter(x=>txtSim(x.title||'',a.title)>=.6).slice(0,3);
+    for(let i=0;i<rels.length;i++){
+      await sleep(1100);
+      guarda(await urlsDa('https://musicbrainz.org/ws/2/release/'+rels[i].id+'?fmt=json&inc=url-rels'));
+      if(out.spotify)break;
+    }
+  }catch(e){}
+  return out;
 }
 async function resolveListen(a){
   if(a.listenUrl)return{url:a.listenUrl,name:a.platform||'Ascolta'};
   if(a.spotify)return{url:a.spotify,name:a.platName||'Spotify'};
   const esito=[];
+  const salva=L=>{const cur=DB.albums.find(x=>x.id===a.id)||a;
+    cur.spotify=L.url;cur.platName=L.name;save(cur);return L};
   let L=null;
   try{L=await daOdesli(a,esito)}catch(e){esito.push('Odesli: '+(e&&e.message||'errore'))}
-  if(!L||!/spotify/i.test(L.name)){
-    /* se Odesli non ha trovato proprio Spotify, chiedo anche all'archivio:
-       la scheda esatta e' meglio di un ripiego su un'altra piattaforma */
-    let A=null;
-    try{A=await daArchivio(a)}catch(e){}
-    if(A&&(!L||/spotify/i.test(A.name)))L=A;
+  if(L&&/spotify/i.test(L.name))return salva(L);
+  /* Spotify non trovato: interrogo l'archivio su piu' edizioni */
+  let A={spotify:null,altro:null};
+  try{A=await linkArchivio(a)}catch(e){}
+  if(A.spotify)return salva({url:A.spotify,name:'Spotify'});
+  /* ho un link ma non di Spotify: provo a convertirlo, invece di accontentarmi */
+  if(A.altro){
+    let C=null;
+    try{C=await odesliDaUrl(A.altro.url,esito)}catch(e){}
+    if(C&&/spotify/i.test(C.name))return salva(C);
+    esito.push('su Spotify non risulta: trovato su '+A.altro.name);
+    return salva(L&&/spotify/i.test(L.name)?L:A.altro);
   }
-  if(!L){resolveListen.motivo=esito.join(' · ')||'nessuna fonte ha il collegamento';return null}
-  const cur=DB.albums.find(x=>x.id===a.id)||a;
-  cur.spotify=L.url;cur.platName=L.name;save(cur);
-  return L;
+  if(L)return salva(L);
+  resolveListen.motivo=esito.join(' · ')||'nessuna fonte ha il collegamento';
+  return null;
 }
 
 /* ==========================================================
@@ -3055,6 +3089,7 @@ document.addEventListener('visibilitychange',()=>{
 /* ==========================================================
    15. AVVIO
    ========================================================== */
+document.getElementById('verApp').textContent='v'+APP_VER;
 loadLocal();loadPrefs();renderPrefs();
 document.getElementById('lfmKey').value=localStorage.getItem(LSK)||'';
 (()=>{const c=ghCfg();if(c){document.getElementById('ghOwner').value=c.owner;
