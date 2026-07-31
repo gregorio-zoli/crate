@@ -115,11 +115,21 @@ label.f{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.7p
 .bar{height:5px;background:var(--bg3);border-radius:99px;overflow:hidden;margin-top:10px}
 .bar i{display:block;height:100%;background:var(--acc);width:0;transition:width .25s}
 
-.chiprow{display:flex;gap:6px;overflow-x:auto;padding:2px 0;-webkit-overflow-scrolling:touch;scrollbar-width:none}
-.chiprow::-webkit-scrollbar{display:none}
-.chiprow button{flex:none;background:var(--bg3);border:1px solid var(--line);color:var(--fg2);
-  border-radius:99px;padding:7px 13px;font-size:13px;white-space:nowrap;font-weight:600}
-.chiprow button.on{background:var(--acc);border-color:var(--acc);color:#fff}
+.mchip{position:relative}
+.mchip>.trigger{width:100%;background:var(--bg3);border:1px solid var(--line);color:var(--fg);
+  border-radius:9px;padding:9px 11px;font-size:14px;text-align:left;display:flex;align-items:center;gap:8px}
+.mchip>.trigger .cnt{margin-left:auto;color:var(--fg3);font-size:13px}
+.mchip>.trigger .frec{color:var(--fg3);font-size:11px}
+.mchip.aperto>.trigger{border-color:var(--acc)}
+.mpanel{display:none;position:absolute;z-index:70;top:calc(100% + 6px);left:0;
+  min-width:min(280px,86vw);max-width:min(420px,92vw);background:var(--bg2);
+  border:1px solid var(--line);border-radius:12px;padding:12px;box-shadow:var(--shadow);
+  max-height:50vh;overflow:auto}
+.mchip.aperto .mpanel{display:block;animation:salePiano .16s ease}
+.mpanel .righe{display:flex;flex-wrap:wrap;gap:6px}
+.mpanel .righe button{background:var(--bg3);border:1px solid var(--line);color:var(--fg2);
+  border-radius:99px;padding:7px 12px;font-size:13px;font-weight:600}
+.mpanel .righe button.on{background:var(--acc);border-color:var(--acc);color:#fff}
 .filtlab{font-size:11px;text-transform:uppercase;letter-spacing:.7px;color:var(--fg3);font-weight:700;margin:10px 0 4px}
 .toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:16px}
 .toolbar select,.toolbar input{width:auto;min-width:118px;padding:9px 11px;font-size:14px}
@@ -266,6 +276,8 @@ label.f{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.7p
   <div class="stats" id="stats"></div>
   <div class="toolbar">
     <input type="text" id="fq" placeholder="Filtra...">
+    <div class="mchip" id="fGenreMenu" style="min-width:150px"></div>
+    <div class="mchip" id="fMoodMenu" style="min-width:140px"></div>
     <select id="fDec"><option value="">Tutti i decenni</option></select>
     <div class="tg" id="fState">
       <button data-s="all" class="on">Tutti</button>
@@ -283,10 +295,6 @@ label.f{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.7p
       <option value="rating">Voto più alto</option>
     </select>
   </div>
-  <div class="filtlab">Generi <span class="muted" style="text-transform:none;letter-spacing:0">· puoi sceglierne piu di uno</span></div>
-  <div class="chiprow" id="fGenreChips"></div>
-  <div class="filtlab">Mood</div>
-  <div class="chiprow" id="fMoodChips" style="margin-bottom:14px"></div>
   <div id="artistBox" style="margin-bottom:14px"></div>
   <div class="grid" id="grid"></div>
 </section>
@@ -306,17 +314,14 @@ label.f{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.7p
       <option value="fav">Solo preferiti</option>
       <option value="done">Solo già ascoltati</option>
     </select></div>
+    <div><label class="f">Generi</label><div class="mchip" id="rGenreMenu"></div></div>
+    <div><label class="f">Mood</label><div class="mchip" id="rMoodMenu"></div></div>
     <div><label class="f">Decennio</label><select id="rDec"><option value="">Qualsiasi</option></select></div>
     <div><label class="f">Tipo</label><select id="rKind">
       <option value="">Tutto</option>
       <option value="full">Solo album interi</option>
     </select></div>
   </div>
-  <div class="filtlab">Generi <span class="muted" style="text-transform:none;letter-spacing:0">· piu di uno allarga la ricerca</span></div>
-  <div class="chiprow" id="rGenreChips"></div>
-  <div class="filtlab">Mood</div>
-  <div class="chiprow" id="rMoodChips" style="margin-bottom:16px"></div>
-
   <div class="slot" id="slot">
     <div class="stage" id="slotStage">
       <div class="tiny muted" id="slotPool"></div>
@@ -768,7 +773,7 @@ function mmss(ms){
   const s=Math.round(ms/1000);
   return Math.floor(s/60)+':'+String(s%60).padStart(2,'0');
 }
-async function fetchTracks(a){
+async function tracceItunes(a){
   const id=itunesId(a.itunesUrl);
   if(!id)return null;
   const d=await jsonp('https://itunes.apple.com/lookup?entity=song&limit=200&id='+encodeURIComponent(id));
@@ -776,6 +781,45 @@ async function fetchTracks(a){
   if(!righe.length)return null;
   righe.sort((x,y)=>(x.discNumber||1)-(y.discNumber||1)||(x.trackNumber||0)-(y.trackNumber||0));
   return righe.map(r=>({n:r.trackNumber||0,t:r.trackName,ms:r.trackTimeMillis||0}));
+}
+async function tracceDeezer(a){
+  const m=String(a.deezerUrl||'').match(/album\/(\d+)/);
+  if(!m)return null;
+  const d=await jsonp('https://api.deezer.com/album/'+m[1]+'?output=jsonp');
+  const t=d&&d.tracks&&d.tracks.data;
+  if(!t||!t.length)return null;
+  return t.map((x,i)=>({n:x.track_position||i+1,t:x.title,ms:(x.duration||0)*1000}));
+}
+/* L'archivio ha anche i dischi che i negozi non hanno, e i classici li ha
+   sempre: e' l'ultima rete, non la prima perche' costa due chiamate. */
+async function tracceArchivio(a){
+  if(!a.title)return null;
+  const q='release:'+JSON.stringify(a.title)+(a.artist?' AND artist:'+JSON.stringify(a.artist):'');
+  const r=await fetch('https://musicbrainz.org/ws/2/release/?fmt=json&limit=5&query='+encodeURIComponent(q));
+  if(!r.ok)return null;
+  const rel=((await r.json()).releases||[]).find(x=>+x['track-count']>0);
+  if(!rel)return null;
+  const r2=await fetch('https://musicbrainz.org/ws/2/release/'+rel.id+'?fmt=json&inc=recordings');
+  if(!r2.ok)return null;
+  const out=[];
+  ((await r2.json()).media||[]).forEach(m=>(m.tracks||[]).forEach(t=>{
+    if(t.title)out.push({n:+t.position||out.length+1,t:t.title,ms:+t.length||0});
+  }));
+  return out.length?out:null;
+}
+/* tre fonti in cascata: iTunes, Deezer, archivio.
+   soloVeloci salta l'archivio, che e' lento e va a 1 richiesta al secondo. */
+async function fetchTracks(a,soloVeloci){
+  try{const t=await tracceItunes(a);if(t)return t}catch(e){}
+  /* nessun aggancio a iTunes? provo a procurarmelo cercando l'album */
+  if(!a.itunesUrl&&!a.deezerUrl){
+    try{await ensureSeed(a)}catch(e){}
+    try{const t=await tracceItunes(a);if(t)return t}catch(e){}
+  }
+  try{const t=await tracceDeezer(a);if(t)return t}catch(e){}
+  if(soloVeloci)return null;
+  try{const t=await tracceArchivio(a);if(t)return t}catch(e){}
+  return null;
 }
 /* numero di tracce dall'archivio, per gli album che i negozi non hanno */
 async function fetchTrackCount(artist,title){
@@ -978,6 +1022,19 @@ async function enrich(id,itunesGenre,merge){
   if(!a.year&&mb.year)a.year=mb.year;
   if(!a.about&&lfm.about)a.about=lfm.about;
   if(lfm.listeners)a.listeners=lfm.listeners;
+  /* Durata: la voglio nell'intestazione fin da subito, senza dover aprire
+     l'elenco. Una chiamata sola da' durata e numero di tracce; l'elenco
+     completo lo scarico solo se lo chiedi, per non gonfiare il file. */
+  if(!a.durata&&!a.pending){
+    try{
+      const el=await fetchTracks(a,true);
+      const cur=DB.albums.find(x=>x.id===id);
+      if(cur&&el&&el.length){
+        cur.durata=el.reduce((t,x)=>t+(x.ms||0),0);
+        if(!cur.tracks)cur.tracks=el.length;
+      }
+    }catch(e){}
+  }
   /* tracce e link di ascolto non devono mai restare vuoti: se i negozi non
      hanno l'album, il conteggio lo prendo dall'archivio */
   if(!a.tracks&&!a.pending){
@@ -1047,24 +1104,59 @@ async function ensureSeed(a){
   save(cur);
   return cur.itunesUrl||cur.deezerUrl||'';
 }
-async function resolveListen(a){
-  if(a.listenUrl)return{url:a.listenUrl,name:a.platform||'Ascolta'};
-  if(a.spotify)return{url:a.spotify,name:a.platName||'Spotify'};
+/* Prima strada: Odesli converte un indirizzo di catalogo in tutti gli altri.
+   Gratuito e senza chiavi, ma tollera 10 richieste al minuto. */
+async function daOdesli(a){
   const seed=await ensureSeed(a);
   if(!seed)return null;
   const r=await fetch('https://api.song.link/v1-alpha.1/links?url='+encodeURIComponent(seed));
-  if(!r.ok)throw new Error('odesli '+r.status);
-  const d=await r.json();
-  const L=(d&&d.linksByPlatform)||{};
-  for(const pair of PLAT_ORDER){
-    const k=pair[0];
-    if(L[k]&&L[k].url){
-      const cur=DB.albums.find(x=>x.id===a.id)||a;
-      cur.spotify=L[k].url;cur.platName=pair[1];save(cur);
-      return{url:L[k].url,name:pair[1]};
+  if(!r.ok)return null;
+  const L=((await r.json())||{}).linksByPlatform||{};
+  for(const pair of PLAT_ORDER)if(L[pair[0]]&&L[pair[0]].url)return{url:L[pair[0]].url,name:pair[1]};
+  return null;
+}
+/* Seconda strada, indipendente: l'archivio conserva i collegamenti ufficiali
+   alle piattaforme. Nessun limite stretto e copre anche cio' che Odesli manca. */
+async function daArchivio(a){
+  if(!a.title)return null;
+  const q='release:'+JSON.stringify(a.title)+(a.artist?' AND artist:'+JSON.stringify(a.artist):'');
+  const r=await fetch('https://musicbrainz.org/ws/2/release/?fmt=json&limit=5&query='+encodeURIComponent(q));
+  if(!r.ok)return null;
+  const rels=((await r.json()).releases||[]);
+  const scelta=[[/open\.spotify\.com\/album\//,'Spotify'],
+                [/music\.apple\.com\/.+\/album\//,'Apple Music'],
+                [/deezer\.com\/album/,'Deezer'],
+                [/bandcamp\.com/,'Bandcamp'],
+                [/tidal\.com\/.*album/,'Tidal']];
+  for(const rel of rels.slice(0,2)){
+    const r2=await fetch('https://musicbrainz.org/ws/2/release/'+rel.id+'?fmt=json&inc=url-rels');
+    if(!r2.ok)continue;
+    const urls=(((await r2.json()).relations)||[])
+      .map(x=>x&&x.url&&x.url.resource).filter(Boolean);
+    for(const[re,nome]of scelta){
+      const u=urls.find(x=>re.test(x));
+      if(u)return{url:u,name:nome};
     }
+    await sleep(1100);              /* l'archivio vuole una richiesta al secondo */
   }
   return null;
+}
+async function resolveListen(a){
+  if(a.listenUrl)return{url:a.listenUrl,name:a.platform||'Ascolta'};
+  if(a.spotify)return{url:a.spotify,name:a.platName||'Spotify'};
+  let L=null;
+  try{L=await daOdesli(a)}catch(e){}
+  if(!L||!/spotify/i.test(L.name)){
+    /* se Odesli non ha trovato proprio Spotify, chiedo anche all'archivio:
+       la scheda esatta e' meglio di un ripiego su un'altra piattaforma */
+    let A=null;
+    try{A=await daArchivio(a)}catch(e){}
+    if(A&&(!L||/spotify/i.test(A.name)))L=A;
+  }
+  if(!L)return null;
+  const cur=DB.albums.find(x=>x.id===a.id)||a;
+  cur.spotify=L.url;cur.platName=L.name;save(cur);
+  return L;
 }
 
 /* ==========================================================
@@ -1405,16 +1497,24 @@ async function runBatch(files){
   show('add');
   openDeck();
   for(let i=0;i<files.length;i++){
+    let item=null;
     try{
-      const item=await analyzeImage(files[i],(msg,pct)=>setDeckProgress(i,msg,pct));
-      deck.push(item);
-    }catch(e){deck.push({kind:'none',dataUrl:'',small:'',cands:[],results:[]})}
-    if(deck.length===1)renderCard();
+      /* se una lettura si impianta non deve bloccare tutta la coda */
+      item=await Promise.race([
+        analyzeImage(files[i],(msg,pct)=>setDeckProgress(i,msg,pct)),
+        new Promise(r=>setTimeout(()=>r(null),90000))
+      ]);
+    }catch(e){item=null}
+    deck.push(item||{kind:'none',dataUrl:'',small:'',cands:[],results:[]});
+    /* Se stavi aspettando proprio questa, disegnala: altrimenti resti fermo
+       sulla schermata di attesa per sempre. */
+    if(deckIdx>=deck.length-1)renderCard();
     else updateDeckMeta();
   }
   deckDone=true;
   updateDeckMeta();
-  if(!deck.length)closeDeck();
+  if(!deck.length||deckIdx>=deck.length)closeDeck();
+  else if(deckIdx===deck.length-1)renderCard();
 }
 function setDeckProgress(i,msg,pct){
   const el=document.getElementById('deckProg');
@@ -1575,8 +1675,14 @@ function renderCard(){
   const body=document.getElementById('deckBody');
   updateDeckMeta();
   if(deckIdx>=deck.length){
+    /* schermata di attesa: dice a che punto siamo e lascia sempre una via d'uscita */
     body.innerHTML='<div class="empty"><div class="big">&#128247;</div>'+
-      '<div id="deckProg"><span class="spinner"></span> sto leggendo...</div></div>';
+      '<div id="deckProg"><span class="spinner"></span> sto leggendo...</div>'+
+      '<div class="tiny muted" style="margin-top:10px">'+deck.length+' di '+deckTotal+' gia\' letti &middot; '+
+      deckAdded+' aggiunti</div>'+
+      '<button class="btn gh sm" id="deckEsci" style="margin-top:16px">Chiudi e tieni quelli aggiunti</button></div>';
+    const b=document.getElementById('deckEsci');
+    if(b)b.onclick=()=>closeDeck();
     return;
   }
   const it=deck[deckIdx];
@@ -1690,6 +1796,13 @@ function renderCardList(it,body){
         (low?'<div class="tiny" style="color:var(--acc2)">controlla: c\'era &ldquo;'+esc(r.p.raw)+'&rdquo;</div>':'')+
         (have?'<div class="tiny" style="color:var(--ok)">gi&agrave; in libreria</div>':'')+
       '</div>';
+    /* correggere una singola riga: senza questo l'avviso "controlla" segnala
+       un problema senza dare modo di rimediare */
+    const bMod=document.createElement('button');
+    bMod.className='btn gh sm';bMod.style.cssText='flex:none;padding:6px 10px';
+    bMod.textContent=r.match?'cambia':'cerca';
+    bMod.onclick=e=>{e.preventDefault();e.stopPropagation();correggiRiga(it,i,body)};
+    row.appendChild(bMod);
     L.appendChild(row);
   });
   L.addEventListener('change',e=>{
@@ -1701,6 +1814,40 @@ function renderCardList(it,body){
     deckAdded+=n;nextCard();
   };
   document.getElementById('dkNo').onclick=()=>{deckSkipped++;nextCard()};
+}
+/* correzione di una singola riga della lista */
+async function correggiRiga(it,i,body){
+  const r=it.rows[i];
+  const partenza=r.match?((r.match.artist||'')+' '+r.match.title).trim():r.p.raw;
+  body.innerHTML=
+    '<div class="tiny muted">Nello screenshot c\'era:</div>'+
+    '<div style="font-weight:700;margin:4px 0 12px">&ldquo;'+esc(r.p.raw)+'&rdquo;</div>'+
+    '<div class="row"><div class="grow"><input type="text" id="corQ" value="'+esc(partenza)+'" enterkeyhint="search"></div>'+
+    '<button class="btn" id="corGo">Cerca</button></div>'+
+    '<div class="res" id="corRes"></div>'+
+    '<div class="row" style="margin-top:14px">'+
+      '<button class="btn gh sm" id="corVia">Togli questa riga</button>'+
+      '<button class="btn gh sm" id="corInd" style="margin-left:auto">Torna all\'elenco</button>'+
+    '</div>';
+  const torna=()=>renderCardList(it,body);
+  const cerca=async()=>{
+    const q=document.getElementById('corQ').value.trim();
+    if(!q)return;
+    const rb=document.getElementById('corRes');
+    rb.innerHTML='<div class="tiny muted" style="padding:6px"><span class="spinner"></span> cerco...</div>';
+    let rs=[];try{rs=await searchAlbums(q)}catch(e){}
+    rb.innerHTML='';
+    if(!rs.length){rb.innerHTML='<div class="tiny muted" style="padding:6px">Nessun risultato.</div>';return}
+    rs.forEach(x=>rb.appendChild(resultRow(x,y=>{
+      r.match=y;r.on=true;r.conf=1;      /* scelto da te: niente piu' avviso */
+      torna();
+    })));
+  };
+  document.getElementById('corGo').onclick=cerca;
+  document.getElementById('corQ').addEventListener('keydown',e=>{if(e.key==='Enter')cerca()});
+  document.getElementById('corVia').onclick=()=>{r.match=null;r.on=false;torna()};
+  document.getElementById('corInd').onclick=torna;
+  cerca();
 }
 /* correggi a mano, poi torna al mazzo */
 function deckManual(it,r){
@@ -1815,12 +1962,14 @@ function manualForm(pre){
   pre=pre||{};openAlbum._id=null;
   document.getElementById('modal').innerHTML='<button class="mclose" id="mclose2">&times;</button>'+
    '<div class="mbody"><h2>Inserimento manuale</h2>'+
-   '<div><label class="f">Link Bandcamp / SoundCloud / altro</label>'+
-   '<input type="text" id="mnL" placeholder="incolla qui e compilo io" value="'+esc(pre.listenUrl||'')+'" autocapitalize="none" spellcheck="false">'+
-   '<div class="hint" id="mnLHint">Da un indirizzo Bandcamp o SoundCloud ricavo artista e titolo da solo. Resta salvato come pulsante di ascolto.</div></div>'+
+   '<div class="hint" style="margin:0 0 12px">Scrivi <b>titolo e artista</b> e basta: copertina, anno, '+
+   'generi, tracce e link li cerco io. Tutto il resto qui sotto e&rsquo; facoltativo.</div>'+
    '<div class="row"><div class="grow"><label class="f">Titolo</label><input type="text" id="mnT" value="'+esc(pre.title||'')+'"></div>'+
    '<div class="grow"><label class="f">Artista</label><input type="text" id="mnA" value="'+esc(pre.artist||'')+'"></div>'+
    '<div style="width:110px"><label class="f">Anno</label><input type="number" id="mnY" value="'+(pre.year||'')+'"></div></div>'+
+   '<div><label class="f">Link diretto <span class="muted" style="text-transform:none;letter-spacing:0">&middot; facoltativo</span></label>'+
+   '<input type="text" id="mnL" placeholder="solo se l&rsquo;album sta solo su Bandcamp o SoundCloud" value="'+esc(pre.listenUrl||'')+'" autocapitalize="none" spellcheck="false">'+
+   '<div class="hint" id="mnLHint">Serve per i dischi che i cataloghi non hanno. Se lo incolli, da li&rsquo; ricavo artista e titolo e diventa il pulsante di ascolto.</div></div>'+
    '<div><label class="f">Tipo</label><select id="mnK">'+
      ['album','EP','singolo','raccolta'].map(k=>'<option value="'+k+'"'+(pre.kind===k?' selected':'')+'>'+k+'</option>').join('')+
    '</select></div>'+
@@ -2060,9 +2209,10 @@ function openAlbum(id,keepScroll){
     const w=window.open('','_blank');   /* apro subito: se aspetto, il browser blocca il popup */
     const etichetta=bSpot.innerHTML;
     bSpot.innerHTML='<span class="spinner"></span>';
-    let url=fallback;
-    try{const L=await resolveListen(a);if(L&&L.url)url=L.url}catch(e){}
+    let url=fallback,diretto=false;
+    try{const L=await resolveListen(a);if(L&&L.url){url=L.url;diretto=true}}catch(e){}
     bSpot.innerHTML=etichetta;
+    if(!diretto)toast('Scheda esatta non trovata: apro la ricerca');
     if(w)w.location=url;else window.open(url,'_blank','noopener');
     if(openAlbum._id===id)openAlbum(id,true);
   };
@@ -2080,8 +2230,9 @@ function openAlbum(id,keepScroll){
     let el=null;
     try{el=await fetchTracks(a)}catch(e){}
     if(!el){
-      box.innerHTML='<div class="tiny muted">Elenco non disponibile per questo album. '+
-        'Succede quando non e\' nei cataloghi digitali.</div>';
+      box.innerHTML='<div class="tiny muted">Non sono riuscito a trovare l\'elenco. '+
+        'Ho provato iTunes, Deezer e l\'archivio MusicBrainz: succede con edizioni molto '+
+        'particolari o con titoli scritti in modo diverso da come sono catalogati.</div>';
       return;
     }
     const cur=DB.albums.find(x=>x.id===id)||a;
@@ -2158,25 +2309,54 @@ function closeModal(){chiudiModale(false)}
 let libState='all',libArtist='';
 /* filtri a selezione multipla: piu voci = ricerca piu larga, non piu stretta */
 const SEL={fGen:new Set(),fMoo:new Set(),rGen:new Set(),rMoo:new Set()};
-function disegnaChip(host,valori,insieme,alCambio){
+/* menu a tendina con le pastiglie dentro, su piu' righe: non scorre e non
+   si allunga all'infinito quando i generi aumentano */
+function chiudiMenu(){document.querySelectorAll('.mchip.aperto').forEach(m=>m.classList.remove('aperto'))}
+function menuChip(host,etichetta,valori,insieme,alCambio){
   const h=document.getElementById(host);if(!h)return;
-  h.innerHTML='';
+  const scelti=[...insieme].filter(v=>valori.includes(v));
+  const riepilogo=!scelti.length?'tutti':(scelti.length===1?scelti[0]:scelti.length+' scelti');
+  h.innerHTML='<button class="trigger" type="button">'+esc(etichetta)+
+    '<span class="cnt">'+esc(riepilogo)+'</span><span class="frec">&#9662;</span></button>'+
+    '<div class="mpanel"><div class="righe"></div>'+
+    '<div class="row" style="margin-top:10px;gap:8px">'+
+      '<button class="btn gh sm" data-az="1">Azzera</button>'+
+      '<button class="btn sm" data-ok="1" style="margin-left:auto">Fatto</button>'+
+    '</div></div>';
+  const righe=h.querySelector('.righe');
   if(!valori.length){
-    h.innerHTML='<span class="tiny muted" style="padding:6px 2px">nessuno ancora</span>';
-    return;
-  }
-  valori.forEach(v=>{
+    righe.innerHTML='<span class="tiny muted">Nessuno ancora: comparira&#768; quando avrai qualche album.</span>';
+  }else valori.forEach(v=>{
     const b=document.createElement('button');
-    b.textContent=v;
+    b.type='button';b.textContent=v;
     if(insieme.has(v))b.classList.add('on');
-    b.onclick=()=>{
+    b.onclick=e=>{
+      e.stopPropagation();
       if(insieme.has(v))insieme.delete(v);else insieme.add(v);
       b.classList.toggle('on');
+      const s2=[...insieme].filter(x=>valori.includes(x));
+      h.querySelector('.cnt').textContent=!s2.length?'tutti':(s2.length===1?s2[0]:s2.length+' scelti');
       alCambio();
     };
-    h.appendChild(b);
+    righe.appendChild(b);
   });
+  h.querySelector('.trigger').onclick=e=>{
+    e.stopPropagation();
+    const era=h.classList.contains('aperto');
+    chiudiMenu();
+    if(!era)h.classList.add('aperto');
+  };
+  h.querySelector('.mpanel').onclick=e=>e.stopPropagation();
+  h.querySelector('[data-az]').onclick=e=>{
+    e.stopPropagation();
+    valori.forEach(v=>insieme.delete(v));
+    righe.querySelectorAll('button').forEach(b=>b.classList.remove('on'));
+    h.querySelector('.cnt').textContent='tutti';
+    alCambio();
+  };
+  h.querySelector('[data-ok]').onclick=e=>{e.stopPropagation();chiudiMenu()};
 }
+document.addEventListener('click',chiudiMenu);
 function openArtist(name){
   libArtist=name||'';libState='all';
   document.getElementById('fq').value='';
@@ -2277,10 +2457,10 @@ function renderAll(){
   const moods=allValues('moods');
   [...SEL.fGen,...SEL.rGen].forEach(v=>{if(!macro.includes(v)){SEL.fGen.delete(v);SEL.rGen.delete(v)}});
   [...SEL.fMoo,...SEL.rMoo].forEach(v=>{if(!moods.includes(v)){SEL.fMoo.delete(v);SEL.rMoo.delete(v)}});
-  disegnaChip('fGenreChips',macro,SEL.fGen,renderLib);
-  disegnaChip('fMoodChips',moods,SEL.fMoo,renderLib);
-  disegnaChip('rGenreChips',macro,SEL.rGen,updatePool);
-  disegnaChip('rMoodChips',moods,SEL.rMoo,updatePool);
+  menuChip('fGenreMenu','Generi',macro,SEL.fGen,renderLib);
+  menuChip('fMoodMenu','Mood',moods,SEL.fMoo,renderLib);
+  menuChip('rGenreMenu','Generi',macro,SEL.rGen,updatePool);
+  menuChip('rMoodMenu','Mood',moods,SEL.rMoo,updatePool);
   ['fDec','rDec'].forEach(i=>fillSelect(document.getElementById(i),decades().map(String)));
   renderStats();renderLib();updatePool();sizeHint();fillSeeds();
 }
@@ -2504,22 +2684,43 @@ window.addEventListener('popstate',()=>{
 });
 /* ---- scorrimento laterale fra le sezioni ---- */
 (()=>{
-  let x0=null,y0=null,t0=0;
-  const zonaEsclusa=e=>e.target&&e.target.closest&&
-    e.target.closest('.deck,.mask,input,textarea,select,.res,.grid,button,a');
+  let x0=null,y0=null,t0=0,maxDy=0;
+  /* Escludo solo cio' che ha un suo gesto orizzontale: campi di testo, menu,
+     e qualunque cosa scorra davvero in orizzontale. Copertine e pulsanti NO:
+     un tocco non muove il dito, quindi non puo' essere scambiato per gesto. */
+  function zonaEsclusa(el){
+    for(let n=el;n&&n!==document.body;n=n.parentElement){
+      if(!n.tagName)continue;
+      const tag=n.tagName.toLowerCase();
+      if(tag==='input'||tag==='textarea'||tag==='select')return true;
+      if(n.classList&&(n.classList.contains('mpanel')||n.classList.contains('deck')||
+         n.classList.contains('mask')))return true;
+      /* scorre in orizzontale per conto suo? allora e' roba sua */
+      if(n.scrollWidth-n.clientWidth>12){
+        const ov=getComputedStyle(n).overflowX;
+        if(ov==='auto'||ov==='scroll')return true;
+      }
+    }
+    return false;
+  }
   document.addEventListener('touchstart',e=>{
-    if(e.touches.length!==1||zonaEsclusa(e)){x0=null;return}
-    x0=e.touches[0].clientX;y0=e.touches[0].clientY;t0=Date.now();
+    if(e.touches.length!==1||zonaEsclusa(e.target)){x0=null;return}
+    x0=e.touches[0].clientX;y0=e.touches[0].clientY;t0=Date.now();maxDy=0;
+  },{passive:true});
+  document.addEventListener('touchmove',e=>{
+    if(x0===null||!e.touches.length)return;
+    maxDy=Math.max(maxDy,Math.abs(e.touches[0].clientY-y0));
   },{passive:true});
   document.addEventListener('touchend',e=>{
     if(x0===null)return;
     const t=e.changedTouches[0];
-    const dx=t.clientX-x0, dy=t.clientY-y0, dt=Date.now()-t0;
+    const dx=t.clientX-x0, dt=Date.now()-t0;
     x0=null;
-    /* orizzontale deciso, non troppo lento, e non mentre e' aperto qualcosa */
-    if(dt>600||Math.abs(dx)<70||Math.abs(dx)<Math.abs(dy)*1.8)return;
     if(document.getElementById('mask').classList.contains('on'))return;
     if(document.getElementById('deck').classList.contains('on'))return;
+    /* orizzontale deciso e senza scorrimento verticale per strada */
+    if(dt>800||Math.abs(dx)<55||maxDy>45||Math.abs(dx)<maxDy*1.6)return;
+    chiudiMenu();
     vaiA(dx<0?1:-1);
   },{passive:true});
 })();

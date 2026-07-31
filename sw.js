@@ -3,7 +3,7 @@
    1. tiene l'app usabile offline (cache dello shell)
    2. intercetta le condivisioni da Android e passa l'immagine alla pagina  */
 
-const V = 'crate-v4';
+const V = 'crate-v10';
 const SHARE_CACHE = 'crate-share';
 const MODEL_CACHE = 'crate-modelli';
 const SHELL = [
