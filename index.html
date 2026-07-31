@@ -427,6 +427,32 @@ label.f{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.7p
   </div>
 
   <div class="card" style="margin-bottom:14px">
+    <h2>Account Spotify</h2>
+    <p class="tiny muted" style="margin-top:0">Collegando il tuo account, Crate pu&ograve; chiedere gli album direttamente a Spotify: titolo, tipo, tracce, durata, copertina e pagina esatta, senza pi&ugrave; ricostruirli da altre fonti. Serve una registrazione gratuita, una volta sola.</p>
+    <div id="spotStato" class="tiny" style="margin:10px 0 12px"></div>
+    <label class="f">Client ID</label>
+    <input type="text" id="spotId" placeholder="le 32 lettere e numeri che ti d&agrave; Spotify" autocapitalize="none" spellcheck="false">
+    <div class="tiny muted" style="margin:6px 0 12px">Non &egrave; una password: il Client ID &egrave; pubblico per costruzione. Lo sincronizzo con la libreria, cos&igrave; lo scrivi una volta e il telefono lo trova gi&agrave;.</div>
+    <label class="f">Indirizzo di ritorno da incollare su Spotify</label>
+    <div class="row" style="align-items:center;gap:8px;margin-bottom:12px">
+      <code id="spotRed" style="flex:1;min-width:0;font-size:12px;word-break:break-all;color:var(--fg2)"></code>
+      <button class="btn gh sm" id="spotCopy">Copia</button>
+    </div>
+    <div class="row">
+      <button class="btn" id="spotLogin">Collega account</button>
+      <button class="btn gh sm" id="spotOut" style="border-color:var(--acc);color:var(--acc)">Scollega</button>
+    </div>
+    <div class="hint"><b>Come si fa, in cinque minuti.</b><br>
+      1. Vai su <b>developer.spotify.com/dashboard</b> e accedi con il tuo account Spotify.<br>
+      2. <b>Create app</b>. Nome e descrizione: quello che vuoi (&ldquo;Crate&rdquo; va bene).<br>
+      3. In <b>Redirect URI</b> incolla l&rsquo;indirizzo qui sopra e premi <b>Add</b>.<br>
+      4. Spunta <b>Web API</b>, accetta i termini, salva.<br>
+      5. Nella scheda dell&rsquo;app apri <b>Settings</b> e copia il <b>Client ID</b> qui sopra.<br>
+      6. Premi <b>Collega account</b>: Spotify ti chiede il permesso, dici di s&igrave;, e torni qui.<br><br>
+      Il <b>Client Secret</b> che vedi accanto <b>non serve</b>: non incollarlo da nessuna parte. Il permesso resta su questo dispositivo, quindi ripeti solo il punto 6 sul telefono.</div>
+  </div>
+
+  <div class="card" style="margin-bottom:14px">
     <h2>Dove ascolti</h2>
     <p class="tiny muted" style="margin-top:0">Quando cerco il link di riproduzione provo queste piattaforme in quest&rsquo;ordine e mi fermo alla prima che ha l&rsquo;album. Togli quelle che non usi: un link a un servizio a cui non sei abbonato apre solo una richiesta di abbonamento.</p>
     <div id="prPlat"></div>
@@ -440,7 +466,7 @@ label.f{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.7p
       <button class="btn" id="spotMissing">Collega quelli che mancano</button>
       <button class="btn gh" id="spotAll">Ricontrolla tutti</button>
     </div>
-    <div class="hint">&ldquo;Ricontrolla tutti&rdquo; riprova anche gli album finiti su un&rsquo;altra piattaforma, per vedere se nel frattempo Spotify li ha. Gli indirizzi che hai incollato tu non vengono mai toccati.</div>
+    <div class="hint">&ldquo;Ricontrolla tutti&rdquo; riprova anche gli album finiti su un&rsquo;altra piattaforma, per vedere se nel frattempo Spotify li ha. Gli indirizzi che hai incollato tu non vengono mai toccati.<br><br>Va lento di proposito: la fonte migliore accetta dieci richieste al minuto, quindi conta circa <b>otto album al minuto</b>. Puoi fermarlo e riprenderlo quando vuoi, quelli gi&agrave; collegati non li rifa&agrave;. Alla fine ti dico anche perch&eacute; gli altri non ci sono.</div>
     <div id="spotBox" style="display:none;margin-top:14px">
       <div class="bar"><i id="spotBar"></i></div>
       <div class="tiny muted" id="spotTxt" style="margin-top:8px"></div>
@@ -501,9 +527,10 @@ label.f{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.7p
 /* ==========================================================
    1. STATO
    ========================================================== */
-const APP_VER='19';
+const APP_VER='22';
 const LS='crate.v1', LSK='crate.lfmkey', LSG='crate.gh', LSS='crate.lastsync', LSP='crate.prefs';
-let DB={albums:[],deleted:[]};
+const LSSP='crate.spot';   /* accesso a Spotify: resta su QUESTO dispositivo */
+let DB={albums:[],deleted:[],cfg:{}};
 
 /* ---- preferenze di visualizzazione della scheda album ----
    Restano su questo dispositivo: sul telefono puoi volere il minimale
@@ -559,7 +586,8 @@ window.crateImgFail=function(img){img.style.visibility='hidden'};
 
 function loadLocal(){
   try{const raw=localStorage.getItem(LS);if(raw){const p=JSON.parse(raw);
-    if(p&&Array.isArray(p.albums)){DB={albums:p.albums,deleted:Array.isArray(p.deleted)?p.deleted:[]};
+    if(p&&Array.isArray(p.albums)){DB={albums:p.albums,deleted:Array.isArray(p.deleted)?p.deleted:[],
+      cfg:(p.cfg&&typeof p.cfg==='object')?p.cfg:{}};
       DB.albums.forEach(a=>{if(!a.updatedAt)a.updatedAt=a.addedAt||now()})}}}catch(e){}
 }
 function saveLocal(){
@@ -617,8 +645,13 @@ function mergeDB(a,b){
   /* le lapidi pesano ~40 byte: le tengo un anno, cosi' un dispositivo
      rimasto spento a lungo non fa resuscitare un album cancellato */
   const cutoff=now()-365*864e5;
+  /* impostazioni condivise (per ora solo il Client ID di Spotify):
+     vince la piu' recente, come per gli album */
+  const ca=a.cfg||{},cb=b.cfg||{};
+  const cfg=((+cb.at||0)>(+ca.at||0))?cb:ca;
   return{albums:[...map.values()].sort((x,y)=>(y.addedAt||0)-(x.addedAt||0)),
-         deleted:[...del.values()].filter(d=>(d.at||0)>cutoff)};
+         deleted:[...del.values()].filter(d=>(d.at||0)>cutoff),
+         cfg:cfg};
 }
 function canon(db){
   const norm=o=>{const r={};Object.keys(o).sort().forEach(k=>{
@@ -626,7 +659,8 @@ function canon(db){
     r[k]=Array.isArray(v)?[...v].map(String).sort():v});return r};
   const s=(x,y)=>x.id<y.id?-1:x.id>y.id?1:0;
   return JSON.stringify({a:(db.albums||[]).slice().sort(s).map(norm),
-                         d:(db.deleted||[]).slice().sort(s).map(norm)});
+                         d:(db.deleted||[]).slice().sort(s).map(norm),
+                         c:norm(db.cfg||{})});
 }
 
 /* ==========================================================
@@ -721,6 +755,206 @@ async function syncNow(depth){
   }
   syncing=false;
   if(pending){pending=false;setTimeout(()=>syncNow(),600)}
+}
+
+/* ==========================================================
+   3b. ACCOUNT SPOTIFY
+   Spotify non fa cercare i suoi album senza credenziali. La strada normale
+   chiede un "client secret", che dentro una pagina pubblica sarebbe in
+   chiaro: inservibile. Esiste pero' PKCE, nato per le app senza server.
+   Invece del segreto si spedisce l'impronta di un numero casuale, e solo
+   chi conosce il numero puo' ritirare il token. Nessun segreto da custodire,
+   solo un Client ID, che e' pubblico per progetto.
+
+   Il token resta su questo dispositivo. Spotify, a ogni rinnovo, sostituisce
+   quello di rinnovo e annulla il precedente: due dispositivi che se ne
+   passassero uno solo si scollegherebbero a vicenda. Il Client ID invece
+   viaggia con la libreria, cosi' lo scrivi una volta.
+   ========================================================== */
+const SPOT_AUTH='https://accounts.spotify.com/authorize';
+const SPOT_TOKEN='https://accounts.spotify.com/api/token';
+const SPOT_API='https://api.spotify.com/v1';
+let SPOT={clientId:'',token:'',refresh:'',scade:0,nome:''};
+function spotCarica(){
+  try{const p=JSON.parse(localStorage.getItem(LSSP)||'null');
+    if(p&&typeof p==='object')SPOT=Object.assign(SPOT,p)}catch(e){}
+  /* il Client ID arrivato dall'altro dispositivo vince, se qui non c'e' */
+  const dalSync=(DB.cfg&&DB.cfg.spotClientId)||'';
+  if(dalSync&&!SPOT.clientId)SPOT.clientId=dalSync;
+}
+function spotSalva(){try{localStorage.setItem(LSSP,JSON.stringify(SPOT))}catch(e){}}
+function spotCollegato(){return!!(SPOT.clientId&&SPOT.refresh)}
+/* l'indirizzo di ritorno deve combaciare al carattere con quello scritto
+   nel cruscotto di Spotify: lo calcolo e te lo faccio copiare */
+function spotRedirect(){
+  /* deve combaciare al carattere, sempre: se apri "index.html" a mano
+     l'indirizzo sarebbe diverso da quando l'app parte dalla cartella */
+  return location.origin+location.pathname.replace(/index\.html$/,'');
+}
+
+function b64url(buf){
+  let s='';const b=new Uint8Array(buf);
+  for(let i=0;i<b.length;i++)s+=String.fromCharCode(b[i]);
+  return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+async function spotEntra(){
+  if(!SPOT.clientId){toast('Prima incolla il Client ID');return}
+  if(!window.crypto||!crypto.subtle){toast('Questo browser non permette l\'accesso sicuro');return}
+  const a=new Uint8Array(48);crypto.getRandomValues(a);
+  const verifier=b64url(a.buffer);
+  const sfida=b64url(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(verifier)));
+  const stato=b64url(crypto.getRandomValues(new Uint8Array(12)).buffer);
+  /* localStorage e non sessionStorage: su Android l'app installata apre il
+     permesso in una finestra separata, e la sessione non la seguirebbe */
+  try{localStorage.setItem('crate.pkce',verifier);localStorage.setItem('crate.stato',stato)}
+  catch(e){toast('Il browser non mi lascia salvare nulla: accesso impossibile');return}
+  location.href=SPOT_AUTH+'?client_id='+encodeURIComponent(SPOT.clientId)+
+    '&response_type=code&redirect_uri='+encodeURIComponent(spotRedirect())+
+    '&code_challenge_method=S256&code_challenge='+sfida+'&state='+stato;
+}
+async function spotToken(corpo){
+  const r=await fetch(SPOT_TOKEN,{method:'POST',
+    headers:{'Content-Type':'application/x-www-form-urlencoded'},
+    body:new URLSearchParams(corpo).toString()});
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok)throw new Error(d.error_description||d.error||('HTTP '+r.status));
+  SPOT.token=d.access_token||'';
+  if(d.refresh_token)SPOT.refresh=d.refresh_token;
+  SPOT.scade=Date.now()+((+d.expires_in||3600)-90)*1000;
+  spotSalva();
+  return SPOT.token;
+}
+/* il ritorno dal cruscotto di Spotify: ?code=... nell'indirizzo */
+async function spotRitorno(){
+  const p=new URLSearchParams(location.search);
+  const code=p.get('code'),stato=p.get('state'),err=p.get('error');
+  if(err){cleanUrl();toast('Spotify ha detto di no: '+err);return false}
+  if(!code)return false;
+  const verifier=localStorage.getItem('crate.pkce');
+  const atteso=localStorage.getItem('crate.stato');
+  localStorage.removeItem('crate.pkce');localStorage.removeItem('crate.stato');
+  cleanUrl();
+  if(!verifier||(atteso&&stato!==atteso)){toast('Accesso non riuscito: riprova');return false}
+  try{
+    await spotToken({grant_type:'authorization_code',code:code,
+      redirect_uri:spotRedirect(),client_id:SPOT.clientId,code_verifier:verifier});
+    try{const me=await spotChiama('/me');if(me)SPOT.nome=me.display_name||me.id||''}catch(e){}
+    spotSalva();toast('Spotify collegato');
+    return true;
+  }catch(e){toast('Accesso non riuscito: '+e.message);return false}
+}
+let spotRinnovo=null;
+async function spotValido(){
+  if(!SPOT.clientId||!SPOT.refresh)return '';
+  if(SPOT.token&&Date.now()<SPOT.scade)return SPOT.token;
+  /* un solo rinnovo per volta: se partissero in parallelo, il secondo
+     userebbe un token di rinnovo gia' annullato dal primo */
+  if(!spotRinnovo){
+    spotRinnovo=spotToken({grant_type:'refresh_token',refresh_token:SPOT.refresh,
+      client_id:SPOT.clientId})
+      .catch(e=>{
+        /* rinnovo rifiutato: l'accesso e' scaduto davvero, non fingo che vada */
+        SPOT.token='';SPOT.refresh='';SPOT.scade=0;spotSalva();
+        if(typeof renderSpot==='function')renderSpot();
+        return '';
+      })
+      .then(t=>{spotRinnovo=null;return t});
+  }
+  return spotRinnovo;
+}
+/* una chiamata all'API, con rinnovo e rispetto dei tempi di attesa */
+async function spotChiama(percorso,tentativo){
+  const t=await spotValido();
+  if(!t)return null;
+  const r=await fetch(SPOT_API+percorso,{headers:{Authorization:'Bearer '+t}});
+  if(r.status===401&&!tentativo){SPOT.scade=0;return spotChiama(percorso,1)}
+  if(r.status===429){
+    const att=Math.min(30,+(r.headers.get('Retry-After')||2)+1);
+    if(tentativo)return null;
+    await sleep(att*1000);
+    return spotChiama(percorso,1);
+  }
+  if(r.status===404)return null;
+  if(!r.ok)throw new Error('Spotify: HTTP '+r.status);
+  return r.json();
+}
+
+/* ---- da Spotify all'album, per davvero ----
+   Qui non si indovina niente: l'API risponde con il tipo di pubblicazione
+   (album, singolo, raccolta), il numero esatto di tracce e la copertina. */
+function spotVerso(al){
+  if(!al||!al.id)return null;
+  const img=(al.images||[]).slice().sort((x,y)=>(y.width||0)-(x.width||0))[0];
+  const tr=((al.tracks&&al.tracks.items)||[])
+    .map((t,i)=>({n:+t.track_number||i+1,t:t.name,ms:+t.duration_ms||0}));
+  const tipo=String(al.album_type||al.type||'').toLowerCase();
+  const link='https://open.spotify.com/album/'+al.id;
+  return{title:cleanTitle(al.name||''),
+    artist:(al.artists||[]).map(x=>x&&x.name).filter(Boolean).join(', '),
+    year:al.release_date?+String(al.release_date).slice(0,4)||null:null,
+    cover:img?img.url:'',
+    tracks:+al.total_tracks||tr.length||null,
+    tracklist:tr.length?tr:null,
+    durata:tr.length?tr.reduce((x,t)=>x+(t.ms||0),0):null,
+    kind:tipo==='single'?(+al.total_tracks>=3?'EP':'singolo')
+        :tipo==='compilation'?'raccolta':'album',
+    spotify:link,platName:'Spotify',listenUrl:link,platform:'Spotify',linkFissato:true};
+}
+function spotLeggero(x){
+  const tipo=String(x.album_type||'').toLowerCase();
+  const img=(x.images||[]).slice().sort((p,q)=>(q.width||0)-(p.width||0))[0];
+  const link='https://open.spotify.com/album/'+x.id;
+  return{title:cleanTitle(x.name||''),
+    artist:(x.artists||[]).map(a=>a&&a.name).filter(Boolean).join(', '),
+    year:x.release_date?+String(x.release_date).slice(0,4)||null:null,
+    cover:img?img.url:'',genre:'',tracks:+x.total_tracks||null,
+    kind:tipo==='single'?(+x.total_tracks>=3?'EP':'singolo')
+        :tipo==='compilation'?'raccolta':'album',
+    spotify:link,platName:'Spotify',listenUrl:link,platform:'Spotify',
+    linkFissato:true,src:'spotify'};
+}
+/* la ricerca a testo libero, per quello che leggo dagli screenshot:
+   un risultato di Spotify si porta dietro gia' il link giusto */
+async function spotCercaLibera(term){
+  if(!spotCollegato()||!term)return[];
+  let d=null;
+  try{d=await spotChiama('/search?type=album&limit=8&market=from_token&q='+encodeURIComponent(term))}
+  catch(e){return[]}
+  return(((d&&d.albums&&d.albums.items)||[])).filter(x=>x&&x.id).map(spotLeggero);
+}
+async function spotAlbumPerId(id){
+  if(!id)return null;
+  const d=await spotChiama('/albums/'+encodeURIComponent(id)+'?market=from_token');
+  return spotVerso(d);
+}
+async function spotCerca(titolo,artista){
+  if(!titolo||!spotCollegato())return null;
+  const pulisci=x=>String(x||'').replace(/["']/g,' ').trim();
+  const mirata='album:"'+pulisci(titolo)+'"'+(artista?' artist:"'+pulisci(artista)+'"':'');
+  let items=[];
+  const chiedi=async q=>{
+    const d=await spotChiama('/search?type=album&limit=20&market=from_token&q='+encodeURIComponent(q));
+    return((d&&d.albums&&d.albums.items)||[]).filter(x=>x&&x.id);
+  };
+  try{items=await chiedi(mirata)}catch(e){}
+  /* la ricerca per campi e' severa: se non trova nulla ritento a testo libero */
+  if(!items.length){try{items=await chiedi(((artista||'')+' '+titolo).trim())}catch(e){}}
+  if(!items.length)return null;
+  const leggeri=items.map(x=>({id:x.id,r:{
+    title:cleanTitle(x.name||''),artist:(x.artists||[]).map(a=>a&&a.name).filter(Boolean).join(', '),
+    tracks:+x.total_tracks||null,
+    year:x.release_date?+String(x.release_date).slice(0,4)||null:null,
+    kind:String(x.album_type||'').toLowerCase()==='single'?(+x.total_tracks>=3?'EP':'singolo')
+        :String(x.album_type||'').toLowerCase()==='compilation'?'raccolta':'album'}}));
+  const esatti=leggeri.filter(c=>stessoTitolo(c.r.title,titolo)&&
+    (!artista||txtSim(c.r.artist,artista)>=.5));
+  const ordinati=(esatti.length?esatti:leggeri).slice()
+    .sort((x,y)=>simAlbum(y.r,titolo,artista)-simAlbum(x.r,titolo,artista));
+  const scelto=ordinati[0];
+  if(!scelto)return null;
+  /* nessun titolo identico e nemmeno una somiglianza decente: meglio dire di no */
+  if(!esatti.length&&simAlbum(scelto.r,titolo,artista)<.6)return null;
+  return spotAlbumPerId(scelto.id);
 }
 
 /* ==========================================================
@@ -880,12 +1114,13 @@ async function cercaPerTitolo(titolo,artista){
 /* la ricerca completa: testo libero + titolo esatto, unite e senza doppioni */
 async function cercaCompleta(titolo,artista){
   const q=((artista||'')+' '+(titolo||'')).trim();
-  const [a,b]=await Promise.all([
+  const [a,b,sp]=await Promise.all([
     q?searchAlbums(q).catch(()=>[]):Promise.resolve([]),
-    cercaPerTitolo(titolo,artista)
+    cercaPerTitolo(titolo,artista),
+    spotCollegato()?spotCercaLibera(q||titolo).catch(()=>[]):Promise.resolve([])
   ]);
   const out=[],visti=new Set();
-  [...a,...b].forEach(r=>{
+  [...sp,...a,...b].forEach(r=>{
     const k=((r.artist||'')+'|'+(r.title||'')).toLowerCase();
     if(visti.has(k))return;visti.add(k);out.push(r);
   });
@@ -995,6 +1230,12 @@ async function tracceArchivio(a){
 /* tre fonti in cascata: iTunes, Deezer, archivio.
    soloVeloci salta l'archivio, che e' lento e va a 1 richiesta al secondo. */
 async function fetchTracks(a,soloVeloci){
+  /* se ho l'account e so gia' quale album e' su Spotify, l'elenco esatto
+     arriva da li' in una chiamata sola */
+  if(spotCollegato()){
+    const id=idSpotify(a.spotify||a.listenUrl||'');
+    if(id){try{const d=await spotAlbumPerId(id);if(d&&d.tracklist)return d.tracklist}catch(e){}}
+  }
   try{const t=await tracceItunes(a);if(t)return t}catch(e){}
   /* nessun aggancio a iTunes? provo a procurarmelo cercando l'album */
   if(!a.itunesUrl&&!a.deezerUrl){
@@ -1178,13 +1419,29 @@ async function autoComplete(id){
      libero: e' cosi' che al posto di This Old Dog e' entrato "Old Dog Demos". */
   const sp=idSpotify(a0.listenUrl||a0.spotify||'');
   if(sp&&!a0.daLink){
-    let d=null;try{d=await albumDaSpotify(urlSpotify(sp))}catch(e){}
+    /* l'artista che hai scritto tu (o che ho letto dallo screenshot) e' un
+       dato prezioso: senza, "This Old Dog" e' anche di altri tre artisti */
+    let d=null;try{d=await albumDaSpotify(urlSpotify(sp),null,a0.artist||'')}catch(e){}
     const a=DB.albums.find(x=>x.id===id);if(!a)return null;
     a.daLink=true;
     if(d){applicaDati(a,d);save(a);renderAll();
       if(openAlbum._id===id)openAlbum(id,true);
       return d;}
     save(a);
+  }
+  /* con l'account collegato chiedo direttamente a Spotify: risponde con il
+     tipo di pubblicazione, quindi album e singolo omonimo non si confondono */
+  if(spotCollegato()&&(!a0.cover||!a0.spotify||!a0.tracks)){
+    let d=null;try{d=await spotCerca(a0.title,a0.artist)}catch(e){}
+    if(d){
+      const a=DB.albums.find(x=>x.id===id);if(!a)return null;
+      if(!a.artist&&d.artist)a.artist=d.artist;
+      ['cover','year','tracks','tracklist','durata','kind','spotify','platName'].forEach(k=>{if(d[k]&&!a[k])a[k]=d[k]});
+      if(!a.listenUrl){a.listenUrl=d.listenUrl;a.platform='Spotify';a.linkFissato=true}
+      save(a);renderAll();
+      if(openAlbum._id===id)openAlbum(id,true);
+      return d;
+    }
   }
   if(a0.cover&&a0.itunesUrl)return null;              /* gia' completa */
   let rs=[];
@@ -1303,6 +1560,22 @@ async function bulkEnrich(mode){
    qual e' la pagina dell'album, e nel frattempo resti su about:blank. Se lo
    faccio prima per tutta la libreria, il tasto diventa istantaneo. */
 let spotRunning=false,spotStop=false;
+/* perche' un album e' rimasto senza collegamento. Lo tengo solo in memoria:
+   e' una spiegazione per te adesso, non un dato da portarsi dietro per sempre. */
+const MOTIVI=new Map();
+/* Nel collegamento in blocco ha senso ASPETTARE il credito di Odesli invece
+   di saltarlo: qui so di star lavorando per minuti, non per secondi, e Odesli
+   e' la fonte che azzecca piu' collegamenti. */
+async function aspettaOdesli(dillo){
+  if(Date.now()<odesliFermoFino)return false;   /* in pausa per un errore: inutile aspettare */
+  while(odesliCredito()<=0){
+    if(spotStop)return false;
+    const manca=Math.max(1,Math.ceil((60000-(Date.now()-odesliTs[0]))/1000));
+    dillo('aspetto '+manca+'s: Odesli accetta 10 richieste al minuto');
+    await sleep(1200);
+  }
+  return true;
+}
 function haSpotify(a){return!!(a.linkFissato||(a.spotify&&/spotify/i.test(a.platName||'')))}
 async function bulkSpotify(mode){
   if(spotRunning)return;
@@ -1315,20 +1588,41 @@ async function bulkSpotify(mode){
         txt=document.getElementById('spotTxt');
   box.style.display='block';
   let done=0,presi=0,altrove=0;
+  const motivi=new Map();
+  const stato=(a,extra)=>{txt.innerHTML='<b>'+(done+1)+' / '+list.length+'</b> &middot; '+esc(a.title)+
+    (extra?' &middot; <span class="muted">'+esc(extra)+'</span>':'')};
   for(const a of list){
     if(spotStop)break;
-    txt.innerHTML='<b>'+(done+1)+' / '+list.length+'</b> &middot; '+esc(a.title);
+    stato(a,'');
     bar.style.width=Math.round(done/list.length*100)+'%';
+    /* Con l'account collegato non serve aspettare nessuno: Spotify concede
+       250 richieste ogni 30 secondi. Senza account, Odesli e' la fonte che
+       azzecca di piu', e allora il suo credito lo aspetto. */
+    if(!spotCollegato()){
+      await aspettaOdesli(m=>stato(a,m));
+      if(spotStop)break;
+      stato(a,'');
+    }
     let L=null;
     try{L=await resolveListen(a,mode==='all')}catch(e){}
-    if(L&&/spotify/i.test(L.name||''))presi++;else if(L)altrove++;
+    if(L&&/spotify/i.test(L.name||''))presi++;
+    else{
+      if(L)altrove++;
+      const m=L?('trovato solo su '+L.name):(MOTIVI.get(a.id)||'nessuna fonte ha risposto');
+      motivi.set(m,(motivi.get(m)||0)+1);
+    }
     done++;
-    if(!spotStop)await sleep(1100);   /* l'archivio accetta una richiesta al secondo */
+    /* l'archivio accetta una richiesta al secondo; l'API di Spotify molte di piu' */
+    if(!spotStop)await sleep(spotCollegato()?260:1100);
   }
   bar.style.width='100%';
-  txt.innerHTML=(spotStop?'Fermato.':'Finito.')+' '+presi+' collegati a Spotify'+
+  const perse=[...motivi.entries()].sort((x,y)=>y[1]-x[1]).slice(0,6);
+  txt.innerHTML='<b>'+(spotStop?'Fermato.':'Finito.')+'</b> '+presi+' collegati a Spotify'+
     (altrove?', '+altrove+' solo su altre piattaforme':'')+
-    (done-presi-altrove>0?', '+(done-presi-altrove)+' non trovati':'')+'.';
+    (done-presi-altrove>0?', '+(done-presi-altrove)+' senza collegamento':'')+'.'+
+    (perse.length?'<div style="margin-top:10px">Perch&eacute; gli altri no:<ul style="margin:6px 0 0;padding-left:18px">'+
+      perse.map(([m,c])=>'<li>'+c+(c===1?' album: ':' album: ')+esc(m)+'</li>').join('')+
+      '</ul></div>':'');
   spotRunning=false;spotStop=false;
   renderAll();scheduleSync();
 }
@@ -1411,6 +1705,67 @@ function odesliVivo(){return Date.now()>=odesliFermoFino&&odesliCredito()>0}
    solo "Failed to fetch". Percio' tratto i due casi allo stesso modo e lo
    lascio in pace dieci minuti, invece di far aspettare ogni album per nulla. */
 function odesliInPausa(){odesliFermoFino=Date.now()+10*60*1000}
+/* la mappa completa di Odesli: mi serve non solo per scegliere dove
+   ascoltare, ma anche per tradurre un indirizzo Spotify in quello di un
+   negozio, e da li' leggere i dati per identificativo invece di cercarli */
+async function odesliMappa(url,esito){
+  if(!url)return null;
+  if(Date.now()<odesliFermoFino){if(esito)esito.push('Odesli in pausa dopo un errore recente');return null}
+  if(odesliCredito()<=0){if(esito)esito.push('Odesli: credito esaurito per un minuto');return null}
+  odesliTs.push(Date.now());
+  let r;
+  try{r=await fetch('https://api.song.link/v1-alpha.1/links?url='+encodeURIComponent(url))}
+  catch(e){odesliInPausa();
+    if(esito)esito.push('Odesli non raggiungibile (di solito e\' il limite di 10 richieste al minuto)');
+    return null}
+  if(r.status===429){odesliInPausa();if(esito)esito.push('Odesli: troppe richieste, riprova fra un minuto');return null}
+  if(!r.ok){if(esito)esito.push('Odesli: errore '+r.status);return null}
+  return((await r.json())||{}).linksByPlatform||null;
+}
+/* Deezer e iTunes, interrogati per identificativo: nessuna ricerca, nessuna
+   ambiguita' fra l'album e il singolo che si chiamano uguale. */
+async function albumDeezer(id){
+  const d=await jsonp('https://api.deezer.com/album/'+id+'?output=jsonp');
+  if(!d||!d.title)return null;
+  const lista=((d.tracks&&d.tracks.data)||[]).map((t,i)=>({n:i+1,t:t.title,ms:(+t.duration||0)*1000}));
+  return{title:cleanTitle(d.title),artist:(d.artist&&d.artist.name)||'',
+    year:d.release_date?+String(d.release_date).slice(0,4)||null:null,
+    cover:d.cover_xl||d.cover_big||'',tracks:d.nb_tracks||lista.length||null,
+    tracklist:lista.length?lista:null,durata:(+d.duration||0)*1000||null,
+    kind:detectKind(d.title,d.nb_tracks,d.record_type),
+    genre:(d.genres&&d.genres.data&&d.genres.data[0]&&d.genres.data[0].name)||'',
+    deezerUrl:d.link||''};
+}
+async function albumItunes(id){
+  const d=await jsonp('https://itunes.apple.com/lookup?entity=song&limit=200&id='+id);
+  const rs=d&&d.results||[];
+  const col=rs.filter(x=>x.wrapperType==='collection')[0];
+  if(!col)return null;
+  const lista=rs.filter(x=>x.wrapperType==='track')
+    .map(t=>({n:+t.trackNumber||0,t:t.trackName,ms:+t.trackTimeMillis||0}))
+    .sort((a,b)=>a.n-b.n);
+  return{title:cleanTitle(col.collectionName),artist:col.artistName||'',
+    year:col.releaseDate?+col.releaseDate.slice(0,4):null,
+    cover:bigCover(col.artworkUrl100),tracks:col.trackCount||lista.length||null,
+    tracklist:lista.length?lista:null,
+    durata:lista.reduce((x,t)=>x+(t.ms||0),0)||null,
+    kind:detectKind(col.collectionName,col.trackCount,col.collectionType),
+    genre:col.primaryGenreName||'',itunesUrl:col.collectionViewUrl||''};
+}
+async function datiDaNegozio(link,esito){
+  const L=await odesliMappa(link,esito);
+  if(!L)return null;
+  const idDa=(chiave,re)=>{
+    const u=L[chiave]&&L[chiave].url;
+    const m=u&&re.exec(u);
+    return m?m[1]:'';
+  };
+  const dz=idDa('deezer',/deezer\.com\/(?:[a-z]{2}\/)?album\/(\d+)/);
+  if(dz){try{const d=await albumDeezer(dz);if(d){if(esito)esito.push('dati esatti da Deezer');return d}}catch(e){}}
+  const it=idDa('itunes',/\/album\/[^/]*\/(\d+)/)||idDa('appleMusic',/\/album\/[^/]*\/(\d+)/);
+  if(it){try{const d=await albumItunes(it);if(d){if(esito)esito.push('dati esatti da iTunes');return d}}catch(e){}}
+  return null;
+}
 async function odesliDaUrl(url,esito){
   if(!url)return null;
   if(Date.now()<odesliFermoFino){if(esito)esito.push('Odesli in pausa dopo un errore recente');return null}
@@ -1461,7 +1816,7 @@ function meglioEdizione(lista,a){
    che viene cercato a parte perche' ha la precedenza su tutto */
 function altrePiatt(){return ordinePiatt().filter(p=>p.k!=='spotify')}
 async function linkArchivio(a){
-  const out={spotify:null,altro:null};
+  const out={spotify:null,altro:null,rgid:a.mbid||''};
   const guarda=urls=>{
     if(!out.spotify){
       const s=urls.find(u=>/open\.spotify\.com\/album\//.test(u));
@@ -1488,6 +1843,9 @@ async function linkArchivio(a){
     const r=await fetch('https://musicbrainz.org/ws/2/release/?fmt=json&limit=6&query='+encodeURIComponent(q));
     if(!r.ok)return out;
     const rels=((await r.json()).releases||[]).filter(x=>stessaEdizione(x,a)).slice(0,3);
+    /* mi segno il gruppo di pubblicazione: serve a Wikidata anche se qui
+       il collegamento non lo trovo */
+    if(!out.rgid)rels.some(x=>{const g=x['release-group'];if(g&&g.id){out.rgid=g.id;return true}});
     for(let i=0;i<rels.length;i++){
       await sleep(1100);
       guarda(await urlsDa('https://musicbrainz.org/ws/2/release/'+rels[i].id+'?fmt=json&inc=url-rels'));
@@ -1539,11 +1897,30 @@ async function mbDaUrl(url){
     tracks:lista.length||null,tracklist:lista.length?lista:null,durata:ms||null,
     cover:rg.id?'https://coverartarchive.org/release-group/'+rg.id+'/front-500':''};
 }
-async function albumDaSpotify(url,esito){
-  const id=idSpotify(url);if(!id)return null;
-  const link=urlSpotify(id);
+async function albumDaSpotify(url,esito,artistaNoto){
   const dice=m=>{if(esito)esito.push(m)};
+  let id=idSpotify(url);
+  /* l'app Spotify condivide spesso un link corto spotify.link: da qui non
+     posso seguirlo (il browser non me lo lascia leggere), ma Odesli si' */
+  if(!id&&/spotify\.link|spoti\.fi/.test(String(url||''))){
+    const L=await odesliMappa(url,esito).catch(()=>null);
+    const lungo=L&&L.spotify&&L.spotify.url;
+    id=idSpotify(lungo||'');
+    if(id)dice('link corto sciolto');
+  }
+  if(!id)return null;
+  const link=urlSpotify(id);
+  /* Con l'account collegato non c'e' piu' niente da ricostruire: chiedo a
+     Spotify quell'identificativo e mi risponde con titolo, artista, tipo,
+     tracce, durata e copertina. Tutto il resto qui sotto e' la vecchia
+     impalcatura, che resta per quando l'account non c'e'. */
+  if(spotCollegato()){
+    try{const d=await spotAlbumPerId(id);
+      if(d){dice('letto da Spotify');return d}
+    }catch(e){dice('Spotify: '+(e&&e.message||'errore'))}
+  }
   const out={spotify:link,platName:'Spotify',listenUrl:link,platform:'Spotify',linkFissato:true};
+  if(artistaNoto)out.artist=artistaNoto;
   let trovato=false;
   /* 1. il titolo esatto di questo identificativo: e' la cosa piu' importante,
         perche' da soli titolo e artista non bastano a distinguere l'album
@@ -1559,6 +1936,21 @@ async function albumDaSpotify(url,esito){
       ['artist','year','mbid','tracks','tracklist','durata'].forEach(k=>{if(m[k]&&!out[k])out[k]=m[k]});
       if(!out.cover&&m.cover)out.cover=m.cover;}
   }catch(e){}
+  /* 2b. la strada migliore quando c'e': Odesli traduce l'indirizzo Spotify
+        in quello di Deezer o iTunes, e da li' leggo per identificativo.
+        Nessuna ricerca, quindi nessun modo di confondere l'album con il
+        singolo che porta lo stesso nome. */
+  if(!out.tracks||!out.artist){
+    try{const d=await datiDaNegozio(link,esito);
+      if(d&&(!out.title||stessoTitolo(d.title,out.title))){
+        trovato=true;
+        ['artist','year','tracks','tracklist','durata','kind','genre','itunesUrl','deezerUrl']
+          .forEach(k=>{if(d[k])out[k]=d[k]});
+        if(!out.cover&&d.cover)out.cover=d.cover;
+        if(!out.title)out.title=d.title;
+      }
+    }catch(e){}
+  }
   /* 3. il resto dai negozi, ma accettando solo chi ha DAVVERO quel titolo */
   if(out.title&&(!out.artist||!out.tracks||!out.cover||!out.itunesUrl)){
     let rs=[];try{rs=await cercaCompleta(out.title,out.artist||'')}catch(e){}
@@ -1571,6 +1963,23 @@ async function albumDaSpotify(url,esito){
   }
   return(trovato&&out.title)?out:null;
 }
+/* Terza strada. Wikidata tiene l'identificativo Spotify di moltissimi album
+   (proprieta' P2205) e sa agganciarlo all'archivio MusicBrainz (P436).
+   E' pubblico, senza chiavi e senza il tetto di dieci richieste al minuto:
+   e' esattamente cio' che serve quando Odesli e' a corto di credito. */
+async function spotifyDaWikidata(rgid,esito){
+  if(!rgid)return null;
+  const q='SELECT ?s WHERE{?i wdt:P436 "'+rgid+'";wdt:P2205 ?s}LIMIT 1';
+  let r;
+  try{r=await fetch('https://query.wikidata.org/sparql?format=json&query='+encodeURIComponent(q))}
+  catch(e){if(esito)esito.push('Wikidata non raggiungibile');return null}
+  if(!r.ok){if(esito)esito.push('Wikidata: errore '+r.status);return null}
+  let d;try{d=await r.json()}catch(e){return null}
+  const b=(((d||{}).results||{}).bindings||[])[0];
+  const id=b&&b.s&&b.s.value;
+  if(!id){if(esito)esito.push('Wikidata non ha l\'identificativo Spotify di questo disco');return null}
+  return urlSpotify(String(id).trim());
+}
 async function resolveListen(a,forza){
   /* un indirizzo che mi hai dato tu non si tocca mai */
   if(a.linkFissato&&a.listenUrl)return{url:a.listenUrl,name:a.platform||'Spotify'};
@@ -1581,13 +1990,37 @@ async function resolveListen(a,forza){
   const esito=[];
   const salva=L=>{const cur=DB.albums.find(x=>x.id===a.id)||a;
     cur.spotify=L.url;cur.platName=L.name;save(cur);return L};
+  /* Prima strada, quando c'e': l'account. Nessun limite stretto, nessuna
+     traduzione di indirizzi, e per giunta riempie i buchi della scheda. */
+  if(spotCollegato()){
+    let d=null;
+    try{d=await spotCerca(a.title,a.artist)}catch(e){esito.push('Spotify: '+(e&&e.message||'errore'))}
+    if(d&&d.spotify){
+      const cur=DB.albums.find(x=>x.id===a.id)||a;
+      ['cover','year','tracks','tracklist','durata'].forEach(k=>{if(d[k]&&!cur[k])cur[k]=d[k]});
+      if(!cur.artist&&d.artist)cur.artist=d.artist;
+      return salva({url:d.spotify,name:'Spotify'});
+    }
+    if(!d)esito.push('Spotify non ha questo album nel tuo paese');
+  }
   let L=null;
   if(odesliVivo()){try{L=await daOdesli(a,esito)}catch(e){esito.push('Odesli: '+(e&&e.message||'errore'))}}
   if(L&&/spotify/i.test(L.name))return salva(L);
   /* Spotify non trovato: interrogo l'archivio su piu' edizioni */
-  let A={spotify:null,altro:null};
-  try{A=await linkArchivio(a)}catch(e){}
+  let A={spotify:null,altro:null,rgid:a.mbid||''};
+  try{A=await linkArchivio(a)}catch(e){esito.push('archivio non raggiungibile')}
   if(A.spotify)return salva({url:A.spotify,name:'Spotify'});
+  if(!A.rgid)esito.push('l\'archivio non ha questo disco');
+  else if(!A.altro)esito.push('l\'archivio ce l\'ha ma senza collegamenti alle piattaforme');
+  /* terza strada: Wikidata, che non ha il tetto di richieste di Odesli */
+  if(A.rgid){
+    let W=null;
+    try{W=await spotifyDaWikidata(A.rgid,esito)}catch(e){}
+    if(W)return salva({url:W,name:'Spotify'});
+    /* mi tengo l'aggancio: la prossima volta parto da qui senza ricercarlo */
+    const cur=DB.albums.find(x=>x.id===a.id)||a;
+    if(!cur.mbid){cur.mbid=A.rgid;save(cur)}
+  }
   /* ho un link ma non di Spotify: provo a convertirlo, invece di accontentarmi */
   if(A.altro){
     let C=null;
@@ -1597,7 +2030,8 @@ async function resolveListen(a,forza){
     return salva(L&&/spotify/i.test(L.name)?L:A.altro);
   }
   if(L)return salva(L);
-  resolveListen.motivo=esito.join(' · ')||'nessuna fonte ha il collegamento';
+  resolveListen.motivo=esito.join(' \u00b7 ')||'nessuna fonte ha il collegamento';
+  MOTIVI.set(a.id,resolveListen.motivo);
   return null;
 }
 
@@ -1984,6 +2418,10 @@ function quietAdd(c){
     listenUrl:c.listenUrl||'',platform:c.platform||'',
     about:'',listeners:0,rating:null,comment:'',fav:false,listened:false,listenedAt:null,
     addedAt:now(),updatedAt:now(),src:c.src||'ocr'};
+  if(c.spotify){al.spotify=c.spotify;al.platName=c.platName||'Spotify'}
+  if(c.tracklist)al.tracklist=c.tracklist;
+  if(c.durata)al.durata=c.durata;
+  if(c.linkFissato){al.linkFissato=true;al.daLink=true}
   DB.albums.unshift(al);saveLocal();scheduleSync();renderAll();
   queueEnrich(al.id,c.genre||'');
   return al;
@@ -2001,6 +2439,13 @@ async function doSearchList(list){
   for(const c of list.slice(0,6)){
     let rs=[];
     try{rs=await searchAlbums(c)}catch(e){}
+    /* con l'account collegato chiedo anche a Spotify: quei risultati
+       arrivano gia' con il link all'album, quindi aggiungendoli dalla
+       carta non c'e' piu' niente da ricercare dopo */
+    if(spotCollegato()){
+      let sp=[];try{sp=await spotCercaLibera(c)}catch(e){}
+      if(sp.length)rs=[...sp,...rs];
+    }
     let presi=0;
     for(const r of rs){
       const k=(r.artist+'|'+r.title).toLowerCase();
@@ -2018,8 +2463,14 @@ function rankResults(results,cands,hint){
   const punteggio=r=>{
     const testo=((r.artist||'')+' '+(r.title||'')).trim();
     let best=0;
-    cands.forEach(c=>{
-      const s=Math.max(txtSim(c,testo),txtSim(c,r.title||''));
+    cands.forEach((c,i)=>{
+      /* Le letture sono in ordine di attendibilita': la prima e' quella che
+         ti mostro come "ho letto". Nello screenshot di un album ci sono anche
+         i titoli delle canzoni, e senza questo peso "For the First Time" del
+         Brady Wilson Band batteva This Old Dog: una traccia letta per caso
+         valeva quanto il titolo dell'album. */
+      const peso=1-Math.min(.45,i*.13);
+      const s=Math.max(txtSim(c,testo),txtSim(c,r.title||''))*peso;
       if(s>best)best=s;
     });
     if(hint&&r.year===hint)best+=.25;
@@ -2372,6 +2823,16 @@ async function daLinkSpotify(url){
     '<span class="spinner"></span> leggo di che disco si tratta...</div>');
   const esito=[];
   let d=null;try{d=await albumDaSpotify(url,esito)}catch(e){}
+  /* Condividendo non so l'artista, e "This Old Dog" e' anche di altri tre.
+     Se quel titolo e' gia' in libreria mi faccio prestare il suo artista e
+     riprovo: e' proprio il caso in cui vuoi correggere una scheda sbagliata. */
+  if(d&&!d.artist&&d.title){
+    const simile=DB.albums.filter(a=>!a.pending&&a.artist&&stessoTitolo(a.title,d.title))[0];
+    if(simile){
+      esito.push('artista preso dalla scheda che avevi gia\': '+simile.artist);
+      try{const d2=await albumDaSpotify(url,esito,simile.artist);if(d2)d=d2}catch(e){}
+    }
+  }
   if(!d){
     mostra('<b>Non sono riuscito a leggere l&rsquo;album</b><div class="tiny muted" style="margin-top:4px">'+
       esc(esito.join(' &middot; ')||'nessuna fonte ha risposto')+
@@ -2399,7 +2860,7 @@ function sharedText(txt){
   /* Condivisione direttamente dall'app Spotify: qui non c'e' niente da
      indovinare, l'indirizzo dice esattamente quale album e'. Lo aggiungo
      e basta, senza farti passare da un modulo. */
-  if(idSpotify(url)){daLinkSpotify(url);return}
+  if(idSpotify(url)||/spotify\.link|spoti\.fi/.test(url)){daLinkSpotify(url);return}
   const words=txt.replace(/https?:\/\/\S+/g,'').replace(/\s+/g,' ').trim();
   const p=url?parseMusicUrl(url):{};
   const known=!!(p.title||p.artist);   /* Bandcamp e SoundCloud li so leggere */
@@ -2661,6 +3122,8 @@ function openAlbum(id,keepScroll){
       '</div><div id="covBox" style="margin-top:10px"></div>'+
       '<input type="file" id="covFile" accept="image/*" hidden></div>'+
     '<div class="sec row"><button class="btn gh sm" id="bRe">Riprova tag automatici</button>'+
+      (a.pending||!MOTIVI.get(a.id)?'':'<div id="linkMotivo" style="flex-basis:100%;margin-bottom:6px">'+
+        '<span class="tiny muted">'+esc(MOTIVI.get(a.id))+'</span></div>')+
       (a.pending?'':'<button class="btn gh sm" id="bLink"'+
         (!a.linkFissato&&a.spotify&&!piattAttiva(a.platName)?' style="border-color:var(--acc);color:var(--acc)"':'')+'>'+
         (a.linkFissato?'Link incollato da te'
@@ -2732,7 +3195,11 @@ function openAlbum(id,keepScroll){
     bLink.innerHTML=et;
     if(L&&/spotify/i.test(L.name||''))toast('Collegato a Spotify');
     else if(L)toast('Su Spotify non risulta: collegato a '+L.name);
-    else toast(resolveListen.motivo||'Non l\'ho trovato da nessuna parte');
+    else{
+      toast('Non l\'ho trovato');
+      const box=document.getElementById('linkMotivo');
+      if(box)box.innerHTML='<span class="tiny muted">'+esc(MOTIVI.get(a.id)||resolveListen.motivo||'')+'</span>';
+    }
     save(a);renderAll();
     if(openAlbum._id===id)openAlbum(id,true);
   };
@@ -3438,6 +3905,39 @@ document.getElementById('bulkMissing').onclick=()=>bulkEnrich('missing');
 document.getElementById('bulkAll').onclick=()=>bulkEnrich('all');
 document.getElementById('bulkReset').onclick=()=>bulkEnrich('reset');
 document.getElementById('bulkStop').onclick=()=>{bulkStop=true;toast('Mi fermo dopo questo album')};
+function renderSpot(){
+  const st=document.getElementById('spotStato');
+  const red=document.getElementById('spotRed');
+  const inp=document.getElementById('spotId');
+  if(!st)return;
+  if(red)red.textContent=spotRedirect();
+  if(inp&&document.activeElement!==inp)inp.value=SPOT.clientId||'';
+  const out=document.getElementById('spotOut');
+  if(out)out.style.display=spotCollegato()?'':'none';
+  st.innerHTML=spotCollegato()
+    ? '<span style="color:var(--ok,#4ade80)">&#10003; collegato</span>'+
+      (SPOT.nome?' come <b>'+esc(SPOT.nome)+'</b>':'')+
+      ' &middot; <span class="muted">250 richieste ogni 30 secondi, invece di 10 al minuto</span>'
+    : (SPOT.clientId?'<span class="muted">Client ID salvato: manca solo il permesso, premi &ldquo;Collega account&rdquo;.</span>'
+                    :'<span class="muted">Non collegato: uso le fonti anonime, che sono pi&ugrave; lente e meno precise.</span>');
+}
+document.getElementById('spotId').addEventListener('input',e=>{
+  const v=e.target.value.trim();
+  SPOT.clientId=v;spotSalva();
+  /* lo porto anche nella libreria, cosi' lo ritrovi sull'altro dispositivo */
+  DB.cfg=DB.cfg||{};DB.cfg.spotClientId=v;DB.cfg.at=now();
+  saveLocal();scheduleSync();renderSpot();
+});
+document.getElementById('spotCopy').onclick=async()=>{
+  try{await navigator.clipboard.writeText(spotRedirect());toast('Indirizzo copiato')}
+  catch(e){toast('Copialo a mano: '+spotRedirect())}
+};
+document.getElementById('spotLogin').onclick=()=>spotEntra();
+document.getElementById('spotOut').onclick=()=>{
+  if(!confirm('Scollegare l\'account Spotify da questo dispositivo?'))return;
+  SPOT.token='';SPOT.refresh='';SPOT.scade=0;SPOT.nome='';spotSalva();renderSpot();
+  toast('Scollegato');
+};
 document.getElementById('spotMissing').onclick=()=>bulkSpotify('missing');
 document.getElementById('spotAll').onclick=()=>bulkSpotify('all');
 document.getElementById('spotStop').onclick=()=>{spotStop=true;toast('Mi fermo dopo questo album')};
@@ -3506,6 +4006,28 @@ document.getElementById('btnDiag').onclick=async()=>{
       if(!r.ok)throw new Error('HTTP '+r.status);
       const L=((await r.json())||{}).linksByPlatform||{};
       return 'funziona, piattaforme trovate: '+Object.keys(L).length;
+    }],
+    ['Account Spotify',async()=>{
+      if(!SPOT.clientId)throw new Error('non configurato: manca il Client ID. '+
+        'E\' la differenza fra chiedere a Spotify e ricostruire da altre fonti.');
+      if(!SPOT.refresh)throw new Error('Client ID salvato ma manca il permesso: premi "Collega account"');
+      const t=await spotValido();
+      if(!t)throw new Error('il permesso e\' scaduto: ricollega l\'account');
+      const d=await spotChiama('/search?type=album&limit=1&q='+encodeURIComponent('Death Grips The Money Store'));
+      const it=((d&&d.albums&&d.albums.items)||[])[0];
+      if(!it)throw new Error('risponde ma non trova nulla');
+      return 'funziona'+(SPOT.nome?' ('+SPOT.nome+')':'')+', prova riuscita: '+it.name;
+    }],
+    ['Wikidata (identificativi Spotify)',async()=>{
+      let r;
+      try{r=await fetch('https://query.wikidata.org/sparql?format=json&query='+
+        encodeURIComponent('SELECT ?s WHERE{?i wdt:P2205 ?s}LIMIT 1'))}
+      catch(e){throw new Error('non raggiungibile da qui. E\' la fonte che uso quando '+
+        'Odesli ha finito il credito: senza, molti album restano scollegati.')}
+      if(!r.ok)throw new Error('HTTP '+r.status);
+      const n=((((await r.json())||{}).results||{}).bindings||[]).length;
+      if(!n)throw new Error('risponde ma senza dati');
+      return 'raggiungibile, e conosce gli identificativi Spotify';
     }],
     ['Copertine (Cover Art)',async()=>{
       await new Promise((res,rej)=>{
@@ -3596,7 +4118,9 @@ document.addEventListener('visibilitychange',()=>{
    ========================================================== */
 document.getElementById('verApp').textContent='v'+APP_VER;
 (function(){const f=document.getElementById('fFav');if(f)f.innerHTML=cuore(true,15)})();
-loadLocal();loadPrefs();renderPrefs();
+loadLocal();spotCarica();loadPrefs();renderPrefs();renderSpot();
+/* se sto tornando dal permesso di Spotify, l'indirizzo ha ?code=... */
+spotRitorno().then(ok=>{if(ok)renderSpot()});
 document.getElementById('lfmKey').value=localStorage.getItem(LSK)||'';
 (()=>{const c=ghCfg();if(c){document.getElementById('ghOwner').value=c.owner;
   document.getElementById('ghRepo').value=c.repo;document.getElementById('ghToken').value=c.token}})();
