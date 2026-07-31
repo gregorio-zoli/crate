@@ -529,7 +529,7 @@ label.f{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.7p
 /* ==========================================================
    1. STATO
    ========================================================== */
-const APP_VER='28';
+const APP_VER='29';
 const LS='crate.v1', LSK='crate.lfmkey', LSG='crate.gh', LSS='crate.lastsync', LSP='crate.prefs';
 const LSSP='crate.spot';   /* accesso a Spotify: resta su QUESTO dispositivo */
 let DB={albums:[],deleted:[],cfg:{}};
@@ -971,11 +971,23 @@ async function spotCerca(titolo,artista,esito){
   if(!titolo||!spotCollegato())return null;
   const dice=m=>{if(esito)esito.push(m)};
   const pulisci=x=>String(x||'').replace(/["']/g,' ').replace(/\s+/g,' ').trim();
+  /* Ogni tentativo lascia una riga di verbale. Serve perche' senza ho
+     passato mezza giornata a fare ipotesi sbagliate su cosa fallisse. */
+  const verbale=[];
   const chiedi=async q=>{
-    try{const d=await spotChiama('/search?type=album&limit=20&q='+encodeURIComponent(q));
-      return((d&&d.albums&&d.albums.items)||[]).filter(x=>x&&x.id)}
-    catch(e){if(e&&e.coda)throw e;return[]}   /* la coda non e' un "non trovato" */
+    try{
+      const d=await spotChiama('/search?type=album&limit=20&q='+encodeURIComponent(q));
+      if(d===null){verbale.push(q+' \u2192 nessuna risposta (token?)');return[]}
+      const items=((d&&d.albums&&d.albums.items)||[]).filter(x=>x&&x.id);
+      verbale.push(q+' \u2192 '+items.length+(items.length?' ('+items[0].name+')':''));
+      return items;
+    }catch(e){
+      if(e&&e.coda)throw e;   /* la coda non e' un "non trovato" */
+      verbale.push(q+' \u2192 errore: '+(e&&e.message||'sconosciuto'));
+      return[];
+    }
   };
+  spotCerca.verbale=verbale;
   const nucleo=nucleoTitolo(titolo);
   const conArtista=artista?' artist:"'+pulisci(artista)+'"':'';
   const tentativi=['album:"'+pulisci(titolo)+'"'+conArtista];
@@ -1002,7 +1014,10 @@ async function spotCerca(titolo,artista,esito){
        altre tre richieste. Ogni richiesta risparmiata e' coda evitata. */
     if(tutti.length&&tutti.some(c=>simAlbum(c.r,titolo,artista)>=.75))break;
   }
-  if(!tutti.length){dice('Spotify non trova niente con questo nome');return null}
+  if(!tutti.length){
+    dice('nessun tentativo ha prodotto risultati [ '+verbale.join(' | ')+' ]');
+    return null;
+  }
   let pool=esattiDi();
   /* titolo scritto storto ma artista giusto: mi fido delle lettere, purche'
      non sia una versione diversa (live, demo, remix) */
