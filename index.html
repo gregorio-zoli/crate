@@ -174,7 +174,7 @@ label.f{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.7p
 .links a{background:var(--bg3);border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-size:13px;color:var(--fg2);font-weight:600}
 .sec{border-top:1px solid var(--line);padding-top:16px}
 .sec:first-child{border-top:none;padding-top:0}
-.toast{position:fixed;bottom:calc(84px + var(--safeb));left:50%;transform:translateX(-50%) translateY(80px);background:var(--fg);color:#111;padding:11px 20px;border-radius:99px;font-weight:700;font-size:14px;z-index:200;transition:.25s;box-shadow:var(--shadow);opacity:0;max-width:88vw;text-align:center}
+.toast{position:fixed;bottom:calc(84px + var(--safeb));left:50%;pointer-events:none;transform:translateX(-50%) translateY(80px);background:var(--fg);color:#111;padding:11px 20px;border-radius:99px;font-weight:700;font-size:14px;z-index:200;transition:.25s;box-shadow:var(--shadow);opacity:0;max-width:88vw;text-align:center}
 .toast.on{transform:translateX(-50%);opacity:1}
 .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:10px;margin-bottom:18px}
 .stat{background:var(--bg2);border:1px solid var(--line);border-radius:11px;padding:12px}
@@ -413,6 +413,13 @@ label.f{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.7p
       <div class="tiny muted" id="bulkTxt" style="margin-top:8px"></div>
       <button class="btn gh sm" id="bulkStop" style="margin-top:10px">Ferma</button>
     </div>
+  </div>
+
+  <div class="card" style="margin-bottom:14px">
+    <h2>Diagnostica</h2>
+    <p class="tiny muted" style="margin-top:0">Prova una per una le fonti che l&rsquo;app interroga. Se qualcosa non funziona, qui si vede quale.</p>
+    <button class="btn" id="btnDiag">Prova le fonti</button>
+    <div id="diagBox" style="margin-top:12px"></div>
   </div>
 
   <div class="card" style="margin-bottom:14px">
@@ -832,7 +839,8 @@ async function tracceArchivio(a){
   const q='release:'+JSON.stringify(a.title)+(a.artist?' AND artist:'+JSON.stringify(a.artist):'');
   const r=await fetch('https://musicbrainz.org/ws/2/release/?fmt=json&limit=5&query='+encodeURIComponent(q));
   if(!r.ok)return null;
-  const rel=((await r.json()).releases||[]).find(x=>+x['track-count']>0);
+  const rel=((await r.json()).releases||[])
+    .find(x=>+x['track-count']>0&&txtSim(x.title||'',a.title)>=.6);
   if(!rel)return null;
   const r2=await fetch('https://musicbrainz.org/ws/2/release/'+rel.id+'?fmt=json&inc=recordings');
   if(!r2.ok)return null;
@@ -864,7 +872,9 @@ async function fetchTrackCount(artist,title){
     const r=await fetch('https://musicbrainz.org/ws/2/release/?fmt=json&limit=3&query='+encodeURIComponent(q));
     if(!r.ok)return 0;
     const d=await r.json();
-    const rel=(d.releases||[]).find(x=>+x['track-count']>0);
+    /* senza questo controllo un EP omonimo di 5 tracce puo' spacciarsi per
+       l'album: il conteggio sbagliato e' peggio del conteggio assente */
+    const rel=(d.releases||[]).find(x=>+x['track-count']>0&&txtSim(x.title||'',title)>=.6);
     return rel?+rel['track-count']:0;
   }catch(e){return 0}
 }
@@ -1141,11 +1151,14 @@ async function ensureSeed(a){
 }
 /* Prima strada: Odesli converte un indirizzo di catalogo in tutti gli altri.
    Gratuito e senza chiavi, ma tollera 10 richieste al minuto. */
-async function daOdesli(a){
+async function daOdesli(a,esito){
   const seed=await ensureSeed(a);
-  if(!seed)return null;
-  const r=await fetch('https://api.song.link/v1-alpha.1/links?url='+encodeURIComponent(seed));
-  if(!r.ok)return null;
+  if(!seed){if(esito)esito.push('nessun aggancio a un catalogo');return null}
+  let r;
+  try{r=await fetch('https://api.song.link/v1-alpha.1/links?url='+encodeURIComponent(seed))}
+  catch(e){if(esito)esito.push('Odesli non raggiungibile');return null}
+  if(r.status===429){if(esito)esito.push('Odesli: troppe richieste, riprova fra un minuto');return null}
+  if(!r.ok){if(esito)esito.push('Odesli: errore '+r.status);return null}
   const L=((await r.json())||{}).linksByPlatform||{};
   for(const pair of PLAT_ORDER)if(L[pair[0]]&&L[pair[0]].url)return{url:L[pair[0]].url,name:pair[1]};
   return null;
@@ -1179,8 +1192,9 @@ async function daArchivio(a){
 async function resolveListen(a){
   if(a.listenUrl)return{url:a.listenUrl,name:a.platform||'Ascolta'};
   if(a.spotify)return{url:a.spotify,name:a.platName||'Spotify'};
+  const esito=[];
   let L=null;
-  try{L=await daOdesli(a)}catch(e){}
+  try{L=await daOdesli(a,esito)}catch(e){esito.push('Odesli: '+(e&&e.message||'errore'))}
   if(!L||!/spotify/i.test(L.name)){
     /* se Odesli non ha trovato proprio Spotify, chiedo anche all'archivio:
        la scheda esatta e' meglio di un ripiego su un'altra piattaforma */
@@ -1188,7 +1202,7 @@ async function resolveListen(a){
     try{A=await daArchivio(a)}catch(e){}
     if(A&&(!L||/spotify/i.test(A.name)))L=A;
   }
-  if(!L)return null;
+  if(!L){resolveListen.motivo=esito.join(' · ')||'nessuna fonte ha il collegamento';return null}
   const cur=DB.albums.find(x=>x.id===a.id)||a;
   cur.spotify=L.url;cur.platName=L.name;save(cur);
   return L;
@@ -2272,7 +2286,7 @@ function openAlbum(id,keepScroll){
     let url=fallback,diretto=false;
     try{const L=await resolveListen(a);if(L&&L.url){url=L.url;diretto=true}}catch(e){}
     bSpot.innerHTML=etichetta;
-    if(!diretto)toast('Scheda esatta non trovata: apro la ricerca');
+    if(!diretto)toast(resolveListen.motivo?('Ricerca: '+resolveListen.motivo):'Scheda esatta non trovata');
     if(w)w.location=url;else window.open(url,'_blank','noopener');
     if(openAlbum._id===id)openAlbum(id,true);
   };
@@ -2916,6 +2930,70 @@ document.getElementById('bulkAll').onclick=()=>bulkEnrich('all');
 document.getElementById('bulkReset').onclick=()=>bulkEnrich('reset');
 document.getElementById('bulkStop').onclick=()=>{bulkStop=true;toast('Mi fermo dopo questo album')};
 
+/* --- diagnostica delle fonti --- */
+document.getElementById('btnDiag').onclick=async()=>{
+  const box=document.getElementById('diagBox');
+  const prove=[
+    ['iTunes (ricerca)',async()=>{
+      const d=await jsonp('https://itunes.apple.com/search?media=music&entity=album&limit=3&term='+
+        encodeURIComponent('Death Grips The Money Store'));
+      const n=(d.results||[]).length;
+      if(!n)throw new Error('risponde ma non trova nulla');
+      return n+' risultati, primo: '+d.results[0].collectionName;
+    }],
+    ['iTunes (per titolo)',async()=>{
+      const r=await cercaPerTitolo('The Money Store','Death Grips');
+      if(!r.length)throw new Error('nessun risultato');
+      return r[0].title+' — '+r[0].artist+(r[0].itunesUrl?' (con indirizzo)':' (SENZA indirizzo)');
+    }],
+    ['Deezer',async()=>{
+      const d=await jsonp('https://api.deezer.com/search/album?output=jsonp&limit=3&q='+
+        encodeURIComponent('Death Grips The Money Store'));
+      const n=(d.data||[]).length;
+      if(!n)throw new Error('nessun risultato');
+      return n+' risultati, primo: '+d.data[0].title;
+    }],
+    ['MusicBrainz',async()=>{
+      const r=await fetch('https://musicbrainz.org/ws/2/release-group/?fmt=json&limit=1&query='+
+        encodeURIComponent('releasegroup:"The Money Store"'));
+      if(!r.ok)throw new Error('HTTP '+r.status);
+      const n=((await r.json())['release-groups']||[]).length;
+      return n?'raggiungibile, '+n+' risultati':'raggiungibile ma senza risultati';
+    }],
+    ['Odesli (link diretti)',async()=>{
+      const r=await fetch('https://api.song.link/v1-alpha.1/links?url='+
+        encodeURIComponent('https://open.spotify.com/album/1An0Hx2GRvttFVMFOZlZbo'));
+      if(r.status===429)throw new Error('limite raggiunto (10 al minuto): riprova fra un minuto');
+      if(!r.ok)throw new Error('HTTP '+r.status);
+      const L=((await r.json())||{}).linksByPlatform||{};
+      return 'funziona, piattaforme trovate: '+Object.keys(L).length;
+    }],
+    ['Copertine (Cover Art)',async()=>{
+      await new Promise((res,rej)=>{
+        const im=new Image();im.onload=()=>res();im.onerror=()=>rej(new Error('non raggiungibile'));
+        im.src='https://coverartarchive.org/release-group/f5093c06-23e3-404f-aeaa-40f72885ee3a/front-250';
+        setTimeout(()=>rej(new Error('nessuna risposta')),8000);
+      });
+      return 'raggiungibile';
+    }]
+  ];
+  box.innerHTML='';
+  for(const[nome,f]of prove){
+    const r=document.createElement('div');
+    r.className='tiny';r.style.cssText='padding:7px 0;border-bottom:1px solid var(--line)';
+    r.innerHTML='<span class="spinner"></span> '+esc(nome)+'...';
+    box.appendChild(r);
+    try{
+      const msg=await f();
+      r.innerHTML='<b style="color:var(--ok)">&#10003; '+esc(nome)+'</b><br><span class="muted">'+esc(msg)+'</span>';
+    }catch(e){
+      r.innerHTML='<b style="color:var(--acc)">&#10005; '+esc(nome)+'</b><br><span class="muted">'+
+        esc(e&&e.message||'non raggiungibile')+'</span>';
+    }
+  }
+  box.insertAdjacentHTML('beforeend','<div class="tiny muted" style="margin-top:10px">'+
+    'Le crocette rosse spiegano perch&eacute; qualcosa non funziona: mandami questo elenco.</div>');
+};
 document.getElementById('btnSaveKey').onclick=()=>{
   const v=document.getElementById('lfmKey').value.trim();
   if(v)localStorage.setItem(LSK,v);else localStorage.removeItem(LSK);
