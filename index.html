@@ -468,7 +468,7 @@ label.f{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.7p
 /* ==========================================================
    1. STATO
    ========================================================== */
-const APP_VER='15';
+const APP_VER='16';
 const LS='crate.v1', LSK='crate.lfmkey', LSG='crate.gh', LSS='crate.lastsync', LSP='crate.prefs';
 let DB={albums:[],deleted:[]};
 
@@ -726,6 +726,30 @@ async function searchArchive(term){
   }catch(e){}
   return out;
 }
+/* Quanto un risultato corrisponde a cio' che sto cercando davvero.
+   Il titolo da solo inganna: cercando "The Money Store" dei Death Grips il
+   negozio restituisce "Money $Tore" di Rann, titolo quasi giusto e artista
+   completamente sbagliato. Se so l'artista, deve pesare almeno quanto il titolo. */
+function simAlbum(r,titolo,artista){
+  const t=Math.max(txtSim(r.title||'',titolo||''),
+    txtSim(((r.artist||'')+' '+(r.title||'')).trim(),((artista||'')+' '+(titolo||'')).trim()));
+  if(!artista)return t;
+  const a=txtSim(r.artist||'',artista);
+  if(a<.34)return Math.min(t,.34)*.5;   /* artista che non c'entra: non e' questo */
+  return .5*t+.5*a;
+}
+/* i negozi in dettaglio, cosi' posso interrogarli anche uno alla volta */
+async function cercaDeezer(term){
+  const out=[];
+  try{
+    const d=await jsonp('https://api.deezer.com/search/album?output=jsonp&limit=12&q='+encodeURIComponent(term));
+    (d.data||[]).forEach(r=>out.push({title:cleanTitle(r.title),artist:r.artist&&r.artist.name,year:null,
+      cover:r.cover_xl||r.cover_big||'',genre:'',tracks:r.nb_tracks||null,
+      kind:detectKind(r.title,r.nb_tracks,r.record_type),
+      deezerUrl:r.link||'',src:'deezer'}));
+  }catch(e){}
+  return out;
+}
 /* ---- ricerca per titolo esatto ----
    Cercando "LCD Soundsystem LCD Soundsystem" il catalogo restituisce gli album
    piu' famosi di quell'artista, mai quello omonimo. Con attribute=albumTerm la
@@ -757,8 +781,16 @@ async function cercaCompleta(titolo,artista){
     const k=((r.artist||'')+'|'+(r.title||'')).toLowerCase();
     if(visti.has(k))return;visti.add(k);out.push(r);
   });
-  const vero=((artista||'')+' '+(titolo||'')).trim();
-  return out.map(r=>({r:r,s:Math.max(txtSim(vero,(r.artist||'')+' '+r.title),txtSim(titolo||'',r.title))}))
+  const meglio=arr=>Math.max(0,...arr.map(r=>simAlbum(r,titolo,artista)));
+  /* niente di convincente: il disco puo' essere fuori catalogo. Chiedo altrove. */
+  if(q&&meglio(out)<.6){
+    const extra=[...(await cercaDeezer(q).catch(()=>[])),...(await searchArchive(q).catch(()=>[]))];
+    extra.forEach(r=>{
+      const k=((r.artist||'')+'|'+(r.title||'')).toLowerCase();
+      if(visti.has(k))return;visti.add(k);out.push(r);
+    });
+  }
+  return out.map(r=>({r:r,s:simAlbum(r,titolo,artista)}))
     .sort((x,y)=>y.s-x.s).map(x=>x.r);
 }
 async function searchAlbums(term){
@@ -771,17 +803,14 @@ async function searchAlbums(term){
       kind:detectKind(r.collectionName,r.trackCount,r.collectionType),
       itunesUrl:r.collectionViewUrl||'',src:'itunes'}));
   }catch(e){}
-  if(!out.length){
-    try{
-      const d=await jsonp('https://api.deezer.com/search/album?output=jsonp&limit=12&q='+encodeURIComponent(term));
-      (d.data||[]).forEach(r=>out.push({title:cleanTitle(r.title),artist:r.artist&&r.artist.name,year:null,
-        cover:r.cover_xl||r.cover_big||'',genre:'',tracks:r.nb_tracks||null,
-        kind:detectKind(r.title,r.nb_tracks,r.record_type),
-        deezerUrl:r.link||'',src:'deezer'}));
-    }catch(e){}
-  }
-  /* Terzo livello automatico: se i negozi non hanno nulla, provo l'archivio */
-  if(!out.length)(await searchArchive(term)).forEach(r=>out.push(r));
+  /* Prima chiedevo altrove solo se la risposta era VUOTA. Non basta: per
+     "Death Grips The Money Store" iTunes risponde con UN risultato, che pero'
+     e' "Full Moon (Death Classic)". Una risposta che non c'entra vale zero,
+     quindi tratto anche quella come un buco e proseguo con le altre fonti. */
+  const debole=arr=>Math.max(0,...arr.map(r=>txtSim(term,((r.artist||'')+' '+(r.title||'')).trim())))<.5;
+  if(debole(out))(await cercaDeezer(term)).forEach(r=>out.push(r));
+  /* Terzo livello automatico: l'archivio, che ha anche i dischi fuori catalogo */
+  if(debole(out))(await searchArchive(term)).forEach(r=>out.push(r));
   const seen=new Set();
   return out.filter(a=>{const k=(a.artist+'|'+a.title).toLowerCase();
     if(seen.has(k))return false;seen.add(k);return true});
@@ -846,7 +875,7 @@ async function tracceArchivio(a){
   const r=await fetch('https://musicbrainz.org/ws/2/release/?fmt=json&limit=5&query='+encodeURIComponent(q));
   if(!r.ok)return null;
   const rel=((await r.json()).releases||[])
-    .find(x=>+x['track-count']>0&&txtSim(x.title||'',a.title)>=.6);
+    .find(x=>+x['track-count']>0&&stessaEdizione(x,a));
   if(!rel)return null;
   const r2=await fetch('https://musicbrainz.org/ws/2/release/'+rel.id+'?fmt=json&inc=recordings');
   if(!r2.ok)return null;
@@ -1157,12 +1186,34 @@ async function ensureSeed(a){
 }
 /* Prima strada: Odesli converte un indirizzo di catalogo in tutti gli altri.
    Gratuito e senza chiavi, ma tollera 10 richieste al minuto. */
+let odesliFermoFino=0;
+const odesliTs=[];
+/* Odesli concede 10 richieste al minuto. Caricando quindici album in fila le
+   bruciavo in pochi secondi e da li' in poi falliva tutto. Ne uso al massimo 8
+   al minuto e, quando il credito e' finito, non aspetto: passo all'archivio,
+   che risponde sempre. Ogni album chiede una volta sola, poi il link e' salvato. */
+function odesliCredito(){
+  const t=Date.now();
+  while(odesliTs.length&&t-odesliTs[0]>60000)odesliTs.shift();
+  return 8-odesliTs.length;
+}
+function odesliVivo(){return Date.now()>=odesliFermoFino&&odesliCredito()>0}
+/* Quando Odesli taglia per eccesso di richieste risponde 429 SENZA le
+   intestazioni CORS: il browser non puo' nemmeno leggere il codice e riporta
+   solo "Failed to fetch". Percio' tratto i due casi allo stesso modo e lo
+   lascio in pace dieci minuti, invece di far aspettare ogni album per nulla. */
+function odesliInPausa(){odesliFermoFino=Date.now()+10*60*1000}
 async function odesliDaUrl(url,esito){
   if(!url)return null;
+  if(Date.now()<odesliFermoFino){if(esito)esito.push('Odesli in pausa dopo un errore recente');return null}
+  if(odesliCredito()<=0){if(esito)esito.push('Odesli: credito esaurito per un minuto, uso l\'archivio');return null}
+  odesliTs.push(Date.now());
   let r;
   try{r=await fetch('https://api.song.link/v1-alpha.1/links?url='+encodeURIComponent(url))}
-  catch(e){if(esito)esito.push('Odesli non raggiungibile');return null}
-  if(r.status===429){if(esito)esito.push('Odesli: troppe richieste, riprova fra un minuto');return null}
+  catch(e){odesliInPausa();
+    if(esito)esito.push('Odesli non raggiungibile (di solito e\' il limite di 10 richieste al minuto)');
+    return null}
+  if(r.status===429){odesliInPausa();if(esito)esito.push('Odesli: troppe richieste, riprova fra un minuto');return null}
   if(!r.ok){if(esito)esito.push('Odesli: errore '+r.status);return null}
   const L=((await r.json())||{}).linksByPlatform||{};
   for(const pair of PLAT_ORDER)if(L[pair[0]]&&L[pair[0]].url)return{url:L[pair[0]].url,name:pair[1]};
@@ -1176,6 +1227,13 @@ async function daOdesli(a,esito){
 /* Seconda strada: l'archivio conserva i collegamenti ufficiali alle
    piattaforme. Cerco Spotify su piu' edizioni prima di accontentarmi
    di un'altra piattaforma: una sola edizione puo' non averlo. */
+/* MusicBrainz restituisce omonimi di altri artisti: se so chi cerco, filtro. */
+function creditoDi(x){return((x&&x['artist-credit'])||[])
+  .map(c=>c.name||(c.artist&&c.artist.name)||'').join(' ')}
+function stessaEdizione(x,a){
+  if(txtSim(x.title||'',a.title||'')<.6)return false;
+  return!a.artist||txtSim(creditoDi(x),a.artist)>=.34;
+}
 const ALTRE_PIATT=[[/music\.apple\.com\/.+\/album\//,'Apple Music'],
   [/deezer\.com\/album/,'Deezer'],[/bandcamp\.com/,'Bandcamp'],
   [/tidal\.com\/.*album/,'Tidal'],[/music\.youtube\.com/,'YouTube Music']];
@@ -1206,8 +1264,7 @@ async function linkArchivio(a){
     const q='release:'+JSON.stringify(a.title)+(a.artist?' AND artist:'+JSON.stringify(a.artist):'');
     const r=await fetch('https://musicbrainz.org/ws/2/release/?fmt=json&limit=6&query='+encodeURIComponent(q));
     if(!r.ok)return out;
-    const rels=((await r.json()).releases||[])
-      .filter(x=>txtSim(x.title||'',a.title)>=.6).slice(0,3);
+    const rels=((await r.json()).releases||[]).filter(x=>stessaEdizione(x,a)).slice(0,3);
     for(let i=0;i<rels.length;i++){
       await sleep(1100);
       guarda(await urlsDa('https://musicbrainz.org/ws/2/release/'+rels[i].id+'?fmt=json&inc=url-rels'));
@@ -1223,7 +1280,7 @@ async function resolveListen(a){
   const salva=L=>{const cur=DB.albums.find(x=>x.id===a.id)||a;
     cur.spotify=L.url;cur.platName=L.name;save(cur);return L};
   let L=null;
-  try{L=await daOdesli(a,esito)}catch(e){esito.push('Odesli: '+(e&&e.message||'errore'))}
+  if(odesliVivo()){try{L=await daOdesli(a,esito)}catch(e){esito.push('Odesli: '+(e&&e.message||'errore'))}}
   if(L&&/spotify/i.test(L.name))return salva(L);
   /* Spotify non trovato: interrogo l'archivio su piu' edizioni */
   let A={spotify:null,altro:null};
@@ -2995,8 +3052,13 @@ document.getElementById('btnDiag').onclick=async()=>{
       return n?'raggiungibile, '+n+' risultati':'raggiungibile ma senza risultati';
     }],
     ['Odesli (link diretti)',async()=>{
-      const r=await fetch('https://api.song.link/v1-alpha.1/links?url='+
-        encodeURIComponent('https://open.spotify.com/album/1An0Hx2GRvttFVMFOZlZbo'));
+      let r;
+      try{r=await fetch('https://api.song.link/v1-alpha.1/links?url='+
+        encodeURIComponent('https://open.spotify.com/album/1An0Hx2GRvttFVMFOZlZbo'))}
+      catch(e){throw new Error('non risponde. Quasi sempre e\' il limite di 10 richieste '+
+        'al minuto (il rifiuto arriva senza intestazioni CORS, cosi\' il browser dice solo '+
+        '"Failed to fetch"); a volte lo blocca la rete o un ad-blocker. '+
+        'Non e\' grave: per i link l\'app usa l\'archivio come seconda strada.')}
       if(r.status===429)throw new Error('limite raggiunto (10 al minuto): riprova fra un minuto');
       if(!r.ok)throw new Error('HTTP '+r.status);
       const L=((await r.json())||{}).linksByPlatform||{};
