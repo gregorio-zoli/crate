@@ -713,6 +713,41 @@ async function searchArchive(term){
   }catch(e){}
   return out;
 }
+/* ---- ricerca per titolo esatto ----
+   Cercando "LCD Soundsystem LCD Soundsystem" il catalogo restituisce gli album
+   piu' famosi di quell'artista, mai quello omonimo. Con attribute=albumTerm la
+   ricerca guarda SOLO i titoli, e gli album omonimi saltano fuori. */
+async function cercaPerTitolo(titolo,artista){
+  const out=[];
+  if(!titolo)return out;
+  try{
+    const d=await jsonp('https://itunes.apple.com/search?media=music&entity=album'+
+      '&attribute=albumTerm&limit=25&term='+encodeURIComponent(titolo));
+    (d.results||[]).forEach(r=>out.push({title:cleanTitle(r.collectionName),artist:r.artistName,
+      year:r.releaseDate?+r.releaseDate.slice(0,4):null,cover:bigCover(r.artworkUrl100),
+      genre:r.primaryGenreName||'',tracks:r.trackCount||null,
+      kind:detectKind(r.collectionName,r.trackCount,r.collectionType),
+      itunesUrl:r.collectionViewUrl||'',src:'itunes'}));
+  }catch(e){}
+  if(artista)out.sort((a,b)=>txtSim(b.artist||'',artista)-txtSim(a.artist||'',artista));
+  return out;
+}
+/* la ricerca completa: testo libero + titolo esatto, unite e senza doppioni */
+async function cercaCompleta(titolo,artista){
+  const q=((artista||'')+' '+(titolo||'')).trim();
+  const [a,b]=await Promise.all([
+    q?searchAlbums(q).catch(()=>[]):Promise.resolve([]),
+    cercaPerTitolo(titolo,artista)
+  ]);
+  const out=[],visti=new Set();
+  [...a,...b].forEach(r=>{
+    const k=((r.artist||'')+'|'+(r.title||'')).toLowerCase();
+    if(visti.has(k))return;visti.add(k);out.push(r);
+  });
+  const vero=((artista||'')+' '+(titolo||'')).trim();
+  return out.map(r=>({r:r,s:Math.max(txtSim(vero,(r.artist||'')+' '+r.title),txtSim(titolo||'',r.title))}))
+    .sort((x,y)=>y.s-x.s).map(x=>x.r);
+}
 async function searchAlbums(term){
   const out=[];
   try{
@@ -1707,6 +1742,7 @@ function renderCardSingle(it,body){
         '<div class="muted" style="font-size:14px">'+esc(r.artist)+
           (r.year?' &middot; '+r.year:'')+(r.kind&&r.kind!=='album'?' &middot; '+esc(r.kind):'')+'</div>'+
         (have?'<div class="tiny" style="color:var(--ok)">gi&agrave; in libreria</div>':'')+
+        (r.fatto?'<div class="tiny" style="color:var(--ok)">aggiunto a mano</div>':'')+
       '</div></div>'+
     (it.cands&&it.cands[0]?'<div class="tiny muted" style="margin-top:7px">ho letto: &ldquo;'+esc(it.cands[0])+'&rdquo;</div>':'')+
     '<div class="row" style="margin-top:14px;gap:10px">'+
@@ -1795,6 +1831,7 @@ function renderCardList(it,body){
           '<div class="tiny muted">'+esc(r.p.raw)+'</div>')+
         (low?'<div class="tiny" style="color:var(--acc2)">controlla: c\'era &ldquo;'+esc(r.p.raw)+'&rdquo;</div>':'')+
         (have?'<div class="tiny" style="color:var(--ok)">gi&agrave; in libreria</div>':'')+
+        (r.fatto?'<div class="tiny" style="color:var(--ok)">aggiunto a mano</div>':'')+
       '</div>';
     /* correggere una singola riga: senza questo l'avviso "controlla" segnala
        un problema senza dare modo di rimediare */
@@ -1818,12 +1855,17 @@ function renderCardList(it,body){
 /* correzione di una singola riga della lista */
 async function correggiRiga(it,i,body){
   const r=it.rows[i];
-  const partenza=r.match?((r.match.artist||'')+' '+r.match.title).trim():r.p.raw;
+  const t0=r.match?r.match.title:(r.p.title||'');
+  const a0=r.match?r.match.artist:(r.p.artist||'');
   body.innerHTML=
     '<div class="tiny muted">Nello screenshot c\'era:</div>'+
-    '<div style="font-weight:700;margin:4px 0 12px">&ldquo;'+esc(r.p.raw)+'&rdquo;</div>'+
-    '<div class="row"><div class="grow"><input type="text" id="corQ" value="'+esc(partenza)+'" enterkeyhint="search"></div>'+
-    '<button class="btn" id="corGo">Cerca</button></div>'+
+    '<div style="font-weight:700;margin:4px 0 14px">&ldquo;'+esc(r.p.raw)+'&rdquo;</div>'+
+    '<div class="row"><div class="grow"><label class="f">Titolo</label>'+
+      '<input type="text" id="corT" value="'+esc(t0)+'"></div>'+
+      '<div class="grow"><label class="f">Artista</label>'+
+      '<input type="text" id="corA" value="'+esc(a0)+'"></div></div>'+
+    '<div class="row" style="margin-top:10px"><button class="btn" id="corGo">Cerca</button>'+
+      '<button class="btn gh" id="corMan">Inserisci a mano</button></div>'+
     '<div class="res" id="corRes"></div>'+
     '<div class="row" style="margin-top:14px">'+
       '<button class="btn gh sm" id="corVia">Togli questa riga</button>'+
@@ -1831,20 +1873,38 @@ async function correggiRiga(it,i,body){
     '</div>';
   const torna=()=>renderCardList(it,body);
   const cerca=async()=>{
-    const q=document.getElementById('corQ').value.trim();
-    if(!q)return;
+    const t=document.getElementById('corT').value.trim();
+    const a=document.getElementById('corA').value.trim();
+    if(!t&&!a)return;
     const rb=document.getElementById('corRes');
     rb.innerHTML='<div class="tiny muted" style="padding:6px"><span class="spinner"></span> cerco...</div>';
-    let rs=[];try{rs=await searchAlbums(q)}catch(e){}
+    let rs=[];
+    try{rs=await cercaCompleta(t,a)}catch(e){}
     rb.innerHTML='';
-    if(!rs.length){rb.innerHTML='<div class="tiny muted" style="padding:6px">Nessun risultato.</div>';return}
-    rs.forEach(x=>rb.appendChild(resultRow(x,y=>{
+    if(!rs.length){
+      rb.innerHTML='<div class="tiny muted" style="padding:6px">Nessun risultato. '+
+        'Se l\'album non e&rsquo; nei cataloghi, usa <b>Inserisci a mano</b>.</div>';
+      return;
+    }
+    rs.slice(0,10).forEach(x=>rb.appendChild(resultRow(x,y=>{
       r.match=y;r.on=true;r.conf=1;      /* scelto da te: niente piu' avviso */
       torna();
     })));
   };
   document.getElementById('corGo').onclick=cerca;
-  document.getElementById('corQ').addEventListener('keydown',e=>{if(e.key==='Enter')cerca()});
+  ['corT','corA'].forEach(id=>document.getElementById(id)
+    .addEventListener('keydown',e=>{if(e.key==='Enter')cerca()}));
+  document.getElementById('corMan').onclick=()=>{
+    document.getElementById('deck').classList.remove('on');
+    manualForm({title:document.getElementById('corT').value.trim(),
+      artist:document.getElementById('corA').value.trim(),
+      onDone:agg=>{
+        /* aggiunto (o annullato) a mano: la riga ha fatto il suo corso */
+        if(agg){r.match=null;r.on=false;r.fatto=true}
+        document.getElementById('deck').classList.add('on');
+        torna();
+      }});
+  };
   document.getElementById('corVia').onclick=()=>{r.match=null;r.on=false;torna()};
   document.getElementById('corInd').onclick=torna;
   cerca();
@@ -2015,7 +2075,7 @@ function manualForm(pre){
       const ar=document.getElementById('mnA').value.trim();
       if(t.length<3){sug.innerHTML='';return}
       sug.innerHTML='<div class="tiny muted" style="padding:6px 2px"><span class="spinner"></span> cerco...</div>';
-      let rs=[];try{rs=await searchAlbums((ar+' '+t).trim())}catch(e){}
+      let rs=[];try{rs=await cercaCompleta(t,ar)}catch(e){}
       if(!rs.length){sug.innerHTML='<div class="tiny muted" style="padding:6px 2px">Nessun album trovato con questi dati: salvando resta quello che hai scritto.</div>';return}
       sug.innerHTML='<label class="f" style="margin-top:10px">&Egrave; uno di questi?</label>';
       const box=document.createElement('div');box.className='res';box.style.marginTop='0';
@@ -2311,7 +2371,16 @@ let libState='all',libArtist='';
 const SEL={fGen:new Set(),fMoo:new Set(),rGen:new Set(),rMoo:new Set()};
 /* menu a tendina con le pastiglie dentro, su piu' righe: non scorre e non
    si allunga all'infinito quando i generi aumentano */
-function chiudiMenu(){document.querySelectorAll('.mchip.aperto').forEach(m=>m.classList.remove('aperto'))}
+function chiudiMenu(){
+  document.querySelectorAll('.mchip.aperto').forEach(m=>{
+    m.classList.remove('aperto');
+    const p=m.querySelector('.mpanel');
+    if(p)p.style.left=p.style.right=p.style.top=p.style.maxWidth=p.style.maxHeight=p.style.position='';
+  });
+}
+/* un pannello agganciato alla finestra resterebbe sospeso mentre scorri */
+window.addEventListener('scroll',()=>{if(document.querySelector('.mchip.aperto'))chiudiMenu()},{passive:true});
+window.addEventListener('resize',chiudiMenu);
 function menuChip(host,etichetta,valori,insieme,alCambio){
   const h=document.getElementById(host);if(!h)return;
   const scelti=[...insieme].filter(v=>valori.includes(v));
@@ -2344,7 +2413,22 @@ function menuChip(host,etichetta,valori,insieme,alCambio){
     e.stopPropagation();
     const era=h.classList.contains('aperto');
     chiudiMenu();
-    if(!era)h.classList.add('aperto');
+    if(era)return;
+    h.classList.add('aperto');
+    /* Il pannello si ancorava al bordo sinistro del pulsante e, con il
+       pulsante a destra, finiva fuori schermo. Lo posiziono rispetto alla
+       finestra: su mobile occupa la larghezza utile, su schermo largo
+       si ribalta a destra se sborderebbe. */
+    const p=h.querySelector('.mpanel'),r=h.querySelector('.trigger').getBoundingClientRect();
+    p.style.left=p.style.right=p.style.top=p.style.maxWidth=p.style.maxHeight=p.style.position='';
+    if(window.innerWidth<=700){
+      p.style.position='fixed';
+      p.style.left='10px';p.style.right='10px';p.style.top=(r.bottom+6)+'px';
+      p.style.maxWidth='none';
+      p.style.maxHeight=Math.max(160,window.innerHeight-r.bottom-96)+'px';
+    }else if(r.left+420>window.innerWidth-12){
+      p.style.left='auto';p.style.right='0';
+    }
   };
   h.querySelector('.mpanel').onclick=e=>e.stopPropagation();
   h.querySelector('[data-az]').onclick=e=>{
