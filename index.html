@@ -530,7 +530,7 @@ label.f{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.7p
 /* ==========================================================
    1. STATO
    ========================================================== */
-const APP_VER='38';
+const APP_VER='39';
 const LS='crate.v1', LSK='crate.lfmkey', LSG='crate.gh', LSS='crate.lastsync', LSP='crate.prefs';
 const LSSP='crate.spot';   /* accesso a Spotify: resta su QUESTO dispositivo */
 let DB={albums:[],deleted:[],cfg:{}};
@@ -885,10 +885,12 @@ async function spotValido(){
    Quando lo superi risponde 429 con un tempo di attesa. Trattare quel 429 come
    "album non trovato" e' l'errore peggiore possibile: fa sembrare mancante un
    disco che c'e', e per giunta continua a bussare peggiorando l'attesa. */
-let spotAttesaFino=0,spotRallenta=false,spotCode=0;
+let spotAttesaFino=0,spotRallenta=false,spotCode=0,spotPasso=0;
+/* Oltre questo, non e' piu' "vai piano": e' una sospensione vera. */
+const SPOT_LUNGA=120;
 /* azzero solo i contatori del giro: una sospensione vera non si cancella
    perche' ho ricominciato da capo, dura quanto dice Spotify */
-function spotRiposa(){spotRallenta=false;spotCode=0}
+function spotRiposa(){spotRallenta=false;spotCode=0;spotPasso=0}
 /* Se mi rifiuta tre volte di fila con attese cortissime, non e' un intoppo:
    e' un no. Continuare a riprovare ogni due secondi tiene occupata l'app,
    non collega niente e allunga la penalita'. Quindi lo metto da parte per un
@@ -931,8 +933,12 @@ async function spotChiama(percorso,tentativo){
     spotAttesaFino=Date.now()+detto*1000;
     SPOT.attesa=spotAttesaFino;spotSalva();
     spotRallenta=true;
-    /* tre rifiuti di fila: smetto di insistere per un quarto d'ora */
-    if(spotCode>=3)spotArrenditi();
+    /* Distinguo i due casi, che prima confondevo. Se mi chiede pochi secondi
+       non mi sta bandendo: mi sta dicendo di andare piano, e allora rallento
+       e continuo. Se mi chiede minuti o ore e' una sospensione vera, e li'
+       insistere la allunga soltanto: mi tolgo di mezzo. */
+    if(detto>SPOT_LUNGA)spotArrenditi();
+    else spotPasso=Math.min(20000,4000+(spotCode-1)*2500);
     if(typeof renderSpot==='function')renderSpot();
     throw erroreCoda(spotSecondi());
   }
@@ -1773,7 +1779,10 @@ async function bulkSpotify(mode){
     /* Un'attesa breve la faccio volentieri, ma UNA volta sola per giro: se
        mi ha gia' rifiutato piu' d'una richiesta, aspettare due secondi alla
        volta per ogni album e' solo un modo elaborato di perdere tempo. */
-    if(spotInCoda()&&spotSecondi()<=8&&spotCode<2){
+    /* Un'attesa di pochi secondi la faccio: e' il ritmo che Spotify mi
+       chiede, e rispettarlo mi fa arrivare in fondo. Una lunga no: quella e'
+       una sospensione, e li' passo direttamente alle altre fonti. */
+    if(spotInCoda()&&spotSecondi()<=25&&!SPOT.rinuncia){
       await aspettaSpotify(m=>stato(a,m));
       if(spotStop)break;
     }
@@ -1808,7 +1817,7 @@ async function bulkSpotify(mode){
        spedito, ma ogni richiamo di Spotify mi fa allargare il passo: e'
        l'unico modo di finire il giro invece di sbatterci contro all'infinito. */
     if(!spotStop)await sleep((spotCollegato()&&!spotInCoda())
-      ? Math.min(5000,400+spotCode*700)
+      ? Math.max(400,spotPasso)
       : 1100);
   }
   bar.style.width='100%';
@@ -1816,9 +1825,9 @@ async function bulkSpotify(mode){
   renderSpotOra();
   const perse=[...motivi.entries()].sort((x,y)=>y[1]-x[1]).slice(0,6);
   const inCoda=spotCode>=2?'<div class="tiny" style="margin-top:8px;color:var(--acc)">'+
-    'Spotify mi ha rifiutato '+spotCode+' richieste, quindi ho lavorato con archivio, '+
-    'Wikidata e Odesli.'+(spotInCoda()?' L&rsquo;ho messo da parte per altri '+spotFinePausa()+
-    ': <b>rilancia dopo</b> e quelli rimasti dovrebbero collegarsi.':'')+
+    'Spotify mi ha chiesto di rallentare '+spotCode+' volte'+
+    (spotPasso?', quindi sono sceso a un album ogni '+Math.round(spotPasso/1000)+' secondi':'')+
+    '.'+(spotInCoda()&&SPOT.rinuncia?' Poi mi ha proprio sospeso: riprendo fra '+spotFinePausa()+'.':'')+
     ' Quelli gi&agrave; fatti non li rifa.</div>':'';
   txt.innerHTML='<b>'+(spotStop?'Fermato.':'Finito.')+'</b> '+presi+' collegati a Spotify'+
     (altrove?', '+altrove+' solo su altre piattaforme':'')+
