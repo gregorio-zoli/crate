@@ -12,6 +12,11 @@
 <link rel="icon" href="favicon.png" sizes="64x64" type="image/png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <style>
+.piatt{display:flex;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line)}
+.piatt.off{opacity:.45}
+.frec{width:34px;height:34px;flex:none;border:1px solid var(--line);border-radius:9px;
+  background:transparent;color:var(--fg);font-size:11px;line-height:1;cursor:pointer;padding:0}
+.frec[disabled]{opacity:.25}
 :root{
   --bg:#0d0d10; --bg2:#14141a; --bg3:#1b1b23; --line:#2a2a35;
   --fg:#eceaf0; --fg2:#9b98a8; --fg3:#6b6878;
@@ -416,6 +421,28 @@ label.f{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.7p
   </div>
 
   <div class="card" style="margin-bottom:14px">
+    <h2>Dove ascolti</h2>
+    <p class="tiny muted" style="margin-top:0">Quando cerco il link di riproduzione provo queste piattaforme in quest&rsquo;ordine e mi fermo alla prima che ha l&rsquo;album. Togli quelle che non usi: un link a un servizio a cui non sei abbonato apre solo una richiesta di abbonamento.</p>
+    <div id="prPlat"></div>
+    <div class="hint">Spotify resta sempre in cima. Le altre le sposti con le frecce. Quelle spente restano qui sotto, spente.</div>
+  </div>
+
+  <div class="card" style="margin-bottom:14px">
+    <h2>Collegamenti a Spotify</h2>
+    <p class="tiny muted" style="margin-top:0">Cerca in anticipo la pagina esatta dell&rsquo;album su Spotify e se la ricorda. Fatto una volta, il tasto <b>&#9654;</b> apre subito il disco invece di restare sulla schermata bianca ad aspettare.</p>
+    <div class="row">
+      <button class="btn" id="spotMissing">Collega quelli che mancano</button>
+      <button class="btn gh" id="spotAll">Ricontrolla tutti</button>
+    </div>
+    <div class="hint">&ldquo;Ricontrolla tutti&rdquo; riprova anche gli album finiti su un&rsquo;altra piattaforma, per vedere se nel frattempo Spotify li ha. Gli indirizzi che hai incollato tu non vengono mai toccati.</div>
+    <div id="spotBox" style="display:none;margin-top:14px">
+      <div class="bar"><i id="spotBar"></i></div>
+      <div class="tiny muted" id="spotTxt" style="margin-top:8px"></div>
+      <button class="btn gh sm" id="spotStop" style="margin-top:10px">Ferma</button>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:14px">
     <h2>Diagnostica</h2>
     <p class="tiny muted" style="margin-top:0">Prova una per una le fonti che l&rsquo;app interroga. Se qualcosa non funziona, qui si vede quale.</p>
     <button class="btn" id="btnDiag">Prova le fonti</button>
@@ -468,7 +495,7 @@ label.f{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.7p
 /* ==========================================================
    1. STATO
    ========================================================== */
-const APP_VER='16';
+const APP_VER='18';
 const LS='crate.v1', LSK='crate.lfmkey', LSG='crate.gh', LSS='crate.lastsync', LSP='crate.prefs';
 let DB={albums:[],deleted:[]};
 
@@ -481,7 +508,9 @@ const PREF_DEFAULTS={
   mode:'full',
   show:{meta:true,quick:true,details:true,about:true,listeners:false,dates:true,
         listen:true,similar:true,links:true,tracce:true},
-  links:{aoty:true,rym:true,lastfm:true,youtube:true,bandcamp:true,discogs:true}
+  links:{aoty:true,rym:true,lastfm:true,youtube:true,bandcamp:true,discogs:true},
+  /* di serie solo quelle che si ascoltano senza abbonamento */
+  plat:['spotify','youtubeMusic','youtube','bandcamp','soundcloud','archive']
 };
 let P=JSON.parse(JSON.stringify(PREF_DEFAULTS));
 function loadPrefs(){
@@ -491,6 +520,10 @@ function loadPrefs(){
       if(p.mode==='min'||p.mode==='full')P.mode=p.mode;
       if(p.show)Object.keys(P.show).forEach(k=>{if(typeof p.show[k]==='boolean')P.show[k]=p.show[k]});
       if(p.links)Object.keys(P.links).forEach(k=>{if(typeof p.links[k]==='boolean')P.links[k]=p.links[k]});
+      if(Array.isArray(p.plat)){
+        const buone=p.plat.filter(k=>PIATTAFORME.some(x=>x.k===k));
+        if(buone.length)P.plat=buone;
+      }
     }}catch(e){}
 }
 function savePrefs(){try{localStorage.setItem(LSP,JSON.stringify(P))}catch(e){}}
@@ -698,6 +731,50 @@ function detectKind(title,tracks,type){
   return 'album';
 }
 function cleanTitle(t){return String(t||'').replace(/\s[-–]\s*(single|singolo|ep)\s*$/i,'').trim()}
+/* Parole che segnalano un'EDIZIONE diversa, non un DISCO diverso. */
+const RUMORE_ED=/^(demos?|instrumentals?|live|remix|remixes|remixed|karaoke|tribute|commentary|acoustic|session|sessions|edit|edits|radio|single|singolo|cover|covers|backing|rehearsal|outtake|outtakes|bonus|reprise|version|versions|remaster|remastered|anniversary|deluxe|expanded|edition|explicit|clean|mono|stereo|ep)$/;
+function nucleoTitolo(t){
+  return String(t||'').toLowerCase()
+    .replace(/\[[^\]]*\]|\([^)]*\)/g,' ')        /* via le parentesi: sono edizioni */
+    .replace(/\s[-–—]\s[^-–—]*$/,' ')            /* via il "- Deluxe Edition" finale */
+    .replace(/[^a-z0-9\s]/g,' ').replace(/\s+/g,' ').trim();
+}
+/* "This Old Dog" e "Old Dog Demos" si somigliano per due parole su tre, ma
+   sono due dischi diversi: e' cosi' che in libreria e' finito un album di
+   demo al posto di quello vero. Per DECIDERE se e' lo stesso album la
+   somiglianza non basta, le parole devono coincidere. Tollero solo le
+   indicazioni di edizione, che cambiano la confezione e non il disco. */
+function stessoTitolo(a,b){
+  const A=nucleoTitolo(a),B=nucleoTitolo(b);
+  if(!A||!B)return false;
+  if(A===B)return true;
+  const estranee=(x,y)=>x.filter(w=>y.indexOf(w)<0).some(w=>!RUMORE_ED.test(w));
+  const pa=A.split(' '),pb=B.split(' ');
+  return!estranee(pa,pb)&&!estranee(pb,pa);
+}
+/* Somiglianza lettera per lettera. Il confronto per parole intere e' severo
+   con i refusi: "This Old Dogg" e "This Old Dog" differiscono di una lettera
+   ma per il conteggio delle parole valgono due terzi. */
+function simLettere(a,b){
+  const bigrammi=x=>{
+    const t=String(x||'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+    const m=new Map();
+    for(let i=0;i<t.length-1;i++){const k=t.slice(i,i+2);m.set(k,(m.get(k)||0)+1)}
+    return m;
+  };
+  const A=bigrammi(a),B=bigrammi(b);
+  let tot=0,com=0;
+  A.forEach((v,k)=>{tot+=v;com+=Math.min(v,B.get(k)||0)});
+  B.forEach(v=>{tot+=v});
+  return tot?2*com/tot:0;
+}
+/* indicazioni di edizione presenti nel risultato ma non in cio' che cerco:
+   "Skinty Fia (Edit)" quando ho chiesto "Skinty Fia" */
+function rumoreExtra(titolo,cercato){
+  const pezzi=x=>String(x||'').toLowerCase().replace(/[^a-z0-9\s]/g,' ').split(/\s+/).filter(Boolean);
+  const c=pezzi(cercato);
+  return pezzi(titolo).some(w=>RUMORE_ED.test(w)&&c.indexOf(w)<0);
+}
 /* MusicBrainz e' un archivio, non un negozio: contiene anche gli artisti
    ritirati dallo streaming (Godspeed You! Black Emperor, molta autoproduzione,
    dischi fuori catalogo). Le copertine arrivano da Cover Art Archive. */
@@ -733,10 +810,23 @@ async function searchArchive(term){
 function simAlbum(r,titolo,artista){
   const t=Math.max(txtSim(r.title||'',titolo||''),
     txtSim(((r.artist||'')+' '+(r.title||'')).trim(),((artista||'')+' '+(titolo||'')).trim()));
-  if(!artista)return t;
-  const a=txtSim(r.artist||'',artista);
-  if(a<.34)return Math.min(t,.34)*.5;   /* artista che non c'entra: non e' questo */
-  return .5*t+.5*a;
+  let s;
+  if(!artista)s=t;
+  else{
+    const a=txtSim(r.artist||'',artista);
+    if(a<.34)return Math.min(t,.34)*.5;   /* artista che non c'entra: non e' questo */
+    s=.5*t+.5*a;
+  }
+  if(stessoTitolo(r.title,titolo))s+=.25;         /* e' proprio quel disco */
+  /* Cercando "Skinty Fia" il negozio propone per primo il singolo omonimo,
+     e in libreria finiva quello. A parita' di titolo voglio l'album. */
+  if(!/\b(single|singolo)\b/i.test(titolo||'')){
+    if(r.kind==='singolo')s-=.45;
+    else if(r.kind==='EP')s-=.12;
+  }
+  if(rumoreExtra(r.title,titolo))s-=.30;          /* (Edit), (Live), Demos... */
+  if(+r.tracks>=5)s+=.05;
+  return s;
 }
 /* i negozi in dettaglio, cosi' posso interrogarli anche uno alla volta */
 async function cercaDeezer(term){
@@ -874,8 +964,7 @@ async function tracceArchivio(a){
   const q='release:'+JSON.stringify(a.title)+(a.artist?' AND artist:'+JSON.stringify(a.artist):'');
   const r=await fetch('https://musicbrainz.org/ws/2/release/?fmt=json&limit=5&query='+encodeURIComponent(q));
   if(!r.ok)return null;
-  const rel=((await r.json()).releases||[])
-    .find(x=>+x['track-count']>0&&stessaEdizione(x,a));
+  const rel=meglioEdizione(((await r.json()).releases||[]).filter(x=>stessaEdizione(x,a)),a);
   if(!rel)return null;
   const r2=await fetch('https://musicbrainz.org/ws/2/release/'+rel.id+'?fmt=json&inc=recordings');
   if(!r2.ok)return null;
@@ -1029,6 +1118,11 @@ function addAlbum(c,quiet){
     rating:null,comment:c.comment||'',fav:false,listened:false,listenedAt:null,
     addedAt:now(),updatedAt:now(),src:c.src||'manual'};
   if(c.pending){al.pending=true;al.link=c.link||''}
+  /* dati che arrivano da un indirizzo preciso: me li porto dietro tutti */
+  if(c.spotify){al.spotify=c.spotify;al.platName=c.platName||'Spotify'}
+  if(c.tracklist)al.tracklist=c.tracklist;
+  if(c.durata)al.durata=c.durata;
+  if(c.linkFissato){al.linkFissato=true;al.daLink=true}
   DB.albums.unshift(al);saveLocal();scheduleSync();renderAll();
   if(c.pending){toast('Salvato da identificare');return al}
   toast('Aggiunto: '+al.title);
@@ -1050,18 +1144,45 @@ function queueEnrich(id,genre){
    Gli archivi di metadati non hanno le copertine. Quindi dopo il salvataggio
    cerco l'album anche nei cataloghi e adotto quello che manca. Adotto solo
    con una somiglianza alta: meglio una scheda incompleta che l'album sbagliato. */
+/* i dati che arrivano da un indirizzo preciso battono quelli indovinati
+   con una ricerca a testo libero: sovrascrivono, non riempiono i buchi */
+function applicaDati(a,d){
+  ['title','artist','cover','year','tracks','tracklist','durata','mbid','kind',
+   'itunesUrl','deezerUrl','spotify','platName','listenUrl','platform'].forEach(k=>{if(d[k])a[k]=d[k]});
+  a.linkFissato=true;a.daLink=true;
+}
 async function autoComplete(id){
   const a0=DB.albums.find(x=>x.id===id);
   if(!a0||!a0.title||a0.pending)return null;
+  /* Un indirizzo Spotify che mi hai dato tu comanda su tutto: e' l'unica cosa
+     che distingue l'album dal singolo omonimo e dalla raccolta di demo.
+     Prima lo tenevo solo come pulsante e i dati li cercavo lo stesso a testo
+     libero: e' cosi' che al posto di This Old Dog e' entrato "Old Dog Demos". */
+  const sp=idSpotify(a0.listenUrl||a0.spotify||'');
+  if(sp&&!a0.daLink){
+    let d=null;try{d=await albumDaSpotify(urlSpotify(sp))}catch(e){}
+    const a=DB.albums.find(x=>x.id===id);if(!a)return null;
+    a.daLink=true;
+    if(d){applicaDati(a,d);save(a);renderAll();
+      if(openAlbum._id===id)openAlbum(id,true);
+      return d;}
+    save(a);
+  }
   if(a0.cover&&a0.itunesUrl)return null;              /* gia' completa */
   let rs=[];
   try{rs=await searchAlbums(((a0.artist||'')+' '+a0.title).trim())}catch(e){}
   if(!rs.length)return null;
-  /* confronto ignorando le parentesi finali: "Souvlaki (Deluxe)" e' comunque
-     l'album giusto da cui prendere copertina e tracce */
-  const base=s=>String(s||'').replace(/\s*\([^)]*\)\s*$/,'');
-  const m=rs.find(r=>txtSim(base(a0.title),base(r.title))>=.6&&
-    (!a0.artist||txtSim(a0.artist,r.artist)>=.5));
+  /* "Souvlaki (Deluxe)" va benissimo per copertina e tracce, "Old Dog Demos"
+     no: prendo solo chi ha davvero quel titolo, e fra questi il migliore,
+     non il primo che capita nell'elenco. */
+  const artistaOk=r=>!a0.artist||txtSim(a0.artist,r.artist||'')>=.5;
+  let buoni=rs.filter(r=>stessoTitolo(a0.title,r.title)&&artistaOk(r));
+  /* se non c'e' niente di identico puo' essere un mio refuso: allora accetto
+     un titolo quasi uguale lettera per lettera, ma mai una versione diversa
+     (demo, live, remix), che e' proprio l'errore che voglio evitare */
+  if(!buoni.length)buoni=rs.filter(r=>artistaOk(r)&&!rumoreExtra(r.title,a0.title)&&
+    simLettere(nucleoTitolo(a0.title),nucleoTitolo(r.title))>=.85);
+  const m=buoni.sort((x,y)=>simAlbum(y,a0.title,a0.artist)-simAlbum(x,a0.title,a0.artist))[0];
   if(!m)return null;
   const a=DB.albums.find(x=>x.id===id);if(!a)return null;
   if(!a.cover&&m.cover)a.cover=m.cover;
@@ -1159,13 +1280,82 @@ async function bulkEnrich(mode){
   bulkRunning=false;bulkStop=false;
   renderAll();scheduleSync();
 }
+/* ---- collegamento a Spotify in blocco ----
+   La prima volta che premi il tasto riproduci l'app deve ancora scoprire
+   qual e' la pagina dell'album, e nel frattempo resti su about:blank. Se lo
+   faccio prima per tutta la libreria, il tasto diventa istantaneo. */
+let spotRunning=false,spotStop=false;
+function haSpotify(a){return!!(a.linkFissato||(a.spotify&&/spotify/i.test(a.platName||'')))}
+async function bulkSpotify(mode){
+  if(spotRunning)return;
+  /* gli indirizzi che hai incollato tu non si toccano nemmeno con "tutti" */
+  const list=DB.albums.filter(a=>!a.pending&&!a.linkFissato&&
+    (mode==='all'||!haSpotify(a)));
+  if(!list.length){toast(mode==='all'?'Nessun album da ricontrollare':'Sono gia tutti collegati');return}
+  spotRunning=true;spotStop=false;
+  const box=document.getElementById('spotBox'),bar=document.getElementById('spotBar'),
+        txt=document.getElementById('spotTxt');
+  box.style.display='block';
+  let done=0,presi=0,altrove=0;
+  for(const a of list){
+    if(spotStop)break;
+    txt.innerHTML='<b>'+(done+1)+' / '+list.length+'</b> &middot; '+esc(a.title);
+    bar.style.width=Math.round(done/list.length*100)+'%';
+    let L=null;
+    try{L=await resolveListen(a,mode==='all')}catch(e){}
+    if(L&&/spotify/i.test(L.name||''))presi++;else if(L)altrove++;
+    done++;
+    if(!spotStop)await sleep(1100);   /* l'archivio accetta una richiesta al secondo */
+  }
+  bar.style.width='100%';
+  txt.innerHTML=(spotStop?'Fermato.':'Finito.')+' '+presi+' collegati a Spotify'+
+    (altrove?', '+altrove+' solo su altre piattaforme':'')+
+    (done-presi-altrove>0?', '+(done-presi-altrove)+' non trovati':'')+'.';
+  spotRunning=false;spotStop=false;
+  renderAll();scheduleSync();
+}
 /* ---- link di ascolto ----
    Spotify e' sempre la prima scelta; se l'album non c'e', ripiego sulla
    piattaforma piu' vicina invece di lasciare la scheda senza niente. */
-const PLAT_ORDER=[['spotify','Spotify'],['appleMusic','Apple Music'],
-  ['youtubeMusic','YouTube Music'],['deezer','Deezer'],['tidal','Tidal'],
-  ['amazonMusic','Amazon Music'],['bandcamp','Bandcamp'],['soundcloud','SoundCloud'],
-  ['youtube','YouTube']];
+/* Le piattaforme che l'app puo' proporre per ascoltare. Quali e in che
+   ordine lo decidi tu in Opzioni: un link a un servizio che non paghi non
+   serve a niente, apre una pagina che ti chiede di abbonarti. */
+const PIATTAFORME=[
+  {k:'spotify',n:'Spotify',od:'spotify',re:/open\.spotify\.com\/album\//,
+   nota:'gratuito con pubblicit\u00e0, oppure premium'},
+  {k:'youtubeMusic',n:'YouTube Music',od:'youtubeMusic',re:/music\.youtube\.com/,
+   nota:'gratuito con pubblicit\u00e0'},
+  {k:'youtube',n:'YouTube',od:'youtube',re:/(^|\/\/)(www\.)?youtube\.com\/(watch|playlist)/,
+   nota:'gratuito, spesso l\u2019unico posto per i dischi fuori catalogo'},
+  {k:'bandcamp',n:'Bandcamp',od:'bandcamp',re:/bandcamp\.com/,
+   nota:'ascolto gratuito, di solito l\u2019album intero'},
+  {k:'soundcloud',n:'SoundCloud',od:'soundcloud',re:/soundcloud\.com/,
+   nota:'gratuito'},
+  {k:'archive',n:'Internet Archive',od:'',re:/archive\.org\/details\//,
+   nota:'gratuito, concerti e dischi fuori commercio'},
+  {k:'appleMusic',n:'Apple Music',od:'appleMusic',re:/music\.apple\.com\/.+\/album\//,
+   nota:'senza abbonamento fa sentire 30 secondi per traccia'},
+  {k:'deezer',n:'Deezer',od:'deezer',re:/deezer\.com\/album/,
+   nota:'gratis solo in ordine casuale: l\u2019album non lo scegli'},
+  {k:'tidal',n:'Tidal',od:'tidal',re:/tidal\.com\/.*album/,
+   nota:'nessun piano gratuito'},
+  {k:'amazonMusic',n:'Amazon Music',od:'amazonMusic',re:/music\.amazon\./,
+   nota:'serve Prime o Unlimited'}
+];
+function piattDi(k){return PIATTAFORME.filter(p=>p.k===k)[0]||null}
+/* un album collegato a una piattaforma che poi hai spento: te lo dico */
+function piattAttiva(nome){return!nome||ordinePiatt().some(p=>p.n===nome)}
+/* l'elenco vero e proprio, nell'ordine che hai scelto; Spotify resta in testa */
+function ordinePiatt(){
+  const out=[],visti={};
+  (P.plat||[]).forEach(k=>{const p=piattDi(k);if(p&&!visti[k]){visti[k]=1;out.push(p)}});
+  if(!visti.spotify)out.unshift(piattDi('spotify'));
+  else if(out[0].k!=='spotify'){
+    const i=out.map(p=>p.k).indexOf('spotify');
+    out.unshift(out.splice(i,1)[0]);
+  }
+  return out;
+}
 /* un aggancio nei cataloghi serve sia per il link sia per il numero di tracce */
 async function ensureSeed(a){
   if(a.itunesUrl||a.deezerUrl)return a.itunesUrl||a.deezerUrl;
@@ -1216,7 +1406,7 @@ async function odesliDaUrl(url,esito){
   if(r.status===429){odesliInPausa();if(esito)esito.push('Odesli: troppe richieste, riprova fra un minuto');return null}
   if(!r.ok){if(esito)esito.push('Odesli: errore '+r.status);return null}
   const L=((await r.json())||{}).linksByPlatform||{};
-  for(const pair of PLAT_ORDER)if(L[pair[0]]&&L[pair[0]].url)return{url:L[pair[0]].url,name:pair[1]};
+  for(const p of ordinePiatt())if(p.od&&L[p.od]&&L[p.od].url)return{url:L[p.od].url,name:p.n};
   return null;
 }
 async function daOdesli(a,esito){
@@ -1231,12 +1421,27 @@ async function daOdesli(a,esito){
 function creditoDi(x){return((x&&x['artist-credit'])||[])
   .map(c=>c.name||(c.artist&&c.artist.name)||'').join(' ')}
 function stessaEdizione(x,a){
-  if(txtSim(x.title||'',a.title||'')<.6)return false;
+  if(!stessoTitolo(x.title||'',a.title||''))return false;
   return!a.artist||txtSim(creditoDi(x),a.artist)>=.34;
 }
-const ALTRE_PIATT=[[/music\.apple\.com\/.+\/album\//,'Apple Music'],
-  [/deezer\.com\/album/,'Deezer'],[/bandcamp\.com/,'Bandcamp'],
-  [/tidal\.com\/.*album/,'Tidal'],[/music\.youtube\.com/,'YouTube Music']];
+/* Fra le edizioni buone scelgo quella giusta: mai il singolo da due tracce
+   quando cerco l'album, e se so quante tracce ha, quella che ci azzecca. */
+function meglioEdizione(lista,a){
+  const tipo=x=>String((x['release-group']||{})['primary-type']||'').toLowerCase();
+  let buone=lista.filter(x=>+x['track-count']>0);
+  const veri=buone.filter(x=>tipo(x)!=='single'&&tipo(x)!=='ep');
+  if(veri.length)buone=veri;
+  if(!buone.length)return null;
+  const atteso=+a.tracks||0;
+  return buone.slice().sort((x,y)=>{
+    const dx=atteso?Math.abs(+x['track-count']-atteso):0,dy=atteso?Math.abs(+y['track-count']-atteso):0;
+    if(dx!==dy)return dx-dy;
+    return+y['track-count']-+x['track-count'];
+  })[0];
+}
+/* i ripieghi, sempre nell'ordine che hai scelto e senza Spotify,
+   che viene cercato a parte perche' ha la precedenza su tutto */
+function altrePiatt(){return ordinePiatt().filter(p=>p.k!=='spotify')}
 async function linkArchivio(a){
   const out={spotify:null,altro:null};
   const guarda=urls=>{
@@ -1244,9 +1449,9 @@ async function linkArchivio(a){
       const s=urls.find(u=>/open\.spotify\.com\/album\//.test(u));
       if(s)out.spotify=s;
     }
-    if(!out.altro)for(const[re,nome]of ALTRE_PIATT){
-      const u=urls.find(x=>re.test(x));
-      if(u){out.altro={url:u,name:nome};break}
+    if(!out.altro)for(const p of altrePiatt()){
+      const u=urls.find(x=>p.re.test(x));
+      if(u){out.altro={url:u,name:p.n};break}
     }
   };
   const urlsDa=async u=>{
@@ -1273,9 +1478,88 @@ async function linkArchivio(a){
   }catch(e){}
   return out;
 }
-async function resolveListen(a){
-  if(a.listenUrl)return{url:a.listenUrl,name:a.platform||'Ascolta'};
-  if(a.spotify)return{url:a.spotify,name:a.platName||'Spotify'};
+/* ==========================================================
+   DAL LINK SPOTIFY ALL'ALBUM VERO
+   Se ti prendi la briga di darmi l'indirizzo preciso, quello deve comandare:
+   prima cercavo lo stesso a testo libero e finivo su un altro disco.
+   Spotify non apre le sue API senza credenziali, ma due porte pubbliche
+   bastano: oEmbed dice titolo e copertina di QUELL'identificativo, e
+   MusicBrainz sa risalire dall'indirizzo all'edizione catalogata.
+   ========================================================== */
+function idSpotify(u){
+  const m=/open\.spotify\.com\/(?:intl-[a-z-]+\/)?album\/([A-Za-z0-9]+)/.exec(String(u||''));
+  return m?m[1]:'';
+}
+function urlSpotify(id){return 'https://open.spotify.com/album/'+id}
+async function spotifyOembed(url){
+  const r=await fetch('https://open.spotify.com/oembed?url='+encodeURIComponent(url));
+  if(!r.ok)return null;
+  const d=(await r.json())||{};
+  const t=cleanTitle(String(d.title||'').trim());
+  return t?{title:t,cover:d.thumbnail_url||''}:null;
+}
+/* l'archivio interrogato AL CONTRARIO: dall'indirizzo all'edizione */
+async function mbDaUrl(url){
+  const r=await fetch('https://musicbrainz.org/ws/2/url?fmt=json&inc=release-rels&resource='+encodeURIComponent(url));
+  if(!r.ok)return null;
+  const rel=(((await r.json())||{}).relations||[]).map(x=>x.release).filter(Boolean)[0];
+  if(!rel)return null;
+  await sleep(1100);
+  const r2=await fetch('https://musicbrainz.org/ws/2/release/'+rel.id+
+    '?fmt=json&inc=recordings+artist-credits+release-groups');
+  if(!r2.ok)return{title:cleanTitle(rel.title||'')};
+  const d=(await r2.json())||{};
+  const lista=[];
+  (d.media||[]).forEach(m=>(m.tracks||[]).forEach(t=>{
+    if(t.title)lista.push({n:+t.position||lista.length+1,t:t.title,ms:+t.length||0});
+  }));
+  const rg=d['release-group']||{};
+  const data=rg['first-release-date']||d.date||'';
+  const ms=lista.reduce((x,t)=>x+(t.ms||0),0);
+  return{title:cleanTitle(d.title||rel.title||''),artist:creditoDi(d)||'',
+    year:data?+String(data).slice(0,4)||null:null,mbid:rg.id||'',
+    tracks:lista.length||null,tracklist:lista.length?lista:null,durata:ms||null,
+    cover:rg.id?'https://coverartarchive.org/release-group/'+rg.id+'/front-500':''};
+}
+async function albumDaSpotify(url,esito){
+  const id=idSpotify(url);if(!id)return null;
+  const link=urlSpotify(id);
+  const dice=m=>{if(esito)esito.push(m)};
+  const out={spotify:link,platName:'Spotify',listenUrl:link,platform:'Spotify',linkFissato:true};
+  let trovato=false;
+  /* 1. il titolo esatto di questo identificativo: e' la cosa piu' importante,
+        perche' da soli titolo e artista non bastano a distinguere l'album
+        dal singolo omonimo o dalla raccolta di demo */
+  try{const o=await spotifyOembed(link);
+    if(o){out.title=o.title;if(o.cover)out.cover=o.cover;trovato=true;dice('Spotify dice: '+o.title)}
+    else dice('Spotify non ha riconosciuto l\'indirizzo');
+  }catch(e){dice('oEmbed non raggiungibile')}
+  /* 2. l'edizione nell'archivio: porta artista, anno, tracce e durata veri */
+  try{const m=await mbDaUrl(link);
+    if(m){trovato=true;dice('edizione trovata nell\'archivio');
+      if(!out.title)out.title=m.title;
+      ['artist','year','mbid','tracks','tracklist','durata'].forEach(k=>{if(m[k]&&!out[k])out[k]=m[k]});
+      if(!out.cover&&m.cover)out.cover=m.cover;}
+  }catch(e){}
+  /* 3. il resto dai negozi, ma accettando solo chi ha DAVVERO quel titolo */
+  if(out.title&&(!out.artist||!out.tracks||!out.cover||!out.itunesUrl)){
+    let rs=[];try{rs=await cercaCompleta(out.title,out.artist||'')}catch(e){}
+    const buoni=rs.filter(r=>stessoTitolo(r.title,out.title)&&
+      (!out.artist||txtSim(r.artist||'',out.artist)>=.5));
+    const m=buoni.sort((x,y)=>simAlbum(y,out.title,out.artist||'')-simAlbum(x,out.title,out.artist||''))[0];
+    if(m){trovato=true;
+      if(!out.artist&&m.artist)out.artist=m.artist;
+      ['year','tracks','cover','itunesUrl','deezerUrl','mbid','kind','genre'].forEach(k=>{if(m[k]&&!out[k])out[k]=m[k]});}
+  }
+  return(trovato&&out.title)?out:null;
+}
+async function resolveListen(a,forza){
+  /* un indirizzo che mi hai dato tu non si tocca mai */
+  if(a.linkFissato&&a.listenUrl)return{url:a.listenUrl,name:a.platform||'Spotify'};
+  if(!forza){
+    if(a.listenUrl)return{url:a.listenUrl,name:a.platform||'Ascolta'};
+    if(a.spotify)return{url:a.spotify,name:a.platName||'Spotify'};
+  }
   const esito=[];
   const salva=L=>{const cur=DB.albums.find(x=>x.id===a.id)||a;
     cur.spotify=L.url;cur.platName=L.name;save(cur);return L};
@@ -1722,6 +2006,13 @@ function rankResults(results,cands,hint){
     });
     if(hint&&r.year===hint)best+=.25;
     else if(hint&&r.year)best-=Math.min(.15,Math.abs(r.year-hint)/200);
+    /* Stesse preferenze della ricerca: dallo screenshot di "Skinty Fia" il
+       negozio propone per primo il singolo omonimo, e sulla carta finiva
+       quello. A parita' di tutto il resto voglio l'album. */
+    if(r.kind==='singolo')best-=.30;
+    else if(r.kind==='EP')best-=.08;
+    if(cands.length&&cands.every(c=>rumoreExtra(r.title,c)))best-=.20;
+    if(+r.tracks>=5)best+=.04;
     return best;
   };
   return results.map(r=>({r:r,s:punteggio(r)}))
@@ -2056,9 +2347,41 @@ async function consumeShare(){
   }
 }
 function cleanUrl(){try{history.replaceState({},'',location.pathname)}catch(e){}}
+async function daLinkSpotify(url){
+  const box=document.getElementById('sharedBox');
+  const mostra=h=>{if(box)box.innerHTML='<div class="banner"><div style="min-width:0;flex:1">'+h+'</div></div>'};
+  mostra('<b>Album di Spotify</b><div class="tiny muted" style="margin-top:4px">'+
+    '<span class="spinner"></span> leggo di che disco si tratta...</div>');
+  const esito=[];
+  let d=null;try{d=await albumDaSpotify(url,esito)}catch(e){}
+  if(!d){
+    mostra('<b>Non sono riuscito a leggere l&rsquo;album</b><div class="tiny muted" style="margin-top:4px">'+
+      esc(esito.join(' &middot; ')||'nessuna fonte ha risposto')+
+      '</div><div class="tiny muted" style="margin-top:6px">Il link resta valido: apri l&rsquo;inserimento '+
+      'manuale, incollalo e scrivi tu titolo e artista.</div>');
+    setTimeout(()=>{if(box)box.innerHTML='';manualForm({listenUrl:url})},1400);
+    return null;
+  }
+  const gia=findExisting(d.artist,d.title);
+  if(gia){
+    /* c'era gia', ma magari con il link sbagliato: lo correggo con questo */
+    applicaDati(gia,d);save(gia);renderAll();
+    if(box)box.innerHTML='';
+    toast('Aggiornato con il link di Spotify');show('lib');openAlbum(gia.id);
+    return gia;
+  }
+  const al=addAlbum({...d,src:'spotify'},true);
+  if(box)box.innerHTML='';
+  show('lib');openAlbum(al.id);
+  return al;
+}
 function sharedText(txt){
   show('add');
   const url=(txt.match(/https?:\/\/\S+/)||[''])[0];
+  /* Condivisione direttamente dall'app Spotify: qui non c'e' niente da
+     indovinare, l'indirizzo dice esattamente quale album e'. Lo aggiungo
+     e basta, senza farti passare da un modulo. */
+  if(idSpotify(url)){daLinkSpotify(url);return}
   const words=txt.replace(/https?:\/\/\S+/g,'').replace(/\s+/g,' ').trim();
   const p=url?parseMusicUrl(url):{};
   const known=!!(p.title||p.artist);   /* Bandcamp e SoundCloud li so leggere */
@@ -2162,9 +2485,24 @@ function manualForm(pre){
     const T=document.getElementById('mnT'),A=document.getElementById('mnA');
     if(p.title&&!T.value.trim())T.value=p.title;
     if(p.artist&&!A.value.trim())A.value=p.artist;
-    document.getElementById('mnLHint').innerHTML=p.platform
+    const H=document.getElementById('mnLHint');
+    H.innerHTML=p.platform
       ? 'Riconosciuto: <b>'+esc(p.platform)+'</b>'+(p.title?' &middot; ho compilato i campi, correggi quello che serve.':'')
       : '';
+    /* con un indirizzo Spotify posso sapere subito di che album si tratta,
+       invece di indovinarlo dal titolo che scrivi */
+    const id=idSpotify(p.listenUrl);
+    if(!id||fromLink._id===id)return;
+    fromLink._id=id;
+    H.innerHTML='Riconosciuto: <b>Spotify</b> &middot; <span class="spinner"></span> leggo di che album si tratta...';
+    spotifyOembed(urlSpotify(id)).then(o=>{
+      if(fromLink._id!==id)return;
+      if(!o){H.innerHTML='Riconosciuto: <b>Spotify</b> &middot; il titolo lo recupero dopo il salvataggio.';return}
+      T.value=o.title;
+      H.innerHTML='Riconosciuto: <b>Spotify</b> &middot; e&rsquo; <b>'+esc(o.title)+
+        '</b>. Copertina, tracce e anno li prendo da questo indirizzo, non da una ricerca.';
+      cercaSug();
+    }).catch(()=>{});
   };
   lin.addEventListener('input',fromLink);
   lin.addEventListener('paste',()=>setTimeout(fromLink,30));
@@ -2305,6 +2643,11 @@ function openAlbum(id,keepScroll){
       '</div><div id="covBox" style="margin-top:10px"></div>'+
       '<input type="file" id="covFile" accept="image/*" hidden></div>'+
     '<div class="sec row"><button class="btn gh sm" id="bRe">Riprova tag automatici</button>'+
+      (a.pending?'':'<button class="btn gh sm" id="bLink"'+
+        (!a.linkFissato&&a.spotify&&!piattAttiva(a.platName)?' style="border-color:var(--acc);color:var(--acc)"':'')+'>'+
+        (a.linkFissato?'Link incollato da te'
+         :(a.spotify&&!piattAttiva(a.platName)?'Ricollega: '+esc(a.platName)+' non la usi'
+         :'Ricollega a Spotify'))+'</button>')+
       (a.pending||!vis('similar')?'':'<button class="btn gh sm" id="bSim">Simili a questo</button>')+
       '<button class="btn gh sm" id="bDel" style="border-color:var(--acc);color:var(--acc);margin-left:auto">Elimina</button></div>'+
   '</div>';
@@ -2357,6 +2700,24 @@ function openAlbum(id,keepScroll){
     e.currentTarget.innerHTML=(linksOpen?'&#9662;':'&#9656;')+' Link esterni ('+linkSet(a).length+')';
   };
   /* consigli a partire da questo album */
+  /* ricollega: rifa' la ricerca del link da zero, utile quando un album e'
+     finito su Tidal perche' in quel momento Spotify non era stato trovato */
+  const bLink=document.getElementById('bLink');
+  if(bLink)bLink.onclick=async()=>{
+    if(a.linkFissato){
+      if(!confirm('Questo album usa l\'indirizzo che hai incollato tu.\n\nVuoi buttarlo via e farmelo ricercare?'))return;
+      a.linkFissato=false;a.daLink=false;a.listenUrl='';a.platform='';
+    }
+    const et=bLink.innerHTML;bLink.innerHTML='<span class="spinner"></span> cerco...';
+    let L=null;
+    try{L=await resolveListen(a,true)}catch(e){}
+    bLink.innerHTML=et;
+    if(L&&/spotify/i.test(L.name||''))toast('Collegato a Spotify');
+    else if(L)toast('Su Spotify non risulta: collegato a '+L.name);
+    else toast(resolveListen.motivo||'Non l\'ho trovato da nessuna parte');
+    save(a);renderAll();
+    if(openAlbum._id===id)openAlbum(id,true);
+  };
   const bSim=document.getElementById('bSim');
   if(bSim)bSim.onclick=()=>{closeModal();recommendFrom(id)};
   /* tocca l'artista per vedere tutti i suoi album */
@@ -2982,7 +3343,7 @@ const PREF_LABELS={
   about:['Descrizione dell\'album','testo da Last.fm, dentro Dettagli'],
   listeners:['Numero di ascoltatori su Last.fm','spento: e\' un dato che sposta il giudizio'],
   dates:['Date di aggiunta e ascolto','dentro Dettagli'],
-  listen:['Pulsante di ascolto','Spotify, oppure Bandcamp e SoundCloud se hai messo il link'],
+  listen:['Pulsante di ascolto','le piattaforme che hai scelto in &ldquo;Dove ascolti&rdquo;'],
   similar:['Pulsante Simili a questo','consigli a partire da quell\'album'],
   tracce:['Elenco delle tracce e durata','si scarica al primo tocco'],
   links:['Sezione dei link esterni','resta comunque chiusa fino a che non la apri']
@@ -2992,6 +3353,28 @@ function checkRow(id,label,sub,on){
     '<input type="checkbox" data-k="'+id+'"'+(on?' checked':'')+' style="width:auto;margin:3px 0 0;flex:none;accent-color:var(--acc)">'+
     '<span style="min-width:0"><span style="font-size:14px">'+label+'</span>'+
     (sub?'<span class="tiny muted" style="display:block">'+sub+'</span>':'')+'</span></label>';
+}
+function renderPiatt(){
+  const host=document.getElementById('prPlat');
+  if(!host)return;
+  const on=ordinePiatt(),off=PIATTAFORME.filter(p=>!on.some(x=>x.k===p.k));
+  const riga=(p,i,att)=>'<div class="piatt'+(att?'':' off')+'">'+
+    '<input type="checkbox" data-p="'+p.k+'"'+(att?' checked':'')+(p.k==='spotify'?' disabled':'')+
+      ' style="width:auto;margin:0;flex:none;accent-color:var(--acc)">'+
+    '<span style="min-width:0;flex:1"><span style="font-size:14px">'+esc(p.n)+'</span>'+
+      '<span class="tiny muted" style="display:block">'+esc(p.nota)+'</span></span>'+
+    (att&&p.k!=='spotify'
+      ? '<button class="frec" data-su="'+p.k+'"'+(i<=1?' disabled':'')+'>&#9650;</button>'+
+        '<button class="frec" data-giu="'+p.k+'"'+(i>=on.length-1?' disabled':'')+'>&#9660;</button>'
+      : '')+'</div>';
+  host.innerHTML=on.map((p,i)=>riga(p,i,true)).join('')+off.map(p=>riga(p,-1,false)).join('');
+}
+function spostaPiatt(k,giu){
+  const lista=ordinePiatt().map(p=>p.k);
+  const i=lista.indexOf(k),j=giu?i+1:i-1;
+  if(i<0||j<1||j>=lista.length)return;   /* j<1: sopra Spotify non si sale */
+  lista.splice(j,0,lista.splice(i,1)[0]);
+  P.plat=lista;savePrefs();renderPiatt();
 }
 function renderPrefs(){
   document.getElementById('prMode').value=P.mode;
@@ -3005,7 +3388,24 @@ function renderPrefs(){
     .map(k=>checkRow(k,PREF_LABELS[k][0],PREF_LABELS[k][1],P.show[k]!==false)).join('');
   document.getElementById('prLinks').innerHTML=linkSet({artist:'',title:''},true)
     .map(l=>checkRow('L:'+LINK_KEYS[l[0]],l[0],l[2],P.links[LINK_KEYS[l[0]]]!==false)).join('');
+  renderPiatt();
 }
+(function(){
+  const host=document.getElementById('prPlat');
+  if(!host)return;
+  host.addEventListener('change',e=>{
+    const k=e.target&&e.target.dataset&&e.target.dataset.p;if(!k)return;
+    const lista=ordinePiatt().map(p=>p.k),i=lista.indexOf(k);
+    if(e.target.checked){if(i<0)lista.push(k)}else if(i>0)lista.splice(i,1);
+    P.plat=lista;savePrefs();renderPiatt();
+  });
+  host.addEventListener('click',e=>{
+    const b=e.target&&e.target.closest?e.target.closest('button'):null;
+    if(!b||!b.dataset)return;
+    if(b.dataset.su)spostaPiatt(b.dataset.su,false);
+    else if(b.dataset.giu)spostaPiatt(b.dataset.giu,true);
+  });
+})();
 document.getElementById('prMode').onchange=e=>{P.mode=e.target.value;savePrefs();renderPrefs()};
 ['prShow','prLinks'].forEach(host=>{
   document.getElementById(host).addEventListener('change',e=>{
@@ -3020,10 +3420,17 @@ document.getElementById('bulkMissing').onclick=()=>bulkEnrich('missing');
 document.getElementById('bulkAll').onclick=()=>bulkEnrich('all');
 document.getElementById('bulkReset').onclick=()=>bulkEnrich('reset');
 document.getElementById('bulkStop').onclick=()=>{bulkStop=true;toast('Mi fermo dopo questo album')};
+document.getElementById('spotMissing').onclick=()=>bulkSpotify('missing');
+document.getElementById('spotAll').onclick=()=>bulkSpotify('all');
+document.getElementById('spotStop').onclick=()=>{spotStop=true;toast('Mi fermo dopo questo album')};
 
 /* --- diagnostica delle fonti --- */
 document.getElementById('btnDiag').onclick=async()=>{
   const box=document.getElementById('diagBox');
+  /* provo con un album tuo, se ne hai uno gia' collegato: e' piu' onesto che
+     usare un identificativo scritto qui dentro, che un giorno puo' sparire */
+  const campione=DB.albums.map(a=>idSpotify(a.listenUrl||a.spotify||'')).filter(Boolean)[0]
+    ||'1An0Hx2GRvttFVMFOZlZbo';
   const prove=[
     ['iTunes (ricerca)',async()=>{
       const d=await jsonp('https://itunes.apple.com/search?media=music&entity=album&limit=3&term='+
@@ -3050,6 +3457,24 @@ document.getElementById('btnDiag').onclick=async()=>{
       if(!r.ok)throw new Error('HTTP '+r.status);
       const n=((await r.json())['release-groups']||[]).length;
       return n?'raggiungibile, '+n+' risultati':'raggiungibile ma senza risultati';
+    }],
+    ['Spotify (titolo da un indirizzo)',async()=>{
+      const url=urlSpotify(campione);
+      let r;
+      try{r=await fetch('https://open.spotify.com/oembed?url='+encodeURIComponent(url))}
+      catch(e){throw new Error('la porta pubblica di Spotify non risponde da qui: '+
+        'senza di essa, da un link non posso sapere quale album sia')}
+      if(r.status===404)throw new Error('raggiungibile, ma questo identificativo non esiste piu\'');
+      if(!r.ok)throw new Error('HTTP '+r.status);
+      const d=(await r.json())||{};
+      if(!d.title)throw new Error('risponde ma non dice il titolo');
+      return 'legge il titolo: '+d.title;
+    }],
+    ['Archivio a partire da un indirizzo',async()=>{
+      const m=await mbDaUrl(urlSpotify(campione));
+      if(!m)throw new Error('raggiungibile, ma questo album non e\' collegato nell\'archivio. '+
+        'Non e\' un guasto: la copertura non e\' totale, e in quel caso uso Spotify e i negozi.');
+      return m.title+(m.tracks?' \u00b7 '+m.tracks+' tracce':'')+(m.artist?' \u00b7 '+m.artist:'');
     }],
     ['Odesli (link diretti)',async()=>{
       let r;
