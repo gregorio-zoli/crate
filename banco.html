@@ -218,13 +218,17 @@ $('go').onclick=async()=>{
       if(b>=0.6&&a<0.6){esito='RECUPERATO';cls='ok'}
       if(a>=0.6&&b<0.6){esito='PERSO';cls='no'}
     }
-    esiti.push({file:f.name,vero:rif.vero,tess:rif.tess,paddle:cands.slice(0,3),coppie:coppie.length,esito:esito});
+    esiti.push({file:f.name,vero:rif.vero,tess:rif.tess,paddle:cands.slice(0,3),
+      coppie:coppie.length,esito:esito,
+      /* il testo grezzo serve a capire COME il motore ha diviso le righe */
+      righe:testo.split('\n').map(x=>x.trim()).filter(Boolean).slice(0,20)});
     const tr=document.createElement('tr');
     tr.innerHTML='<td class="tiny">'+f.name.slice(11,30)+'</td>'+
       '<td class="tiny">'+(rif.vero||'<i style="color:#555">non verificata</i>')+'</td>'+
       '<td class="tiny">'+(tessTop||'<span class="no">niente</span>')+'</td>'+
       '<td class="tiny">'+(padTop||'<span class="no">niente</span>')+'</td>'+
-      '<td class="'+cls+'"><b>'+esito+'</b></td>';
+      '<td class="'+cls+'"><b>'+esito+'</b>'+
+        (coppie.length>=3?'<br><span class="ok tiny">lista: '+coppie.length+' righe</span>':'')+'</td>';
     $('corpo').appendChild(tr);
   }
   const c={MEGLIO:0,PEGGIO:0,pari:0,RECUPERATO:0,PERSO:0};

@@ -47,6 +47,30 @@ nav button.on{background:var(--fg);color:#111}
 
 .view{display:none;padding-top:24px}
 .view.on{display:block}
+/* ---- animazioni ----
+   Curve morbide e durate brevi: devono farsi sentire senza far aspettare. */
+@keyframes entraDx{from{opacity:0;transform:translateX(26px)}to{opacity:1;transform:none}}
+@keyframes entraSx{from{opacity:0;transform:translateX(-26px)}to{opacity:1;transform:none}}
+@keyframes salePiano{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+@keyframes appare{from{opacity:0}to{opacity:1}}
+@keyframes modaleSu{from{opacity:0;transform:translateY(26px) scale(.985)}to{opacity:1;transform:none}}
+.view.da-destra{animation:entraDx .26s cubic-bezier(.22,.7,.3,1)}
+.view.da-sinistra{animation:entraSx .26s cubic-bezier(.22,.7,.3,1)}
+.mask.on{animation:appare .18s ease}
+.mask.on .modal{animation:modaleSu .28s cubic-bezier(.22,.7,.3,1)}
+.deck.on .deckbody{animation:salePiano .24s cubic-bezier(.22,.7,.3,1)}
+.cardalb{transition:transform .16s ease, opacity .16s ease}
+.cardalb:active{transform:scale(.96)}
+nav button{transition:color .15s ease, transform .12s ease}
+nav button:active{transform:scale(.92)}
+.btn{transition:transform .12s ease, filter .15s ease}
+.btn:active{transform:scale(.97)}
+.chip{transition:transform .12s ease}
+/* chi preferisce meno movimento non lo subisce */
+@media(prefers-reduced-motion:reduce){
+  .view.da-destra,.view.da-sinistra,.mask.on,.mask.on .modal,.deck.on .deckbody{animation:none}
+  .cardalb,.btn,nav button{transition:none}
+}
 h1{font-size:26px;letter-spacing:-.6px;margin:0 0 4px}
 h2{font-size:17px;letter-spacing:-.3px;margin:0 0 12px}
 .sub{color:var(--fg2);font-size:14px;margin:0 0 20px}
@@ -91,6 +115,12 @@ label.f{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.7p
 .bar{height:5px;background:var(--bg3);border-radius:99px;overflow:hidden;margin-top:10px}
 .bar i{display:block;height:100%;background:var(--acc);width:0;transition:width .25s}
 
+.chiprow{display:flex;gap:6px;overflow-x:auto;padding:2px 0;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.chiprow::-webkit-scrollbar{display:none}
+.chiprow button{flex:none;background:var(--bg3);border:1px solid var(--line);color:var(--fg2);
+  border-radius:99px;padding:7px 13px;font-size:13px;white-space:nowrap;font-weight:600}
+.chiprow button.on{background:var(--acc);border-color:var(--acc);color:#fff}
+.filtlab{font-size:11px;text-transform:uppercase;letter-spacing:.7px;color:var(--fg3);font-weight:700;margin:10px 0 4px}
 .toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:16px}
 .toolbar select,.toolbar input{width:auto;min-width:118px;padding:9px 11px;font-size:14px}
 .tg{display:flex;background:var(--bg3);border:1px solid var(--line);border-radius:9px;overflow:hidden;flex-wrap:wrap}
@@ -152,6 +182,10 @@ label.f{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.7p
 
 /* ---------- mobile: barra in basso ---------- */
 @media(max-width:700px){
+  /* La sfocatura dell'intestazione creerebbe un blocco contenitore e la barra
+     fissa si ancorerebbe a lei invece che allo schermo, finendo in alto e
+     tagliata. Su mobile uso un fondo pieno. */
+  header{backdrop-filter:none;-webkit-backdrop-filter:none;background:#101014}
   .hin{padding:9px 16px;gap:10px}
   h1{font-size:22px}
   nav{position:fixed;left:0;right:0;bottom:0;z-index:60;margin:0;display:grid;grid-template-columns:repeat(4,1fr);gap:0;
@@ -232,8 +266,6 @@ label.f{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.7p
   <div class="stats" id="stats"></div>
   <div class="toolbar">
     <input type="text" id="fq" placeholder="Filtra...">
-    <select id="fGenre"><option value="">Tutti i generi</option></select>
-    <select id="fMood"><option value="">Tutti i mood</option></select>
     <select id="fDec"><option value="">Tutti i decenni</option></select>
     <div class="tg" id="fState">
       <button data-s="all" class="on">Tutti</button>
@@ -251,6 +283,10 @@ label.f{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.7p
       <option value="rating">Voto più alto</option>
     </select>
   </div>
+  <div class="filtlab">Generi <span class="muted" style="text-transform:none;letter-spacing:0">· puoi sceglierne piu di uno</span></div>
+  <div class="chiprow" id="fGenreChips"></div>
+  <div class="filtlab">Mood</div>
+  <div class="chiprow" id="fMoodChips" style="margin-bottom:14px"></div>
   <div id="artistBox" style="margin-bottom:14px"></div>
   <div class="grid" id="grid"></div>
 </section>
@@ -270,14 +306,17 @@ label.f{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.7p
       <option value="fav">Solo preferiti</option>
       <option value="done">Solo già ascoltati</option>
     </select></div>
-    <div><label class="f">Genere</label><select id="rGenre"><option value="">Qualsiasi</option></select></div>
-    <div><label class="f">Mood</label><select id="rMood"><option value="">Qualsiasi</option></select></div>
     <div><label class="f">Decennio</label><select id="rDec"><option value="">Qualsiasi</option></select></div>
     <div><label class="f">Tipo</label><select id="rKind">
       <option value="">Tutto</option>
       <option value="full">Solo album interi</option>
     </select></div>
   </div>
+  <div class="filtlab">Generi <span class="muted" style="text-transform:none;letter-spacing:0">· piu di uno allarga la ricerca</span></div>
+  <div class="chiprow" id="rGenreChips"></div>
+  <div class="filtlab">Mood</div>
+  <div class="chiprow" id="rMoodChips" style="margin-bottom:16px"></div>
+
   <div class="slot" id="slot">
     <div class="stage" id="slotStage">
       <div class="tiny muted" id="slotPool"></div>
@@ -423,7 +462,7 @@ const LINK_KEYS={'Album of the Year':'aoty','RateYourMusic':'rym','Last.fm':'las
 const PREF_DEFAULTS={
   mode:'full',
   show:{meta:true,quick:true,details:true,about:true,listeners:false,dates:true,
-        listen:true,similar:true,links:true},
+        listen:true,similar:true,links:true,tracce:true},
   links:{aoty:true,rym:true,lastfm:true,youtube:true,bandcamp:true,discogs:true}
 };
 let P=JSON.parse(JSON.stringify(PREF_DEFAULTS));
@@ -710,6 +749,34 @@ async function fetchMusicBrainz(artist,title){
   }catch(e){}
   return{tags,year};
 }
+/* ---- elenco tracce e durata ----
+   iTunes le da' in una chiamata sola a partire dall'identificativo che sta
+   dentro l'indirizzo dell'album. Le scarico solo quando le chiedi. */
+function itunesId(url){
+  const m=String(url||'').match(/\/id(\d+)/)||String(url||'').match(/\/(\d{6,})(\?|$)/);
+  return m?m[1]:'';
+}
+function durataUmana(ms){
+  if(!ms)return '';
+  const min=Math.round(ms/60000);
+  if(min<60)return min+' min';
+  const h=Math.floor(min/60),r=min%60;
+  return h+'h'+(r?' '+r+'min':'');
+}
+function mmss(ms){
+  if(!ms)return '';
+  const s=Math.round(ms/1000);
+  return Math.floor(s/60)+':'+String(s%60).padStart(2,'0');
+}
+async function fetchTracks(a){
+  const id=itunesId(a.itunesUrl);
+  if(!id)return null;
+  const d=await jsonp('https://itunes.apple.com/lookup?entity=song&limit=200&id='+encodeURIComponent(id));
+  const righe=(d.results||[]).filter(r=>r.wrapperType==='track'&&r.trackName);
+  if(!righe.length)return null;
+  righe.sort((x,y)=>(x.discNumber||1)-(y.discNumber||1)||(x.trackNumber||0)-(y.trackNumber||0));
+  return righe.map(r=>({n:r.trackNumber||0,t:r.trackName,ms:r.trackTimeMillis||0}));
+}
 /* numero di tracce dall'archivio, per gli album che i negozi non hanno */
 async function fetchTrackCount(artist,title){
   if(!title)return 0;
@@ -773,11 +840,45 @@ const GENRE_MOODS={'shoegaze':['sognante','malinconico'],'dream pop':['sognante'
 const NOISE_TAGS=/^(albums i own|favorite|favourites|seen live|awesome|beautiful|great|good|best|love|music|album|albums|10s|00s|90s|80s|70s|60s|50s|20\d\d|19\d\d|\d+)$/i;
 const PURE_MOOD=/^(sad|sadness|melanchol\w*|happy|joyful|chill|chillout|chilled|relaxing|calm|calming|mellow|dark|bleak|energetic|upbeat|dreamy|ethereal|hazy|aggressive|angry|brutal|heavy|epic|cinematic|hypnotic|romantic|sensual|intimate|nostalgic|nostalgia|retro|vintage|summer|summery|sunny|atmospheric|moody|emotional|uplifting|bittersweet|somber|haunting|dreamlike|late night|night|nocturnal|peaceful|soothing|soft|gentle)$/i;
 
+/* ---- macro generi ----
+   Le fonti danno micro-generi a valanga: "east coast hip hop", "jazz rap",
+   "boom bap"... Per i filtri servono poche categorie larghe, altrimenti il
+   menu diventa illeggibile gia' col primo album. I micro restano nella scheda. */
+const MACRO=[
+  ['hip hop',/hip.?hop|rap|boom bap|trap|grime|drill|turntabl/i],
+  ['rock',/(^|\W)rock|punk|grunge|shoegaze|emo|hardcore|garage|indie rock|post-?rock|metal|noise/i],
+  ['elettronica',/electro|techno|house|edm|idm|ambient|drum.?(and|n).?bass|dubstep|synth|trance|breakbeat|glitch|hyperpop|dance/i],
+  ['pop',/(^|\W)pop($|\W)|k-?pop|j-?pop|art pop|dream pop|bedroom pop|indie pop/i],
+  ['jazz',/jazz|bebop|swing|fusion/i],
+  ['soul e funk',/soul|funk|r&b|rnb|motown|disco|neo.?soul/i],
+  ['folk e cantautori',/folk|singer.?songwriter|cantautor|americana|country|bluegrass/i],
+  ['classica',/classic(al)?|orchestr|opera|baroque|chamber|contemporary classical/i],
+  ['blues',/blues/i],
+  ['reggae',/reggae|dub|ska|dancehall/i],
+  ['sperimentale',/experimental|avant|drone|musique|field recording/i],
+  ['colonne sonore',/soundtrack|score|ost/i]
+];
+function macroDi(tag){
+  for(const m of MACRO)if(m[1].test(tag))return m[0];
+  return null;
+}
+function macroDiAlbum(a){
+  const s=new Set();
+  (a.genres||[]).forEach(g=>{const m=macroDi(g);if(m)s.add(m)});
+  return[...s];
+}
 function classify(rawTags,itunesGenre){
   const tags=[];if(itunesGenre)tags.push(itunesGenre);
   rawTags.forEach(t=>tags.push(t));
   const clean=[],seen=new Set();
-  tags.forEach(t=>{if(!t)return;const s=String(t).trim().toLowerCase();
+  /* le fonti a volte impacchettano piu' generi in una stringa sola:
+     "east coast rap;jazz-rap;rap" va spezzato, non tenuto com'e' */
+  const pezzi=[];
+  tags.forEach(t=>{
+    if(!t)return;
+    String(t).split(/[;,/|]+/).forEach(x=>pezzi.push(x));
+  });
+  pezzi.forEach(t=>{if(!t)return;const s=String(t).trim().toLowerCase();
     if(!s||s.length>28||NOISE_TAGS.test(s)||seen.has(s))return;seen.add(s);clean.push(s)});
   const moods=new Set();
   clean.forEach(t=>{MOOD_RULES.forEach(([m,re])=>{if(re.test(t))moods.add(m)});
@@ -1135,11 +1236,60 @@ async function ocrPass(state,mode,n){
   state.cache[mode]=text;
   return text;
 }
+/* ---- secondo motore: PaddleOCR ----
+   Misurato su 54 screenshot reali: ha un rilevatore di testo addestrato su
+   fotografie, quindi trova la didascalia e la legge isolata invece di provare
+   a decifrare tutta l'immagine. Recupera 8 casi che Tesseract sbagliava e non
+   ne perde nessuno. Ma a volte si mangia la riga dell'artista, dove invece
+   Tesseract la prende: per questo convivono, e i candidati si sommano. */
+let paddleSvc=null,paddleKo=false;
+async function getPaddle(){
+  if(paddleSvc||paddleKo)return paddleSvc;
+  try{
+    const mod=await import('https://esm.sh/ppu-paddle-ocr@latest/web');
+    paddleSvc=new mod.PaddleOcrService();
+    await paddleSvc.initialize();
+  }catch(e){paddleKo=true;paddleSvc=null}
+  return paddleSvc;
+}
+/* il testo va tenuto riga per riga: e' cosi' che si riconoscono le liste */
+function paddleText(res){
+  if(!res)return '';
+  const gruppi=[res.lines,res.results,res.blocks,Array.isArray(res)?res:null];
+  for(const g of gruppi){
+    if(Array.isArray(g)&&g.length){
+      const righe=g.map(x=>typeof x==='string'?x:(x&&(x.text||x.label||''))).filter(Boolean);
+      if(righe.length)return righe.join('\n');
+    }
+  }
+  return String(res.text||'');
+}
+async function ocrPaddle(state){
+  if(state.cache.paddle!==undefined)return state.cache.paddle;
+  let text='';
+  try{
+    const svc=await getPaddle();
+    if(svc){
+      const im=await loadImg(state.dataUrl);
+      const c=document.createElement('canvas');
+      c.width=im.naturalWidth||im.width;c.height=im.naturalHeight||im.height;
+      c.getContext('2d').drawImage(im,0,0);
+      /* noCache: senza, la libreria ripropone il risultato della prima immagine */
+      text=paddleText(await svc.recognize(c,{noCache:true}));
+    }
+  }catch(e){text=''}
+  state.cache.paddle=text;
+  return text;
+}
+
 /* Non scelgo una passata: le eseguo tutte e METTO INSIEME i candidati.
    Misurato su 15 screenshot veri: scegliendone una sola ne indovinavo 5,
    unendole 13. Le query sbagliate non fanno danno, la ricerca le scarta. */
 async function ocrAll(state){
   const texts={};
+  /* prima il motore preciso: da solo azzecca la maggioranza dei casi */
+  state.status('<span class="spinner"></span> leggo il testo &middot; motore preciso');
+  texts.paddle=await ocrPaddle(state);
   for(let i=0;i<OCR_MODES.length;i++)
     texts[OCR_MODES[i]]=await ocrPass(state,OCR_MODES[i],i+1);
   return texts;
@@ -1391,11 +1541,13 @@ async function analyzeImage(file,onProgress){
 function openDeck(){
   document.getElementById('deck').classList.add('on');
   document.body.style.overflow='hidden';
+  apriTappa('revisione');
   renderCard();
 }
-function closeDeck(){
+function closeDeck(daIndietro){
   document.getElementById('deck').classList.remove('on');
   document.body.style.overflow='';
+  if(!daIndietro)chiudiTappa();
   if(deckAdded||deckSkipped){
     toast(deckAdded+(deckAdded===1?' album aggiunto':' album aggiunti')+
       (deckSkipped?', '+deckSkipped+' saltati':''));
@@ -1683,7 +1835,10 @@ function manualForm(pre){
    '<div class="row"><button class="btn" id="mnSave">Salva</button></div>'+
    '<div class="hint">Salvando, cerco da solo copertina, anno, generi e mood. '+
    'Se mentre scrivi compare l&rsquo;album giusto qui sopra, toccalo: &egrave; la strada pi&ugrave; veloce.</div></div>';
-  document.getElementById('mask').classList.add('on');
+  const maskM=document.getElementById('mask');
+  const eraApertaM=maskM.classList.contains('on');
+  maskM.classList.add('on');
+  if(!eraApertaM)apriTappa('manuale');
   document.getElementById('mclose2').onclick=closeModal;
   /* incollando il link riempio i campi ancora vuoti */
   const lin=document.getElementById('mnL');
@@ -1761,10 +1916,10 @@ function linkSet(a,all){
   ];
   return all?set:set.filter(l=>P.links[LINK_KEYS[l[0]]]!==false);
 }
-let detailOpen=false,linksOpen=false;
+let detailOpen=false,linksOpen=false,tracceAperte=false;
 function openAlbum(id,keepScroll){
   const a=DB.albums.find(x=>x.id===id);if(!a)return;
-  if(!keepScroll){detailOpen=false;linksOpen=false}
+  if(!keepScroll){detailOpen=false;linksOpen=false;tracceAperte=false}
   const sc=keepScroll?document.getElementById('mask').scrollTop:0;
   openAlbum._id=id;
   let stars='';
@@ -1775,7 +1930,8 @@ function openAlbum(id,keepScroll){
   const quick=qg.map(t=>'<span class="chip g">'+esc(t)+'</span>').join('')+
               qm.map(t=>'<span class="chip m">'+esc(t)+'</span>').join('')||
               '<span class="tiny muted">nessun tag ancora</span>';
-  const meta=[a.kind&&a.kind!=='album'?a.kind:'',a.year||'',a.tracks?a.tracks+' tracce':'']
+  const meta=[a.kind&&a.kind!=='album'?a.kind:'',a.year||'',
+    a.tracks?a.tracks+' tracce':'',durataUmana(a.durata)]
     .filter(Boolean).join(' &middot; ');
   document.getElementById('modal').innerHTML=
   '<button class="mclose" id="mclose3">&times;</button>'+
@@ -1822,6 +1978,10 @@ function openAlbum(id,keepScroll){
         '<b style="font-size:13.5px">'+l[0]+' &#8599;</b>'+
         '<div class="tiny muted" style="margin-top:1px">'+l[2]+'</div></a>').join('')+
       '</div></div>':'')+
+    (vis('tracce')?'<div class="sec"><button id="bTrk" class="f" style="padding:0;letter-spacing:.7px">'+
+      (tracceAperte?'&#9662;':'&#9656;')+' Tracce'+(a.tracks?' ('+a.tracks+')':'')+
+      (a.durata?' &middot; '+durataUmana(a.durata):'')+'</button>'+
+      '<div id="trkBox" style="display:'+(tracceAperte?'block':'none')+';margin-top:8px"></div></div>':'')+
     '<div class="sec"><label class="f">Copertina</label>'+
       '<div class="row" style="gap:7px">'+
         '<button class="btn gh sm" id="bCovFind">Cerca online</button>'+
@@ -1834,7 +1994,10 @@ function openAlbum(id,keepScroll){
       (a.pending||!vis('similar')?'':'<button class="btn gh sm" id="bSim">Simili a questo</button>')+
       '<button class="btn gh sm" id="bDel" style="border-color:var(--acc);color:var(--acc);margin-left:auto">Elimina</button></div>'+
   '</div>';
-  const mask=document.getElementById('mask');mask.classList.add('on');mask.scrollTop=sc;
+  const mask=document.getElementById('mask');
+  const eraAperta=mask.classList.contains('on');
+  mask.classList.add('on');mask.scrollTop=sc;
+  if(!eraAperta)apriTappa('scheda');
   document.getElementById('mclose3').onclick=closeModal;
 
   const chips=(host,arr,cls,k)=>{
@@ -1905,6 +2068,32 @@ function openAlbum(id,keepScroll){
   };
   const cmt=document.getElementById('cmt');
   cmt.oninput=()=>{a.comment=cmt.value;clearTimeout(cmt._t);cmt._t=setTimeout(()=>{save(a);renderAll()},500)};
+  /* --- tracce --- */
+  const bTrk=document.getElementById('bTrk');
+  if(bTrk)bTrk.onclick=async()=>{
+    tracceAperte=!tracceAperte;
+    const box=document.getElementById('trkBox');
+    box.style.display=tracceAperte?'block':'none';
+    if(!tracceAperte)return;
+    if(a.tracklist&&a.tracklist.length){mostraTracce(box,a);return}
+    box.innerHTML='<div class="tiny muted"><span class="spinner"></span> cerco l\'elenco...</div>';
+    let el=null;
+    try{el=await fetchTracks(a)}catch(e){}
+    if(!el){
+      box.innerHTML='<div class="tiny muted">Elenco non disponibile per questo album. '+
+        'Succede quando non e\' nei cataloghi digitali.</div>';
+      return;
+    }
+    const cur=DB.albums.find(x=>x.id===id)||a;
+    cur.tracklist=el;
+    cur.tracks=cur.tracks||el.length;
+    cur.durata=el.reduce((t,x)=>t+(x.ms||0),0);
+    save(cur);renderAll();
+    mostraTracce(box,cur);
+    if(openAlbum._id===id){const h=document.getElementById('bTrk');
+      if(h)h.innerHTML='&#9662; Tracce ('+cur.tracks+')'+(cur.durata?' &middot; '+durataUmana(cur.durata):'')}
+  };
+
   /* --- copertina modificabile --- */
   const covBox=document.getElementById('covBox');
   const setCover=v=>{a.cover=v||'';save(a);openAlbum(id,true);renderAll()};
@@ -1944,16 +2133,54 @@ function openAlbum(id,keepScroll){
     removeAlbum(id);closeModal();renderAll();toast('Eliminato');
   };
 }
-function closeModal(){document.getElementById('mask').classList.remove('on');openAlbum._id=null}
+/* chiudiModale(daIndietro) — se la chiusura arriva dal gesto indietro la
+   tappa e' gia' consumata, altrimenti la consumo io */
+function chiudiModale(daIndietro){
+  document.getElementById('mask').classList.remove('on');
+  openAlbum._id=null;
+  document.body.style.overflow='';
+  if(!daIndietro)chiudiTappa();
+}
+function mostraTracce(box,a){
+  box.innerHTML=(a.tracklist||[]).map((t,i)=>
+    '<div style="display:flex;gap:10px;padding:5px 0;border-bottom:1px solid var(--line)">'+
+    '<span class="tiny muted" style="width:22px;flex:none;text-align:right">'+(t.n||i+1)+'</span>'+
+    '<span style="flex:1;min-width:0;font-size:13.5px">'+esc(t.t)+'</span>'+
+    '<span class="tiny muted" style="flex:none">'+mmss(t.ms)+'</span></div>').join('')+
+    (a.durata?'<div class="tiny muted" style="padding-top:8px">Durata totale: <b>'+
+      durataUmana(a.durata)+'</b></div>':'');
+}
+function closeModal(){chiudiModale(false)}
 
 /* ==========================================================
    12. LIBRERIA
    ========================================================== */
 let libState='all',libArtist='';
+/* filtri a selezione multipla: piu voci = ricerca piu larga, non piu stretta */
+const SEL={fGen:new Set(),fMoo:new Set(),rGen:new Set(),rMoo:new Set()};
+function disegnaChip(host,valori,insieme,alCambio){
+  const h=document.getElementById(host);if(!h)return;
+  h.innerHTML='';
+  if(!valori.length){
+    h.innerHTML='<span class="tiny muted" style="padding:6px 2px">nessuno ancora</span>';
+    return;
+  }
+  valori.forEach(v=>{
+    const b=document.createElement('button');
+    b.textContent=v;
+    if(insieme.has(v))b.classList.add('on');
+    b.onclick=()=>{
+      if(insieme.has(v))insieme.delete(v);else insieme.add(v);
+      b.classList.toggle('on');
+      alCambio();
+    };
+    h.appendChild(b);
+  });
+}
 function openArtist(name){
   libArtist=name||'';libState='all';
   document.getElementById('fq').value='';
-  ['fGenre','fMood','fDec'].forEach(i=>document.getElementById(i).value='');
+  document.getElementById('fDec').value='';SEL.fGen.clear();SEL.fMoo.clear();
   document.getElementById('fState').querySelectorAll('button')
     .forEach(x=>x.classList.toggle('on',x.dataset.s==='all'));
   show('lib');renderLib();
@@ -1974,8 +2201,15 @@ function matches(a,f){
   if(f.state==='todo'&&a.listened)return false;
   if(f.state==='done'&&!a.listened)return false;
   if(f.state==='fav'&&!a.fav)return false;
-  if(f.genre&&!(a.genres||[]).includes(f.genre))return false;
-  if(f.mood&&!(a.moods||[]).includes(f.mood))return false;
+  /* piu' generi selezionati = OR: basta che l'album ne abbia uno */
+  if(f.generi&&f.generi.length){
+    const mg=macroDiAlbum(a);
+    if(!f.generi.some(x=>mg.includes(x)))return false;
+  }
+  if(f.moods&&f.moods.length){
+    const am=a.moods||[];
+    if(!f.moods.some(x=>am.includes(x)))return false;
+  }
   if(f.dec&&(!a.year||Math.floor(a.year/10)*10!==+f.dec))return false;
   if(f.q){const s=((a.title||'')+' '+(a.artist||'')+' '+(a.genres||[]).join(' ')+' '+
     (a.moods||[]).join(' ')+' '+(a.comment||'')).toLowerCase();
@@ -1984,7 +2218,7 @@ function matches(a,f){
 }
 function renderLib(){
   const f={state:libState,q:document.getElementById('fq').value.trim(),
-    genre:document.getElementById('fGenre').value,mood:document.getElementById('fMood').value,
+    generi:[...SEL.fGen],moods:[...SEL.fMoo],
     dec:document.getElementById('fDec').value,artist:libArtist};
   const ab=document.getElementById('artistBox');
   if(libArtist){
@@ -2039,8 +2273,14 @@ function sizeHint(){
     (kb>800?' Attenzione: molte copertine da screenshot appesantiscono la sincronizzazione.':'');
 }
 function renderAll(){
-  ['fGenre','rGenre'].forEach(i=>fillSelect(document.getElementById(i),allValues('genres')));
-  ['fMood','rMood'].forEach(i=>fillSelect(document.getElementById(i),allValues('moods')));
+  const macro=[...new Set(DB.albums.flatMap(macroDiAlbum))].sort();
+  const moods=allValues('moods');
+  [...SEL.fGen,...SEL.rGen].forEach(v=>{if(!macro.includes(v)){SEL.fGen.delete(v);SEL.rGen.delete(v)}});
+  [...SEL.fMoo,...SEL.rMoo].forEach(v=>{if(!moods.includes(v)){SEL.fMoo.delete(v);SEL.rMoo.delete(v)}});
+  disegnaChip('fGenreChips',macro,SEL.fGen,renderLib);
+  disegnaChip('fMoodChips',moods,SEL.fMoo,renderLib);
+  disegnaChip('rGenreChips',macro,SEL.rGen,updatePool);
+  disegnaChip('rMoodChips',moods,SEL.rMoo,updatePool);
   ['fDec','rDec'].forEach(i=>fillSelect(document.getElementById(i),decades().map(String)));
   renderStats();renderLib();updatePool();sizeHint();fillSeeds();
 }
@@ -2050,7 +2290,7 @@ function renderAll(){
    ========================================================== */
 function randPool(){
   const f={state:document.getElementById('rState').value,q:'',
-    genre:document.getElementById('rGenre').value,mood:document.getElementById('rMood').value,
+    generi:[...SEL.rGen],moods:[...SEL.rMoo],
     dec:document.getElementById('rDec').value,
     fullOnly:document.getElementById('rKind').value==='full'};
   return DB.albums.filter(a=>!a.pending&&matches(a,f));
@@ -2066,7 +2306,8 @@ function updatePool(){
     if(st==='fav')on.push('solo preferiti');
     if(st==='done')on.push('solo ascoltati');
     if(document.getElementById('rKind').value==='full')on.push('senza singoli ed EP');
-    ['rGenre','rMood','rDec'].forEach(i=>{const v=document.getElementById(i).value;if(v)on.push(v)});
+    [...SEL.rGen,...SEL.rMoo].forEach(v=>on.push(v));
+    const dec=document.getElementById('rDec').value;if(dec)on.push(dec);
     act.textContent=on.length?'filtri attivi: '+on.join(', '):'nessun filtro: pesca da tutta la libreria';
   }
 }
@@ -2214,13 +2455,74 @@ function recommendFrom(id){
 /* ==========================================================
    14. NAVIGAZIONE ED EVENTI
    ========================================================== */
-function show(v){
+const VISTE=['add','lib','rand','set'];
+let vistaCorrente='add';
+function show(v,verso){
+  if(!VISTE.includes(v))v='add';
+  const cambio=v!==vistaCorrente;
+  vistaCorrente=v;
   document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));
-  document.querySelectorAll('.view').forEach(s=>s.classList.toggle('on',s.id==='v-'+v));
+  document.querySelectorAll('.view').forEach(s=>{
+    const attiva=s.id==='v-'+v;
+    s.classList.toggle('on',attiva);
+    if(attiva&&cambio){
+      /* piccola animazione di entrata, dal lato da cui "arrivi" */
+      s.classList.remove('da-destra','da-sinistra');
+      void s.offsetWidth;                         /* forza il riavvio */
+      s.classList.add(verso===-1?'da-sinistra':'da-destra');
+    }
+  });
   window.scrollTo(0,0);
   if(v==='rand')updatePool();
 }
-document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>show(b.dataset.v));
+function vaiA(delta){
+  const i=VISTE.indexOf(vistaCorrente);
+  const j=Math.min(VISTE.length-1,Math.max(0,i+delta));
+  if(j!==i)show(VISTE[j],delta);
+}
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
+  const verso=VISTE.indexOf(b.dataset.v)>VISTE.indexOf(vistaCorrente)?1:-1;
+  show(b.dataset.v,verso);
+});
+
+/* ---- gesto indietro del telefono ----
+   Aprendo scheda o revisione metto una tappa nella cronologia: cosi' lo swipe
+   dal bordo chiude quello che e' aperto invece di uscire dall'app. */
+let tappe=0;
+function apriTappa(nome){
+  tappe++;
+  try{history.pushState({crate:nome,n:tappe},'')}catch(e){}
+}
+function chiudiTappa(){
+  if(tappe>0){tappe--;try{history.back()}catch(e){}}
+}
+window.addEventListener('popstate',()=>{
+  if(tappe>0)tappe--;
+  /* chiudo dal piu' interno al piu' esterno */
+  if(document.getElementById('mask').classList.contains('on')){chiudiModale(true);return}
+  if(document.getElementById('deck').classList.contains('on')){closeDeck(true);return}
+});
+/* ---- scorrimento laterale fra le sezioni ---- */
+(()=>{
+  let x0=null,y0=null,t0=0;
+  const zonaEsclusa=e=>e.target&&e.target.closest&&
+    e.target.closest('.deck,.mask,input,textarea,select,.res,.grid,button,a');
+  document.addEventListener('touchstart',e=>{
+    if(e.touches.length!==1||zonaEsclusa(e)){x0=null;return}
+    x0=e.touches[0].clientX;y0=e.touches[0].clientY;t0=Date.now();
+  },{passive:true});
+  document.addEventListener('touchend',e=>{
+    if(x0===null)return;
+    const t=e.changedTouches[0];
+    const dx=t.clientX-x0, dy=t.clientY-y0, dt=Date.now()-t0;
+    x0=null;
+    /* orizzontale deciso, non troppo lento, e non mentre e' aperto qualcosa */
+    if(dt>600||Math.abs(dx)<70||Math.abs(dx)<Math.abs(dy)*1.8)return;
+    if(document.getElementById('mask').classList.contains('on'))return;
+    if(document.getElementById('deck').classList.contains('on'))return;
+    vaiA(dx<0?1:-1);
+  },{passive:true});
+})();
 document.getElementById('btnSearch').onclick=()=>runSearch();
 document.getElementById('q').addEventListener('keydown',e=>{if(e.key==='Enter')runSearch()});
 document.getElementById('btnManual').onclick=()=>manualForm({});
@@ -2245,13 +2547,13 @@ document.addEventListener('paste',e=>{
   const it=[...(e.clipboardData&&e.clipboardData.items||[])].find(i=>i.type.startsWith('image/'));
   if(it)queueImages([it.getAsFile()]);
 });
-['fq','fGenre','fMood','fDec','fSort'].forEach(i=>document.getElementById(i)
+['fq','fDec','fSort'].forEach(i=>document.getElementById(i)
   .addEventListener(i==='fq'?'input':'change',renderLib));
 document.getElementById('fState').querySelectorAll('button').forEach(b=>b.onclick=()=>{
   libState=b.dataset.s;
   document.getElementById('fState').querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));
   renderLib()});
-['rState','rGenre','rMood','rDec','rKind'].forEach(i=>document.getElementById(i).addEventListener('change',updatePool));
+['rState','rDec','rKind'].forEach(i=>document.getElementById(i).addEventListener('change',updatePool));
 document.getElementById('btnSpin').onclick=spin;
 document.getElementById('recToggle').onclick=()=>{
   const b=document.getElementById('recBody'),open=b.style.display==='none';
@@ -2263,7 +2565,8 @@ document.getElementById('recGo').onclick=renderRec;
 ['recSeed','recTodo'].forEach(i=>document.getElementById(i).addEventListener('change',renderRec));
 document.getElementById('rReset').onclick=()=>{
   document.getElementById('rState').value='all';
-  ['rGenre','rMood','rDec','rKind'].forEach(i=>document.getElementById(i).value='');
+  ['rDec','rKind'].forEach(i=>document.getElementById(i).value='');
+  SEL.rGen.clear();SEL.rMoo.clear();renderAll();
   updatePool();toast('Filtri azzerati');
 };
 
@@ -2291,6 +2594,7 @@ const PREF_LABELS={
   dates:['Date di aggiunta e ascolto','dentro Dettagli'],
   listen:['Pulsante di ascolto','Spotify, oppure Bandcamp e SoundCloud se hai messo il link'],
   similar:['Pulsante Simili a questo','consigli a partire da quell\'album'],
+  tracce:['Elenco delle tracce e durata','si scarica al primo tocco'],
   links:['Sezione dei link esterni','resta comunque chiusa fino a che non la apri']
 };
 function checkRow(id,label,sub,on){

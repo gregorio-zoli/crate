@@ -3,8 +3,9 @@
    1. tiene l'app usabile offline (cache dello shell)
    2. intercetta le condivisioni da Android e passa l'immagine alla pagina  */
 
-const V = 'crate-v2';
+const V = 'crate-v4';
 const SHARE_CACHE = 'crate-share';
+const MODEL_CACHE = 'crate-modelli';
 const SHELL = [
   './',
   './index.html',
@@ -24,7 +25,7 @@ self.addEventListener('install', e => {
 self.addEventListener('activate', e => {
   e.waitUntil((async () => {
     const keys = await caches.keys();
-    await Promise.all(keys.filter(k => k !== V && k !== SHARE_CACHE).map(k => caches.delete(k)));
+    await Promise.all(keys.filter(k => k !== V && k !== SHARE_CACHE && k !== MODEL_CACHE).map(k => caches.delete(k)));
     await self.clients.claim();
   })());
 });
@@ -68,7 +69,24 @@ self.addEventListener('fetch', e => {
     e.respondWith(handleShare(req));
     return;
   }
-  if (req.method !== 'GET' || url.origin !== self.location.origin) return;
+  if (req.method !== 'GET') return;
+
+  // Modelli e runtime del secondo motore OCR: pesano qualche MB e vengono da
+  // un CDN. Li tengo in cache a parte, cosi' dal secondo uso in poi la lettura
+  // parte subito e funziona anche senza rete.
+  if (url.origin !== self.location.origin) {
+    if (/ppu-paddle-ocr|onnxruntime|\.onnx($|\?)|\.wasm($|\?)|ppocr.*dict/i.test(req.url)) {
+      e.respondWith((async () => {
+        const c = await caches.open(MODEL_CACHE);
+        const hit = await c.match(req);
+        if (hit) return hit;
+        const fresh = await fetch(req);
+        if (fresh && (fresh.ok || fresh.type === 'opaque')) c.put(req, fresh.clone());
+        return fresh;
+      })());
+    }
+    return;
+  }
 
   // niente cache per la sincronizzazione o per i dati
   if (url.pathname.endsWith('.json') && !url.pathname.endsWith('manifest.json')) return;
