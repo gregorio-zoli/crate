@@ -529,7 +529,7 @@ label.f{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.7p
 /* ==========================================================
    1. STATO
    ========================================================== */
-const APP_VER='27';
+const APP_VER='28';
 const LS='crate.v1', LSK='crate.lfmkey', LSG='crate.gh', LSS='crate.lastsync', LSP='crate.prefs';
 const LSSP='crate.spot';   /* accesso a Spotify: resta su QUESTO dispositivo */
 let DB={albums:[],deleted:[],cfg:{}};
@@ -4161,17 +4161,32 @@ document.getElementById('btnDiag').onclick=async()=>{
       const t=await spotValido();
       if(!t)throw new Error('il permesso e\' scaduto: ricollega l\'account');
       /* Uso la funzione VERA, non una chiamata scritta apposta per la prova:
-         e' esattamente cosi' che mi era sfuggito un parametro sbagliato:
-         la prova passava e l'app falliva. */
-      const it=await spotCerca('The Money Store','Death Grips');
-      if(!it)throw new Error('risponde ma non riconosce nemmeno The Money Store dei Death Grips: '+
-        'e\' un album che c\'e\' di sicuro, quindi il problema e\' nella ricerca, non nel catalogo');
+         e' esattamente cosi' che mi era sfuggito un parametro sbagliato.
+         E se fallisce non mi accontento di dirlo: chiedo la stessa cosa in
+         modo grezzo e riporto parola per parola cosa risponde Spotify, cosi'
+         la prossima diagnosi la faccio sui fatti e non a intuito. */
+      const esito=[];
+      const it=await spotCerca('The Money Store','Death Grips',esito);
       const g=spotGiorni();
-      if(spotInCoda())throw new Error('sei in coda per altri '+spotSecondi()+' secondi: '+
-        'hai superato il tetto di richieste. Non e\' un guasto, passa da solo.');
-      return 'funziona'+(SPOT.nome?' ('+SPOT.nome+')':'')+', prova riuscita: '+
-        it.title+' \u00b7 '+it.tracks+' tracce'+
-        (g===null?'':' \u00b7 permesso valido ancora '+g+' giorni');
+      if(it){
+        if(spotInCoda())throw new Error('sei in coda per altri '+spotSecondi()+' secondi');
+        return 'funziona'+(SPOT.nome?' ('+SPOT.nome+')':'')+', prova riuscita: '+
+          it.title+' \u00b7 '+it.tracks+' tracce'+
+          (g===null?'':' \u00b7 permesso valido ancora '+g+' giorni');
+      }
+      let grezza;
+      try{
+        const d=await spotChiama('/search?type=album&limit=3&q='+
+          encodeURIComponent('Death Grips The Money Store'));
+        const items=(d&&d.albums&&d.albums.items)||[];
+        grezza=items.length
+          ? 'ricerca grezza: '+items.length+' risultati, primo \u201c'+items[0].name+'\u201d di '+
+            ((items[0].artists||[]).map(x=>x&&x.name).filter(Boolean).join(', ')||'?')+
+            ' [tipo '+(items[0].album_type||'?')+', id '+(items[0].id||'?')+']'
+          : 'ricerca grezza: risponde con ZERO risultati';
+      }catch(e){grezza='ricerca grezza fallita: '+(e&&e.message||'errore')}
+      throw new Error('non riconosce The Money Store. Motivi: '+
+        (esito.join(' \u00b7 ')||'nessuno registrato')+'. '+grezza);
     }],
     ['Wikidata (identificativi Spotify)',async()=>{
       let r;
