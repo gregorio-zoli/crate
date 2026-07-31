@@ -529,7 +529,7 @@ label.f{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.7p
 /* ==========================================================
    1. STATO
    ========================================================== */
-const APP_VER='33';
+const APP_VER='34';
 const LS='crate.v1', LSK='crate.lfmkey', LSG='crate.gh', LSS='crate.lastsync', LSP='crate.prefs';
 const LSSP='crate.spot';   /* accesso a Spotify: resta su QUESTO dispositivo */
 let DB={albums:[],deleted:[],cfg:{}};
@@ -881,7 +881,8 @@ async function spotValido(){
    Quando lo superi risponde 429 con un tempo di attesa. Trattare quel 429 come
    "album non trovato" e' l'errore peggiore possibile: fa sembrare mancante un
    disco che c'e', e per giunta continua a bussare peggiorando l'attesa. */
-let spotAttesaFino=0,spotRallenta=false;
+let spotAttesaFino=0,spotRallenta=false,spotCode=0;
+function spotRiposa(){spotAttesaFino=0;spotRallenta=false;spotCode=0}
 function spotInCoda(){return Date.now()<spotAttesaFino}
 function spotSecondi(){return Math.max(0,Math.ceil((spotAttesaFino-Date.now())/1000))}
 function erroreCoda(sec){const e=new Error('Spotify in coda per '+sec+'s');e.coda=sec;return e}
@@ -892,7 +893,13 @@ async function spotChiama(percorso,tentativo){
   const r=await fetch(SPOT_API+percorso,{headers:{Authorization:'Bearer '+t}});
   if(r.status===401&&!tentativo){SPOT.scade=0;return spotChiama(percorso,1)}
   if(r.status===429){
-    const att=Math.min(60,Math.max(2,+(r.headers.get('Retry-After')||3)+1));
+    /* Il tempo che mi dice Spotify e' il minimo per la SINGOLA richiesta, non
+       per riprendere a pieno ritmo: se aspetto due secondi e poi gliene sparo
+       altre cinque, ci ricasco subito. E' esattamente il giro a vuoto in cui
+       mi ero infilato. Quindi a ogni richiamo aspetto un po' di piu'. */
+    spotCode++;
+    const detto=Math.max(2,+(r.headers.get('Retry-After')||3)+1);
+    const att=Math.min(90,detto+Math.min(30,(spotCode-1)*4));
     spotAttesaFino=Date.now()+att*1000;
     spotRallenta=true;            /* d'ora in poi vado piu' piano per tutto il giro */
     throw erroreCoda(att);
@@ -985,7 +992,7 @@ async function spotAlbumPerId(id){
    "The" di troppo o un titolo che ho letto storto dallo screenshot e non
    trova niente. Quindi provo piu' formulazioni, dalla piu' precisa alla piu'
    larga, e mi fermo appena una da' un titolo identico. */
-async function spotCerca(titolo,artista,esito){
+async function spotCerca(titolo,artista,esito,soloLink){
   if(!titolo||!spotCollegato())return null;
   const dice=m=>{if(esito)esito.push(m)};
   const pulisci=x=>String(x||'').replace(/["']/g,' ').replace(/\s+/g,' ').trim();
@@ -1013,6 +1020,10 @@ async function spotCerca(titolo,artista,esito){
     tentativi.push('album:"'+pulisci(nucleo)+'"'+conArtista);
   if(artista)tentativi.push('artist:"'+pulisci(artista)+'"');   /* poi filtro io */
   tentativi.push(((artista||'')+' '+titolo).trim());
+  /* Se Spotify mi ha gia' richiamato, smetto di insistere con quattro
+     formulazioni: tengo la piu' precisa e quella a testo libero, che insieme
+     coprono quasi tutto. Meno richieste ora vuol dire piu' album collegati. */
+  if(spotRallenta&&tentativi.length>2)tentativi.splice(1,tentativi.length-2);
 
   const leggero=x=>{
     const t=String(x.album_type||'').toLowerCase();
@@ -1054,7 +1065,10 @@ async function spotCerca(titolo,artista,esito){
      buttare via un album che ho GIA' riconosciuto: tengo quello che ho letto
      dalla ricerca, che basta e avanza per il link e per la scheda.
      E' il buco per cui The New Sound e' finito su Bandcamp pur essendo su
-     Spotify: un intoppo sull'elenco tracce cancellava tutto il ritrovamento. */
+     Spotify: un intoppo sull'elenco tracce cancellava tutto il ritrovamento.
+     Nel collegamento in blocco non la faccio proprio: dimezzare le richieste
+     e' il modo piu' semplice di non finire in coda. */
+  if(soloLink)return spotLeggero(scelto.x);
   let pieno=null;
   try{pieno=await spotAlbumPerId(scelto.id)}
   catch(e){if(e&&e.coda)throw e;dice('elenco tracce non recuperato: '+(e&&e.message||'errore'))}
@@ -1690,6 +1704,8 @@ async function bulkSpotify(mode){
     (mode==='all'||!haSpotify(a)));
   if(!list.length){toast(mode==='all'?'Nessun album da ricontrollare':'Sono gia tutti collegati');return}
   spotRunning=true;spotStop=false;
+  spotRiposa();                 /* ogni giro riparte con la lavagna pulita */
+  resolveListen.soloLink=true;  /* qui mi serve il link, non l'elenco tracce */
   const box=document.getElementById('spotBox'),bar=document.getElementById('spotBar'),
         txt=document.getElementById('spotTxt');
   box.style.display='block';
@@ -1730,20 +1746,27 @@ async function bulkSpotify(mode){
       rimasti.push({id:a.id,title:a.title,artist:a.artist,motivo:m});
     }
     done++;
-    /* l'archivio accetta una richiesta al secondo; con l'account vado piu'
-       spedito, ma se Spotify mi ha gia' rimproverato una volta rallento per
-       il resto del giro invece di rischiare di nuovo */
-    if(!spotStop)await sleep(spotCollegato()?(spotRallenta?900:400):1100);
+    /* L'archivio accetta una richiesta al secondo. Con l'account parto
+       spedito, ma ogni richiamo di Spotify mi fa allargare il passo: e'
+       l'unico modo di finire il giro invece di sbatterci contro all'infinito. */
+    if(!spotStop)await sleep(spotCollegato()
+      ? Math.min(5000,400+spotCode*700)
+      : 1100);
   }
   bar.style.width='100%';
+  resolveListen.soloLink=false;
   renderSpotOra();
   const perse=[...motivi.entries()].sort((x,y)=>y[1]-x[1]).slice(0,6);
+  const inCoda=spotCode>2?'<div class="tiny" style="margin-top:8px;color:var(--acc)">'+
+    'Spotify mi ha messo in coda '+spotCode+' volte: ha un tetto di richieste basso per le app '+
+    'in modalit&agrave; sviluppo. Se restano album scollegati, rilancia fra qualche minuto: '+
+    'quelli gi&agrave; fatti non li rifa.</div>':'';
   txt.innerHTML='<b>'+(spotStop?'Fermato.':'Finito.')+'</b> '+presi+' collegati a Spotify'+
     (altrove?', '+altrove+' solo su altre piattaforme':'')+
     (done-presi-altrove>0?', '+(done-presi-altrove)+' senza collegamento':'')+'.'+
     (perse.length?'<div style="margin-top:10px">Perch&eacute; gli altri no:<ul style="margin:6px 0 0;padding-left:18px">'+
       perse.map(([m,c])=>'<li>'+c+' album: '+esc(m)+'</li>').join('')+
-      '</ul></div>':'')+
+      '</ul></div>':'')+inCoda+
     (rimasti.length?'<div style="margin-top:12px"><b>Quali sono</b> '+
       '<span class="muted">(tocca per aprire la scheda e correggere titolo o artista)</span>'+
       '<div style="margin-top:8px;display:grid;gap:2px">'+rigaAlbum(rimasti.slice(0,40))+
@@ -2120,7 +2143,7 @@ async function resolveListen(a,forza){
      traduzione di indirizzi, e per giunta riempie i buchi della scheda. */
   if(spotCollegato()){
     let d=null;
-    try{d=await spotCerca(a.title,a.artist,esito)}
+    try{d=await spotCerca(a.title,a.artist,esito,resolveListen.soloLink)}
     catch(e){
       if(e&&e.coda){
         /* non e' un fallimento dell'album: e' un limite mio. Lo dico e mi
