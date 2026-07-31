@@ -449,7 +449,8 @@ label.f{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.7p
       4. Spunta <b>Web API</b>, accetta i termini, salva.<br>
       5. Nella scheda dell&rsquo;app apri <b>Settings</b> e copia il <b>Client ID</b> qui sopra.<br>
       6. Premi <b>Collega account</b>: Spotify ti chiede il permesso, dici di s&igrave;, e torni qui.<br><br>
-      Il <b>Client Secret</b> che vedi accanto <b>non serve</b>: non incollarlo da nessuna parte. Il permesso resta su questo dispositivo, quindi ripeti solo il punto 6 sul telefono.</div>
+      Il <b>Client Secret</b> che vedi accanto <b>non serve</b>: non incollarlo da nessuna parte. Il permesso resta su questo dispositivo, quindi ripeti solo il punto 6 sul telefono.<br><br>
+      <b>Ogni sei mesi va ridato.</b> Spotify fa scadere il permesso 180 giorni dopo che l&rsquo;hai concesso, e usarlo non sposta la scadenza. Non si rompe niente e non si perde niente: torni qui e premi di nuovo <b>Collega account</b>. Ti avviso io due settimane prima, e nel frattempo l&rsquo;app continua a funzionare con le fonti anonime.</div>
   </div>
 
   <div class="card" style="margin-bottom:14px">
@@ -527,7 +528,7 @@ label.f{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.7p
 /* ==========================================================
    1. STATO
    ========================================================== */
-const APP_VER='22';
+const APP_VER='24';
 const LS='crate.v1', LSK='crate.lfmkey', LSG='crate.gh', LSS='crate.lastsync', LSP='crate.prefs';
 const LSSP='crate.spot';   /* accesso a Spotify: resta su QUESTO dispositivo */
 let DB={albums:[],deleted:[],cfg:{}};
@@ -774,7 +775,15 @@ async function syncNow(depth){
 const SPOT_AUTH='https://accounts.spotify.com/authorize';
 const SPOT_TOKEN='https://accounts.spotify.com/api/token';
 const SPOT_API='https://api.spotify.com/v1';
-let SPOT={clientId:'',token:'',refresh:'',scade:0,nome:''};
+let SPOT={clientId:'',token:'',refresh:'',scade:0,nome:'',dal:0,scaduto:false};
+/* Spotify fa scadere il permesso 180 giorni dopo che l'hai dato, e rinnovarlo
+   non sposta la scadenza: e' contata dall'autorizzazione, non dall'ultimo uso.
+   Quindi una volta ogni sei mesi va ridato. Meglio dirtelo prima che dopo. */
+const SPOT_GIORNI=180;
+function spotGiorni(){
+  if(!SPOT.dal)return null;
+  return Math.ceil((SPOT.dal+SPOT_GIORNI*864e5-Date.now())/864e5);
+}
 function spotCarica(){
   try{const p=JSON.parse(localStorage.getItem(LSSP)||'null');
     if(p&&typeof p==='object')SPOT=Object.assign(SPOT,p)}catch(e){}
@@ -838,6 +847,8 @@ async function spotRitorno(){
   try{
     await spotToken({grant_type:'authorization_code',code:code,
       redirect_uri:spotRedirect(),client_id:SPOT.clientId,code_verifier:verifier});
+    /* qui, e solo qui, riparte il conteggio dei sei mesi */
+    SPOT.dal=Date.now();SPOT.scaduto=false;
     try{const me=await spotChiama('/me');if(me)SPOT.nome=me.display_name||me.id||''}catch(e){}
     spotSalva();toast('Spotify collegato');
     return true;
@@ -854,8 +865,9 @@ async function spotValido(){
       client_id:SPOT.clientId})
       .catch(e=>{
         /* rinnovo rifiutato: l'accesso e' scaduto davvero, non fingo che vada */
-        SPOT.token='';SPOT.refresh='';SPOT.scade=0;spotSalva();
+        SPOT.token='';SPOT.refresh='';SPOT.scade=0;SPOT.scaduto=true;spotSalva();
         if(typeof renderSpot==='function')renderSpot();
+        if(typeof toast==='function')toast('Il permesso di Spotify e\' scaduto: ricollega l\'account');
         return '';
       })
       .then(t=>{spotRinnovo=null;return t});
@@ -927,33 +939,57 @@ async function spotAlbumPerId(id){
   const d=await spotChiama('/albums/'+encodeURIComponent(id)+'?market=from_token');
   return spotVerso(d);
 }
-async function spotCerca(titolo,artista){
+/* La ricerca per campi di Spotify e' letterale: un apostrofo diverso, un
+   "The" di troppo o un titolo che ho letto storto dallo screenshot e non
+   trova niente. Quindi provo piu' formulazioni, dalla piu' precisa alla piu'
+   larga, e mi fermo appena una da' un titolo identico. */
+async function spotCerca(titolo,artista,esito){
   if(!titolo||!spotCollegato())return null;
-  const pulisci=x=>String(x||'').replace(/["']/g,' ').trim();
-  const mirata='album:"'+pulisci(titolo)+'"'+(artista?' artist:"'+pulisci(artista)+'"':'');
-  let items=[];
+  const dice=m=>{if(esito)esito.push(m)};
+  const pulisci=x=>String(x||'').replace(/["']/g,' ').replace(/\s+/g,' ').trim();
   const chiedi=async q=>{
-    const d=await spotChiama('/search?type=album&limit=20&market=from_token&q='+encodeURIComponent(q));
-    return((d&&d.albums&&d.albums.items)||[]).filter(x=>x&&x.id);
+    try{const d=await spotChiama('/search?type=album&limit=20&market=from_token&q='+encodeURIComponent(q));
+      return((d&&d.albums&&d.albums.items)||[]).filter(x=>x&&x.id)}
+    catch(e){return[]}
   };
-  try{items=await chiedi(mirata)}catch(e){}
-  /* la ricerca per campi e' severa: se non trova nulla ritento a testo libero */
-  if(!items.length){try{items=await chiedi(((artista||'')+' '+titolo).trim())}catch(e){}}
-  if(!items.length)return null;
-  const leggeri=items.map(x=>({id:x.id,r:{
-    title:cleanTitle(x.name||''),artist:(x.artists||[]).map(a=>a&&a.name).filter(Boolean).join(', '),
-    tracks:+x.total_tracks||null,
-    year:x.release_date?+String(x.release_date).slice(0,4)||null:null,
-    kind:String(x.album_type||'').toLowerCase()==='single'?(+x.total_tracks>=3?'EP':'singolo')
-        :String(x.album_type||'').toLowerCase()==='compilation'?'raccolta':'album'}}));
-  const esatti=leggeri.filter(c=>stessoTitolo(c.r.title,titolo)&&
+  const nucleo=nucleoTitolo(titolo);
+  const conArtista=artista?' artist:"'+pulisci(artista)+'"':'';
+  const tentativi=['album:"'+pulisci(titolo)+'"'+conArtista];
+  if(nucleo&&pulisci(nucleo)!==pulisci(titolo).toLowerCase())
+    tentativi.push('album:"'+pulisci(nucleo)+'"'+conArtista);
+  if(artista)tentativi.push('artist:"'+pulisci(artista)+'"');   /* poi filtro io */
+  tentativi.push(((artista||'')+' '+titolo).trim());
+
+  const leggero=x=>{
+    const t=String(x.album_type||'').toLowerCase();
+    return{id:x.id,r:{title:cleanTitle(x.name||''),
+      artist:(x.artists||[]).map(a=>a&&a.name).filter(Boolean).join(', '),
+      tracks:+x.total_tracks||null,
+      year:x.release_date?+String(x.release_date).slice(0,4)||null:null,
+      kind:t==='single'?(+x.total_tracks>=3?'EP':'singolo'):t==='compilation'?'raccolta':'album'}};
+  };
+  const visti=new Set(),tutti=[];
+  const esattiDi=()=>tutti.filter(c=>stessoTitolo(c.r.title,titolo)&&
     (!artista||txtSim(c.r.artist,artista)>=.5));
-  const ordinati=(esatti.length?esatti:leggeri).slice()
+  for(const q of tentativi){
+    (await chiedi(q)).forEach(x=>{if(!visti.has(x.id)){visti.add(x.id);tutti.push(leggero(x))}});
+    if(esattiDi().length)break;
+  }
+  if(!tutti.length){dice('Spotify non trova niente con questo nome');return null}
+  let pool=esattiDi();
+  /* titolo scritto storto ma artista giusto: mi fido delle lettere, purche'
+     non sia una versione diversa (live, demo, remix) */
+  if(!pool.length&&artista)pool=tutti.filter(c=>txtSim(c.r.artist,artista)>=.6&&
+    simLettere(nucleoTitolo(c.r.title),nucleo)>=.72&&!rumoreExtra(c.r.title,titolo));
+  const ordinati=(pool.length?pool:tutti).slice()
     .sort((x,y)=>simAlbum(y.r,titolo,artista)-simAlbum(x.r,titolo,artista));
   const scelto=ordinati[0];
   if(!scelto)return null;
-  /* nessun titolo identico e nemmeno una somiglianza decente: meglio dire di no */
-  if(!esatti.length&&simAlbum(scelto.r,titolo,artista)<.6)return null;
+  if(!pool.length&&simAlbum(scelto.r,titolo,artista)<.55){
+    dice('su Spotify ci sono solo dischi diversi, il piu\' vicino e\' \u201c'+
+      scelto.r.title+'\u201d di '+(scelto.r.artist||'ignoto'));
+    return null;
+  }
   return spotAlbumPerId(scelto.id);
 }
 
@@ -1588,7 +1624,7 @@ async function bulkSpotify(mode){
         txt=document.getElementById('spotTxt');
   box.style.display='block';
   let done=0,presi=0,altrove=0;
-  const motivi=new Map();
+  const motivi=new Map(),rimasti=[];
   const stato=(a,extra)=>{txt.innerHTML='<b>'+(done+1)+' / '+list.length+'</b> &middot; '+esc(a.title)+
     (extra?' &middot; <span class="muted">'+esc(extra)+'</span>':'')};
   for(const a of list){
@@ -1610,6 +1646,7 @@ async function bulkSpotify(mode){
       if(L)altrove++;
       const m=L?('trovato solo su '+L.name):(MOTIVI.get(a.id)||'nessuna fonte ha risposto');
       motivi.set(m,(motivi.get(m)||0)+1);
+      rimasti.push({id:a.id,title:a.title,artist:a.artist,motivo:m});
     }
     done++;
     /* l'archivio accetta una richiesta al secondo; l'API di Spotify molte di piu' */
@@ -1621,8 +1658,24 @@ async function bulkSpotify(mode){
     (altrove?', '+altrove+' solo su altre piattaforme':'')+
     (done-presi-altrove>0?', '+(done-presi-altrove)+' senza collegamento':'')+'.'+
     (perse.length?'<div style="margin-top:10px">Perch&eacute; gli altri no:<ul style="margin:6px 0 0;padding-left:18px">'+
-      perse.map(([m,c])=>'<li>'+c+(c===1?' album: ':' album: ')+esc(m)+'</li>').join('')+
-      '</ul></div>':'');
+      perse.map(([m,c])=>'<li>'+c+' album: '+esc(m)+'</li>').join('')+
+      '</ul></div>':'')+
+    (rimasti.length?'<div style="margin-top:12px"><b>Quali sono</b> '+
+      '<span class="muted">(tocca per aprire la scheda e correggere titolo o artista)</span>'+
+      '<div id="spotRimasti" style="margin-top:8px;display:grid;gap:2px"></div></div>':'');
+  /* l'elenco vero: senza, il conteggio non ti fa capire se sono dischi che su
+     Spotify non ci sono davvero o se ho solo letto male un titolo */
+  const host=document.getElementById('spotRimasti');
+  if(host)rimasti.slice(0,40).forEach(x=>{
+    const b=document.createElement('button');
+    b.className='btn gh sm';
+    b.style.cssText='text-align:left;width:100%;white-space:normal;line-height:1.35';
+    b.innerHTML='<b>'+esc(x.title)+'</b>'+(x.artist?' <span class="muted">&middot; '+esc(x.artist)+'</span>':'');
+    b.onclick=()=>openAlbum(x.id);
+    host.appendChild(b);
+  });
+  if(host&&rimasti.length>40)host.insertAdjacentHTML('beforeend',
+    '<div class="tiny muted" style="margin-top:6px">e altri '+(rimasti.length-40)+'</div>');
   spotRunning=false;spotStop=false;
   renderAll();scheduleSync();
 }
@@ -1994,14 +2047,14 @@ async function resolveListen(a,forza){
      traduzione di indirizzi, e per giunta riempie i buchi della scheda. */
   if(spotCollegato()){
     let d=null;
-    try{d=await spotCerca(a.title,a.artist)}catch(e){esito.push('Spotify: '+(e&&e.message||'errore'))}
+    try{d=await spotCerca(a.title,a.artist,esito)}catch(e){esito.push('Spotify: '+(e&&e.message||'errore'))}
     if(d&&d.spotify){
       const cur=DB.albums.find(x=>x.id===a.id)||a;
       ['cover','year','tracks','tracklist','durata'].forEach(k=>{if(d[k]&&!cur[k])cur[k]=d[k]});
       if(!cur.artist&&d.artist)cur.artist=d.artist;
       return salva({url:d.spotify,name:'Spotify'});
     }
-    if(!d)esito.push('Spotify non ha questo album nel tuo paese');
+
   }
   let L=null;
   if(odesliVivo()){try{L=await daOdesli(a,esito)}catch(e){esito.push('Odesli: '+(e&&e.message||'errore'))}}
@@ -3914,11 +3967,20 @@ function renderSpot(){
   if(inp&&document.activeElement!==inp)inp.value=SPOT.clientId||'';
   const out=document.getElementById('spotOut');
   if(out)out.style.display=spotCollegato()?'':'none';
+  const g=spotGiorni();
   st.innerHTML=spotCollegato()
     ? '<span style="color:var(--ok,#4ade80)">&#10003; collegato</span>'+
       (SPOT.nome?' come <b>'+esc(SPOT.nome)+'</b>':'')+
-      ' &middot; <span class="muted">250 richieste ogni 30 secondi, invece di 10 al minuto</span>'
-    : (SPOT.clientId?'<span class="muted">Client ID salvato: manca solo il permesso, premi &ldquo;Collega account&rdquo;.</span>'
+      ' &middot; <span class="muted">250 richieste ogni 30 secondi, invece di 10 al minuto</span>'+
+      (g===null?'':'<div style="margin-top:6px" class="'+(g<=14?'':'muted')+'"'+
+        (g<=14?' style="margin-top:6px;color:var(--acc)"':'')+'>'+
+        (g<=0?'Il permesso &egrave; scaduto: premi &ldquo;Collega account&rdquo;.'
+             :'Permesso valido ancora <b>'+g+' giorn'+(g===1?'o':'i')+'</b>'+
+              (g<=14?': conviene ridarlo adesso, &egrave; un tocco.'
+                   :'. Spotify lo fa scadere ogni 6 mesi; ti avviso io.'))+'</div>')
+    : (SPOT.scaduto?'<span style="color:var(--acc)">Il permesso &egrave; scaduto</span>'+
+        ' <span class="muted">&middot; premi &ldquo;Collega account&rdquo;: il Client ID &egrave; ancora al suo posto.</span>'
+      :SPOT.clientId?'<span class="muted">Client ID salvato: manca solo il permesso, premi &ldquo;Collega account&rdquo;.</span>'
                     :'<span class="muted">Non collegato: uso le fonti anonime, che sono pi&ugrave; lente e meno precise.</span>');
 }
 document.getElementById('spotId').addEventListener('input',e=>{
@@ -4016,7 +4078,9 @@ document.getElementById('btnDiag').onclick=async()=>{
       const d=await spotChiama('/search?type=album&limit=1&q='+encodeURIComponent('Death Grips The Money Store'));
       const it=((d&&d.albums&&d.albums.items)||[])[0];
       if(!it)throw new Error('risponde ma non trova nulla');
-      return 'funziona'+(SPOT.nome?' ('+SPOT.nome+')':'')+', prova riuscita: '+it.name;
+      const g=spotGiorni();
+      return 'funziona'+(SPOT.nome?' ('+SPOT.nome+')':'')+', prova riuscita: '+it.name+
+        (g===null?'':' \u00b7 permesso valido ancora '+g+' giorni');
     }],
     ['Wikidata (identificativi Spotify)',async()=>{
       let r;
@@ -4121,6 +4185,17 @@ document.getElementById('verApp').textContent='v'+APP_VER;
 loadLocal();spotCarica();loadPrefs();renderPrefs();renderSpot();
 /* se sto tornando dal permesso di Spotify, l'indirizzo ha ?code=... */
 spotRitorno().then(ok=>{if(ok)renderSpot()});
+/* Un promemoria quando mancano due settimane, non ogni volta che apri l'app:
+   un avviso che compare sempre smette di essere un avviso. */
+(function(){
+  const g=spotGiorni();
+  if(g===null||!spotCollegato()||g>14)return;
+  const oggi=new Date().toDateString();
+  if(localStorage.getItem('crate.spotAvviso')===oggi)return;
+  localStorage.setItem('crate.spotAvviso',oggi);
+  setTimeout(()=>toast(g<=0?'Il permesso di Spotify e\' scaduto: ricollegalo in Opzioni'
+    :'Il permesso di Spotify scade fra '+g+' giorn'+(g===1?'o':'i')+': ricollegalo in Opzioni'),1500);
+})();
 document.getElementById('lfmKey').value=localStorage.getItem(LSK)||'';
 (()=>{const c=ghCfg();if(c){document.getElementById('ghOwner').value=c.owner;
   document.getElementById('ghRepo').value=c.repo;document.getElementById('ghToken').value=c.token}})();
