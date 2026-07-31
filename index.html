@@ -1,0 +1,2401 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Crate — la mia libreria di album</title>
+<meta name="theme-color" content="#0d0d10">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="favicon.png" sizes="64x64" type="image/png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<style>
+:root{
+  --bg:#0d0d10; --bg2:#14141a; --bg3:#1b1b23; --line:#2a2a35;
+  --fg:#eceaf0; --fg2:#9b98a8; --fg3:#6b6878;
+  --acc:#e0533f; --acc2:#f0a03c; --ok:#4ec98a; --gold:#f0c040;
+  --r:12px; --shadow:0 8px 30px rgba(0,0,0,.5);
+  --safeb:env(safe-area-inset-bottom,0px);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0;overscroll-behavior-y:none}
+body{
+  background:radial-gradient(1200px 600px at 70% -10%, #1d1a2b 0%, transparent 60%), var(--bg);
+  color:var(--fg); font:15px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  min-height:100vh; -webkit-font-smoothing:antialiased;
+}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer;background:none;border:none}
+a{color:var(--acc2);text-decoration:none}
+.wrap{max-width:1240px;margin:0 auto;padding:0 18px calc(96px + var(--safeb))}
+
+header{position:sticky;top:0;z-index:50;background:rgba(13,13,16,.86);backdrop-filter:blur(14px);border-bottom:1px solid var(--line);padding-top:env(safe-area-inset-top,0px)}
+.hin{max-width:1240px;margin:0 auto;padding:11px 18px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.logo{display:flex;align-items:center;gap:9px;font-weight:800;letter-spacing:-.4px;font-size:19px}
+.logo .dot{width:11px;height:11px;border-radius:50%;background:var(--acc);box-shadow:0 0 14px var(--acc)}
+nav{display:flex;gap:4px;margin-left:auto;flex-wrap:wrap}
+nav button{padding:8px 14px;border-radius:99px;color:var(--fg2);font-weight:600;font-size:14px;transition:.15s}
+nav button.on{background:var(--fg);color:#111}
+.syncb{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--fg3);border:1px solid var(--line);background:var(--bg2);padding:5px 10px;border-radius:99px}
+.syncb .d{width:7px;height:7px;border-radius:50%;background:var(--fg3);flex:none}
+.syncb.idle .d{background:var(--ok);box-shadow:0 0 8px var(--ok)}
+.syncb.syncing .d{background:var(--acc2);animation:pulse 1s infinite}
+.syncb.error .d,.syncb.offline .d{background:var(--acc)}
+@keyframes pulse{50%{opacity:.25}}
+
+.view{display:none;padding-top:24px}
+.view.on{display:block}
+h1{font-size:26px;letter-spacing:-.6px;margin:0 0 4px}
+h2{font-size:17px;letter-spacing:-.3px;margin:0 0 12px}
+.sub{color:var(--fg2);font-size:14px;margin:0 0 20px}
+.card{background:var(--bg2);border:1px solid var(--line);border-radius:var(--r);padding:16px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.grow{flex:1;min-width:160px}
+input[type=text],input[type=number],input[type=password],select,textarea{
+  width:100%;background:var(--bg3);border:1px solid var(--line);border-radius:9px;padding:11px 12px;outline:none;transition:.15s;font-size:16px
+}
+input:focus,select:focus,textarea:focus{border-color:var(--acc);background:#20202a}
+textarea{resize:vertical;min-height:80px}
+label.f{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.7px;color:var(--fg3);margin:0 0 5px;font-weight:700}
+.btn{background:var(--fg);color:#111;padding:11px 18px;border-radius:9px;font-weight:700;transition:.15s;white-space:nowrap}
+.btn.acc{background:var(--acc);color:#fff}
+.btn.gh{background:var(--bg3);color:var(--fg);border:1px solid var(--line)}
+.btn.sm{padding:8px 13px;font-size:13px}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.muted{color:var(--fg2)}.tiny{font-size:12.5px}
+.chip{display:inline-flex;align-items:center;gap:5px;background:var(--bg3);border:1px solid var(--line);border-radius:99px;padding:5px 11px;font-size:12.5px;color:var(--fg2)}
+.chip.g{border-color:#3a4a6a;color:#9dbaf0;background:#182238}
+.chip.m{border-color:#5a3a5a;color:#e0a0d8;background:#2a1a28}
+.chip button{color:var(--fg3);font-weight:800;line-height:1;padding:0 2px}
+.chip.add{border-style:dashed;cursor:pointer;color:var(--fg3)}
+.hint{font-size:12.5px;color:var(--fg3);margin-top:7px;line-height:1.55}
+.hint code{background:var(--bg3);padding:1px 5px;border-radius:4px;font-size:11.5px}
+
+.res{display:grid;gap:8px;margin-top:14px}
+.res-item{display:flex;gap:12px;align-items:center;background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:9px;cursor:pointer;transition:.15s;text-align:left;width:100%}
+.res-item:active{border-color:var(--acc)}
+.res-item img{width:56px;height:56px;border-radius:6px;object-fit:cover;background:var(--bg3);flex:none}
+.res-item .t{font-weight:700;font-size:14.5px}
+.res-item .s{color:var(--fg2);font-size:13px}
+.res-item .have{margin-left:auto;font-size:12px;color:var(--ok);font-weight:700;flex:none}
+
+.dz{border:2px dashed var(--line);border-radius:var(--r);padding:30px 18px;text-align:center;transition:.15s;cursor:pointer;background:var(--bg2)}
+.dz.over{border-color:var(--acc);background:#1c1720}
+.dz .big{font-size:32px;margin-bottom:6px;opacity:.8}
+.dz.busy{pointer-events:none;opacity:.7}
+.ocrbox{margin-top:14px;display:none}
+.ocrbox.on{display:block}
+.ocrtext{background:var(--bg3);border:1px solid var(--line);border-radius:9px;padding:10px;font:12.5px/1.5 ui-monospace,monospace;color:var(--fg2);max-height:110px;overflow:auto;white-space:pre-wrap}
+.bar{height:5px;background:var(--bg3);border-radius:99px;overflow:hidden;margin-top:10px}
+.bar i{display:block;height:100%;background:var(--acc);width:0;transition:width .25s}
+
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:16px}
+.toolbar select,.toolbar input{width:auto;min-width:118px;padding:9px 11px;font-size:14px}
+.tg{display:flex;background:var(--bg3);border:1px solid var(--line);border-radius:9px;overflow:hidden;flex-wrap:wrap}
+.tg button{padding:9px 12px;font-size:13px;color:var(--fg2);font-weight:600}
+.tg button.on{background:var(--fg);color:#111}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:16px}
+.cardalb{cursor:pointer}
+.cov{position:relative;aspect-ratio:1;border-radius:10px;overflow:hidden;background:var(--bg3);box-shadow:var(--shadow)}
+.cov img{width:100%;height:100%;object-fit:cover;display:block}
+.cov .ph{width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:30px;opacity:.3}
+.cov .badges{position:absolute;top:7px;right:7px;display:flex;flex-direction:column;gap:5px;align-items:flex-end}
+.pill{background:rgba(0,0,0,.72);backdrop-filter:blur(6px);border-radius:99px;padding:3px 8px;font-size:11.5px;font-weight:800}
+.pill.r{color:var(--gold)}.pill.f{color:var(--acc)}.pill.q{color:var(--acc2)}
+.cov .lis{position:absolute;bottom:0;left:0;right:0;padding:22px 9px 7px;background:linear-gradient(transparent,rgba(0,0,0,.85));font-size:11px;font-weight:700;color:var(--ok)}
+.cardalb .t{font-weight:700;font-size:13.8px;margin-top:9px;line-height:1.3;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.cardalb .a{color:var(--fg2);font-size:12.8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.empty{text-align:center;padding:60px 20px;color:var(--fg3)}
+.empty .big{font-size:44px;margin-bottom:12px;opacity:.5}
+
+.slot{background:var(--bg2);border:1px solid var(--line);border-radius:18px;padding:24px 18px;text-align:center}
+.slot .stage{min-height:280px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px}
+.slot .cover{width:min(230px,64vw);height:min(230px,64vw);border-radius:14px;object-fit:cover;box-shadow:0 14px 46px rgba(0,0,0,.6);background:var(--bg3)}
+.slot h3{font-size:22px;margin:0;letter-spacing:-.5px}
+.slot .art{color:var(--fg2);margin:2px 0 0;font-size:15px}
+.spinning .cover{animation:sp .32s infinite}
+@keyframes sp{0%{opacity:.25;transform:scale(.96)}50%{opacity:1;transform:scale(1)}100%{opacity:.25;transform:scale(.96)}}
+.filtgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:11px;margin-bottom:14px}
+
+.mask{position:fixed;inset:0;background:rgba(0,0,0,.75);backdrop-filter:blur(5px);z-index:100;display:none;overflow:auto;padding:26px 14px calc(40px + var(--safeb))}
+.mask.on{display:block}
+.modal{max-width:760px;margin:0 auto;background:var(--bg2);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);overflow:hidden;position:relative}
+.mhead{display:flex;gap:18px;padding:20px;background:linear-gradient(160deg,#22202c,var(--bg2))}
+.mhead img,.mhead .ph{width:140px;height:140px;border-radius:11px;object-fit:cover;flex:none;background:var(--bg3);box-shadow:var(--shadow)}
+.mhead .ph{display:flex;align-items:center;justify-content:center;font-size:36px;opacity:.3}
+.mbody{padding:20px;display:grid;gap:18px}
+.mclose{position:absolute;top:12px;right:12px;background:rgba(0,0,0,.55);border:1px solid var(--line);width:34px;height:34px;border-radius:50%;font-size:17px;color:var(--fg);z-index:3}
+.stars{display:flex;gap:2px;align-items:center;flex-wrap:wrap}
+.stars button{font-size:24px;color:var(--fg3);line-height:1;padding:0 1px}
+.stars button.on{color:var(--gold)}
+.links{display:flex;gap:8px;flex-wrap:wrap}
+.links a{background:var(--bg3);border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-size:13px;color:var(--fg2);font-weight:600}
+.sec{border-top:1px solid var(--line);padding-top:16px}
+.sec:first-child{border-top:none;padding-top:0}
+.toast{position:fixed;bottom:calc(84px + var(--safeb));left:50%;transform:translateX(-50%) translateY(80px);background:var(--fg);color:#111;padding:11px 20px;border-radius:99px;font-weight:700;font-size:14px;z-index:200;transition:.25s;box-shadow:var(--shadow);opacity:0;max-width:88vw;text-align:center}
+.toast.on{transform:translateX(-50%);opacity:1}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:10px;margin-bottom:18px}
+.stat{background:var(--bg2);border:1px solid var(--line);border-radius:11px;padding:12px}
+.stat b{display:block;font-size:22px;letter-spacing:-.5px}
+.stat span{font-size:11px;color:var(--fg3);text-transform:uppercase;letter-spacing:.6px;font-weight:700}
+.spinner{display:inline-block;width:13px;height:13px;border:2px solid var(--fg3);border-top-color:var(--fg);border-radius:50%;animation:rot .7s linear infinite;vertical-align:-2px}
+@keyframes rot{to{transform:rotate(360deg)}}
+.banner{background:linear-gradient(120deg,#2a1a20,var(--bg2));border:1px solid var(--acc);border-radius:var(--r);padding:14px;margin-bottom:16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+/* revisione a carte */
+.deck{position:fixed;inset:0;z-index:120;background:var(--bg);display:none;flex-direction:column}
+.deck.on{display:flex}
+.deckhead{display:flex;align-items:center;gap:12px;padding:calc(12px + env(safe-area-inset-top,0px)) 16px 12px;border-bottom:1px solid var(--line)}
+.deckbody{flex:1;overflow:auto;padding:16px 16px calc(28px + var(--safeb));max-width:640px;width:100%;margin:0 auto}
+.warn{background:#2a2015;border:1px solid #6a5020;border-radius:var(--r);padding:13px;margin-bottom:16px;font-size:13.5px;line-height:1.55}
+
+/* ---------- mobile: barra in basso ---------- */
+@media(max-width:700px){
+  .hin{padding:9px 16px;gap:10px}
+  h1{font-size:22px}
+  nav{position:fixed;left:0;right:0;bottom:0;z-index:60;margin:0;display:grid;grid-template-columns:repeat(4,1fr);gap:0;
+      background:rgba(16,16,20,.96);backdrop-filter:blur(16px);border-top:1px solid var(--line);
+      padding:6px 4px calc(6px + var(--safeb))}
+  nav button{border-radius:10px;padding:8px 2px;font-size:11px;display:flex;flex-direction:column;align-items:center;gap:3px;font-weight:700}
+  nav button i{font-size:19px;font-style:normal;line-height:1}
+  nav button.on{background:transparent;color:var(--acc)}
+  .grid{grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:13px}
+  .mhead{flex-direction:column;align-items:center;text-align:center;gap:12px;padding:18px}
+  .mhead img,.mhead .ph{width:min(200px,58vw);height:min(200px,58vw)}
+  .mhead .row{justify-content:center}
+  .mask{padding:14px 10px calc(30px + var(--safeb))}
+  .toolbar select,.toolbar input{flex:1;min-width:calc(50% - 6px)}
+  .tg{width:100%}.tg button{flex:1}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="hin">
+    <div class="logo"><span class="dot"></span>Crate</div>
+    <button class="syncb" id="syncb" title="Stato sincronizzazione"><span class="d"></span><span id="synctxt">locale</span></button>
+    <nav>
+      <button data-v="add" class="on"><i>&#43;</i>Aggiungi</button>
+      <button data-v="lib"><i>&#9634;</i>Libreria</button>
+      <button data-v="rand"><i>&#127922;</i>Random</button>
+      <button data-v="set"><i>&#9881;</i>Opzioni</button>
+    </nav>
+  </div>
+</header>
+
+<div class="wrap">
+
+<!-- ============ AGGIUNGI ============ -->
+<section class="view on" id="v-add">
+  <div id="installBanner"></div>
+  <h1>Aggiungi un album</h1>
+  <p class="sub">Cerca per nome, oppure manda qui uno screenshot.</p>
+
+  <div id="sharedBox"></div>
+
+  <div class="card" style="margin-bottom:14px">
+    <label class="f">Cerca album o artista</label>
+    <div class="row">
+      <div class="grow"><input type="text" id="q" placeholder="es. Slowdive Souvlaki" autocomplete="off" enterkeyhint="search"></div>
+      <button class="btn" id="btnSearch">Cerca</button>
+    </div>
+    <div class="hint">Copertina, anno, generi e mood arrivano automaticamente.</div>
+    <div class="res" id="results"></div>
+  </div>
+
+  <div class="dz" id="dz">
+    <div class="big">&#128247;</div>
+    <div style="font-weight:700">Screenshot</div>
+    <div class="tiny muted" style="margin-top:4px">tocca per scegliere dalla galleria, anche pi&ugrave; di uno &middot; su PC trascina o incolla con Ctrl+V</div>
+    <input type="file" id="fileIn" accept="image/*" multiple hidden>
+  </div>
+  <div class="hint" id="shareHint" style="text-align:center"></div>
+
+  <div class="ocrbox" id="ocrbox">
+    <div class="bar"><i id="ocrbar"></i></div>
+    <div class="tiny muted" id="ocrstatus" style="margin-top:8px"></div>
+    <div class="ocrtext" id="ocrtext" style="display:none;margin-top:8px"></div>
+    <div class="res" id="ocrresults"></div>
+  </div>
+
+  <div style="text-align:center;margin-top:20px">
+    <button class="btn gh sm" id="btnManual">Inserisci a mano</button>
+  </div>
+</section>
+
+<!-- ============ LIBRERIA ============ -->
+<section class="view" id="v-lib">
+  <h1>Libreria</h1>
+  <p class="sub" id="libcount"></p>
+  <div class="stats" id="stats"></div>
+  <div class="toolbar">
+    <input type="text" id="fq" placeholder="Filtra...">
+    <select id="fGenre"><option value="">Tutti i generi</option></select>
+    <select id="fMood"><option value="">Tutti i mood</option></select>
+    <select id="fDec"><option value="">Tutti i decenni</option></select>
+    <div class="tg" id="fState">
+      <button data-s="all" class="on">Tutti</button>
+      <button data-s="todo">Da ascoltare</button>
+      <button data-s="done">Ascoltati</button>
+      <button data-s="fav">&#9829;</button>
+      <button data-s="pending" id="bPend" style="display:none">? Da identificare</button>
+    </div>
+    <select id="fSort">
+      <option value="added">Aggiunti di recente</option>
+      <option value="alpha">Titolo A-Z</option>
+      <option value="artist">Artista A-Z</option>
+      <option value="year">Anno (recenti)</option>
+      <option value="yearold">Anno (vecchi)</option>
+      <option value="rating">Voto più alto</option>
+    </select>
+  </div>
+  <div id="artistBox" style="margin-bottom:14px"></div>
+  <div class="grid" id="grid"></div>
+</section>
+
+<!-- ============ RANDOM ============ -->
+<section class="view" id="v-rand">
+  <h1>Cosa ascolto?</h1>
+  <p class="sub">I filtri sono tutti opzionali: puoi premere e basta.</p>
+  <div class="row" style="margin-bottom:12px">
+    <button class="btn gh sm" id="rReset">&#127922; Tutto casuale &mdash; azzera i filtri</button>
+    <span class="tiny muted" id="rActive"></span>
+  </div>
+  <div class="filtgrid">
+    <div><label class="f">Stato</label><select id="rState">
+      <option value="todo">Solo da ascoltare</option>
+      <option value="all">Tutti</option>
+      <option value="fav">Solo preferiti</option>
+      <option value="done">Solo già ascoltati</option>
+    </select></div>
+    <div><label class="f">Genere</label><select id="rGenre"><option value="">Qualsiasi</option></select></div>
+    <div><label class="f">Mood</label><select id="rMood"><option value="">Qualsiasi</option></select></div>
+    <div><label class="f">Decennio</label><select id="rDec"><option value="">Qualsiasi</option></select></div>
+    <div><label class="f">Tipo</label><select id="rKind">
+      <option value="">Tutto</option>
+      <option value="full">Solo album interi</option>
+    </select></div>
+  </div>
+  <div class="slot" id="slot">
+    <div class="stage" id="slotStage">
+      <div class="tiny muted" id="slotPool"></div>
+      <div style="font-size:50px;opacity:.35">&#127925;</div>
+      <button class="btn acc" id="btnSpin" style="padding:14px 28px;font-size:16px">Estrai un album</button>
+    </div>
+  </div>
+
+  <div class="card" id="recCard" style="margin-top:18px">
+    <button id="recToggle" style="display:flex;align-items:center;gap:8px;width:100%;text-align:left;font-weight:700;font-size:17px;letter-spacing:-.3px">
+      <span id="recArrow">&#9656;</span> Consigli dalla tua libreria
+    </button>
+    <div id="recBody" style="display:none;margin-top:14px">
+      <p class="tiny muted" style="margin-top:0">Nessun suggerimento ti arriva addosso: appare solo quello che chiedi tu.</p>
+      <div class="filtgrid">
+        <div><label class="f">Partendo da</label><select id="recSeed">
+          <option value="__taste">I miei voti e preferiti</option>
+        </select></div>
+        <div><label class="f">Cosa mostrare</label><select id="recTodo">
+          <option value="1">Solo da ascoltare</option>
+          <option value="0">Tutta la libreria</option>
+        </select></div>
+      </div>
+      <button class="btn" id="recGo">Mostra i consigli</button>
+      <div class="tiny muted" id="recWhy" style="margin-top:12px"></div>
+      <div class="grid" id="recOut" style="margin-top:12px"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ OPZIONI ============ -->
+<section class="view" id="v-set">
+  <h1>Opzioni</h1>
+
+  <div class="card" style="margin-bottom:14px">
+    <h2>Sincronizzazione tra telefono e PC</h2>
+    <p class="tiny muted" style="margin-top:0">La libreria vive in un file dentro un tuo repository <b>privato</b> su GitHub. Le stesse tre voci qui sotto vanno inserite su ogni dispositivo: da quel momento si allinea da sola. Le modifiche si <b>fondono</b>, non si sovrascrivono.</p>
+    <div class="row" style="margin-bottom:9px">
+      <div class="grow"><label class="f">Utente GitHub</label><input type="text" id="ghOwner" placeholder="il-tuo-username" autocapitalize="none" autocomplete="off" spellcheck="false"></div>
+      <div class="grow"><label class="f">Repository dei dati</label><input type="text" id="ghRepo" placeholder="crate-data" autocapitalize="none" autocomplete="off" spellcheck="false"></div>
+    </div>
+    <div><label class="f">Token di accesso</label><input type="password" id="ghToken" placeholder="github_pat_..." autocomplete="off" spellcheck="false"></div>
+    <div class="row" style="margin-top:11px">
+      <button class="btn" id="btnSyncSave">Salva e collega</button>
+      <button class="btn gh" id="btnSyncNow">Sincronizza adesso</button>
+      <button class="btn gh sm" id="btnSyncOff">Scollega</button>
+    </div>
+    <div class="hint" id="syncHint"></div>
+  </div>
+
+  <div class="card" style="margin-bottom:14px">
+    <h2>Tag automatici più ricchi (opzionale)</h2>
+    <p class="tiny muted" style="margin-top:0">Senza chiave i tag arrivano da iTunes e MusicBrainz. Con una chiave gratuita Last.fm diventano molto più specifici. Si prende in un minuto su <a href="https://www.last.fm/api/account/create" target="_blank" rel="noopener">last.fm/api</a>.</p>
+    <div class="row">
+      <div class="grow"><input type="text" id="lfmKey" placeholder="API key Last.fm" autocomplete="off" spellcheck="false"></div>
+      <button class="btn gh" id="btnSaveKey">Salva</button>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:14px">
+    <h2>Come si presenta la scheda di un album</h2>
+    <div style="margin-bottom:14px">
+      <label class="f">Visualizzazione</label>
+      <select id="prMode">
+        <option value="full">Completa &mdash; scegli tu cosa mostrare</option>
+        <option value="min">Minimale &mdash; solo l&rsquo;essenziale</option>
+      </select>
+      <div class="hint" id="prModeHint"></div>
+    </div>
+    <div id="prPanel">
+      <label class="f">Informazioni da mostrare</label>
+      <div id="prShow" style="display:grid;gap:2px;margin-bottom:16px"></div>
+      <label class="f">Link esterni da tenere</label>
+      <div id="prLinks" style="display:grid;gap:2px"></div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:14px">
+    <h2>Riaggiorna i tag di tutta la libreria</h2>
+    <p class="tiny muted" style="margin-top:0">Utile dopo aver messo la chiave Last.fm, o quando un disco appena uscito non aveva ancora tag. Circa un secondo per album, perch&eacute; MusicBrainz accetta una richiesta al secondo.</p>
+    <div class="row">
+      <button class="btn" id="bulkMissing">Completa quelli senza tag</button>
+      <button class="btn gh" id="bulkAll">Ripassa tutti</button>
+      <button class="btn gh sm" id="bulkReset" style="border-color:var(--acc);color:var(--acc)">Rifai da zero</button>
+    </div>
+    <div class="hint">&ldquo;Ripassa tutti&rdquo; aggiunge i tag nuovi e non tocca quelli che hai messo tu. &ldquo;Rifai da zero&rdquo; li cancella e li riscarica: usalo solo se sono sbagliati.</div>
+    <div id="bulkBox" style="display:none;margin-top:14px">
+      <div class="bar"><i id="bulkBar"></i></div>
+      <div class="tiny muted" id="bulkTxt" style="margin-top:8px"></div>
+      <button class="btn gh sm" id="bulkStop" style="margin-top:10px">Ferma</button>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:14px">
+    <h2>Backup manuale</h2>
+    <div class="row">
+      <button class="btn gh" id="btnExport">Esporta JSON</button>
+      <button class="btn gh" id="btnImport">Importa JSON</button>
+      <input type="file" id="importIn" accept=".json,application/json" hidden>
+    </div>
+    <div class="hint" id="sizeHint"></div>
+  </div>
+
+  <div class="card">
+    <h2>Zona rossa</h2>
+    <button class="btn gh" id="btnWipe" style="border-color:var(--acc);color:var(--acc)">Cancella tutta la libreria</button>
+  </div>
+</section>
+
+</div>
+
+<!-- ============ REVISIONE A CARTE ============ -->
+<div class="deck" id="deck">
+  <div class="deckhead">
+    <div style="flex:1;min-width:0">
+      <div style="font-weight:800">Rivedi gli screenshot</div>
+      <div class="tiny muted" id="deckMeta"></div>
+    </div>
+    <button class="btn gh sm" id="deckClose">Chiudi</button>
+  </div>
+  <div class="bar" style="border-radius:0"><i id="deckBar"></i></div>
+  <div class="deckbody" id="deckBody"></div>
+</div>
+
+<div class="mask" id="mask">
+  <div class="modal" id="modal"><button class="mclose" id="mclose">&times;</button></div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+'use strict';
+/* ==========================================================
+   1. STATO
+   ========================================================== */
+const LS='crate.v1', LSK='crate.lfmkey', LSG='crate.gh', LSS='crate.lastsync', LSP='crate.prefs';
+let DB={albums:[],deleted:[]};
+
+/* ---- preferenze di visualizzazione della scheda album ----
+   Restano su questo dispositivo: sul telefono puoi volere il minimale
+   e sul PC il completo. */
+const LINK_KEYS={'Album of the Year':'aoty','RateYourMusic':'rym','Last.fm':'lastfm',
+  'YouTube':'youtube','Bandcamp':'bandcamp','Discogs':'discogs'};
+const PREF_DEFAULTS={
+  mode:'full',
+  show:{meta:true,quick:true,details:true,about:true,listeners:false,dates:true,
+        listen:true,similar:true,links:true},
+  links:{aoty:true,rym:true,lastfm:true,youtube:true,bandcamp:true,discogs:true}
+};
+let P=JSON.parse(JSON.stringify(PREF_DEFAULTS));
+function loadPrefs(){
+  try{const raw=localStorage.getItem(LSP);if(!raw)return;
+    const p=JSON.parse(raw);
+    if(p&&typeof p==='object'){
+      if(p.mode==='min'||p.mode==='full')P.mode=p.mode;
+      if(p.show)Object.keys(P.show).forEach(k=>{if(typeof p.show[k]==='boolean')P.show[k]=p.show[k]});
+      if(p.links)Object.keys(P.links).forEach(k=>{if(typeof p.links[k]==='boolean')P.links[k]=p.links[k]});
+    }}catch(e){}
+}
+function savePrefs(){try{localStorage.setItem(LSP,JSON.stringify(P))}catch(e){}}
+/* nella vista minimale sopravvivono solo l'essenziale e le azioni */
+const MIN_KEEP={meta:1,listen:1};
+function vis(k){return P.mode==='min'?!!MIN_KEEP[k]:P.show[k]!==false}
+
+function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7)}
+function now(){return Date.now()}
+function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('on');clearTimeout(t._x);t._x=setTimeout(()=>t.classList.remove('on'),2400)}
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+/* Cover Art Archive risponde 404 quando la copertina non c'e': nascondo
+   l'immagine rotta invece di lasciare l'icona di errore del browser */
+window.crateImgFail=function(img){img.style.visibility='hidden'};
+
+function loadLocal(){
+  try{const raw=localStorage.getItem(LS);if(raw){const p=JSON.parse(raw);
+    if(p&&Array.isArray(p.albums)){DB={albums:p.albums,deleted:Array.isArray(p.deleted)?p.deleted:[]};
+      DB.albums.forEach(a=>{if(!a.updatedAt)a.updatedAt=a.addedAt||now()})}}}catch(e){}
+}
+function saveLocal(){
+  try{localStorage.setItem(LS,JSON.stringify(DB))}
+  catch(e){toast('Memoria del browser piena: esporta un JSON')}
+  sizeHint();
+}
+/* ogni modifica passa da qui: aggiorna il timestamp e programma la sincronizzazione */
+function save(album){
+  if(album)album.updatedAt=now();
+  saveLocal();scheduleSync();
+}
+function removeAlbum(id){
+  DB.albums=DB.albums.filter(a=>a.id!==id);
+  DB.deleted=DB.deleted.filter(d=>d.id!==id);
+  DB.deleted.push({id:id,at:now()});
+  saveLocal();scheduleSync();
+}
+
+/* ==========================================================
+   2. FUSIONE (il cuore della sincronizzazione)
+   ========================================================== */
+function key(a){return ((a.artist||'')+'|'+(a.title||'')).trim().toLowerCase()}
+function richness(a){return (a.rating?4:0)+(a.comment?3:0)+(a.fav?2:0)+(a.listened?1:0)+
+  ((a.genres||[]).length?1:0)+(a.cover?1:0)}
+function mergeDB(a,b){
+  const map=new Map();
+  [...(a.albums||[]),...(b.albums||[])].forEach(al=>{
+    if(!al||!al.id)return;
+    const cur=map.get(al.id);
+    if(!cur||(al.updatedAt||0)>(cur.updatedAt||0))map.set(al.id,al);
+  });
+  /* lapidi: una cancellazione vince se e' piu' recente dell'ultima modifica */
+  const del=new Map();
+  [...(a.deleted||[]),...(b.deleted||[])].forEach(d=>{
+    if(!d||!d.id)return;const c=del.get(d.id);
+    if(!c||(d.at||0)>(c.at||0))del.set(d.id,d);
+  });
+  del.forEach((d,id)=>{const al=map.get(id);if(al&&(al.updatedAt||0)<=(d.at||0))map.delete(id)});
+  /* stesso album inserito su due dispositivi -> tengo quello con piu' informazioni */
+  const byKey=new Map();
+  [...map.values()].forEach(al=>{
+    const k=key(al);if(!k||k==='|')return;
+    const other=byKey.get(k);
+    if(!other){byKey.set(k,al);return}
+    const loser=(richness(al)>richness(other)||(richness(al)===richness(other)&&(al.addedAt||0)<(other.addedAt||0)))?other:al;
+    const winner=loser===al?other:al;
+    if(!winner.cover&&loser.cover)winner.cover=loser.cover;
+    if(!(winner.genres||[]).length&&(loser.genres||[]).length)winner.genres=loser.genres;
+    if(!(winner.moods||[]).length&&(loser.moods||[]).length)winner.moods=loser.moods;
+    if(!winner.comment&&loser.comment)winner.comment=loser.comment;
+    if(!winner.rating&&loser.rating)winner.rating=loser.rating;
+    map.delete(loser.id);byKey.set(k,winner);
+  });
+  /* le lapidi pesano ~40 byte: le tengo un anno, cosi' un dispositivo
+     rimasto spento a lungo non fa resuscitare un album cancellato */
+  const cutoff=now()-365*864e5;
+  return{albums:[...map.values()].sort((x,y)=>(y.addedAt||0)-(x.addedAt||0)),
+         deleted:[...del.values()].filter(d=>(d.at||0)>cutoff)};
+}
+function canon(db){
+  const norm=o=>{const r={};Object.keys(o).sort().forEach(k=>{
+    const v=o[k];if(v===undefined||v===null||v===''||(Array.isArray(v)&&!v.length))return;
+    r[k]=Array.isArray(v)?[...v].map(String).sort():v});return r};
+  const s=(x,y)=>x.id<y.id?-1:x.id>y.id?1:0;
+  return JSON.stringify({a:(db.albums||[]).slice().sort(s).map(norm),
+                         d:(db.deleted||[]).slice().sort(s).map(norm)});
+}
+
+/* ==========================================================
+   3. SINCRONIZZAZIONE GITHUB
+   ========================================================== */
+const SY={state:'off',msg:'',last:+(localStorage.getItem(LSS)||0)};
+let syncing=false,pending=false,syncTimer=null;
+function ghCfg(){try{const c=JSON.parse(localStorage.getItem(LSG)||'null');
+  return (c&&c.owner&&c.repo&&c.token)?c:null}catch(e){return null}}
+function ghApi(c){return 'https://api.github.com/repos/'+encodeURIComponent(c.owner)+'/'+
+  encodeURIComponent(c.repo)+'/contents/'+(c.path||'library.json')}
+function ghHead(c){return{Authorization:'Bearer '+c.token,Accept:'application/vnd.github+json',
+  'X-GitHub-Api-Version':'2022-11-28'}}
+function b64enc(str){const b=new TextEncoder().encode(str);let s='';
+  for(let i=0;i<b.length;i+=0x8000)s+=String.fromCharCode.apply(null,b.subarray(i,i+0x8000));return btoa(s)}
+function b64dec(b64){const bin=atob(String(b64).replace(/\s/g,''));
+  const u=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);
+  return new TextDecoder().decode(u)}
+
+function setSync(st,msg){
+  SY.state=st;SY.msg=msg||'';
+  const b=document.getElementById('syncb'),t=document.getElementById('synctxt');
+  b.className='syncb '+st;
+  t.textContent={off:'locale',idle:'sincronizzato',syncing:'sincronizzo...',
+    offline:'offline',error:'errore'}[st]||st;
+  const h=document.getElementById('syncHint');
+  if(h){
+    let s='';
+    if(st==='off')s='Non collegato: i dati restano solo su questo dispositivo.';
+    else if(st==='error')s='<b style="color:var(--acc)">Errore:</b> '+esc(SY.msg||'')+
+      '<br>Controlla utente, nome del repository e che il token abbia il permesso <i>Contents: Read and write</i> su quel repository.';
+    else if(st==='offline')s='Nessuna rete: le modifiche restano in coda e partono appena torni online.';
+    else if(SY.last)s='Ultima sincronizzazione: '+new Date(SY.last).toLocaleString('it-IT');
+    h.innerHTML=s;
+  }
+}
+async function ghGet(c){
+  const r=await fetch(ghApi(c)+'?ref=HEAD&t='+now(),{headers:ghHead(c),cache:'no-store'});
+  if(r.status===404)return{db:null,sha:null};
+  if(r.status===401||r.status===403)throw new Error('token rifiutato ('+r.status+')');
+  if(!r.ok)throw new Error('lettura '+r.status);
+  const d=await r.json();
+  let txt=d.content?b64dec(d.content):'';
+  if(!txt&&d.sha){ /* file oltre 1 MB: passo dall'API dei blob */
+    const r2=await fetch('https://api.github.com/repos/'+encodeURIComponent(c.owner)+'/'+
+      encodeURIComponent(c.repo)+'/git/blobs/'+d.sha,{headers:ghHead(c)});
+    if(r2.ok){const d2=await r2.json();txt=d2.content?b64dec(d2.content):''}
+  }
+  let db=null;
+  try{const p=JSON.parse(txt);if(p&&Array.isArray(p.albums))db={albums:p.albums,deleted:p.deleted||[]}}catch(e){}
+  return{db:db,sha:d.sha};
+}
+async function ghPut(c,db,sha){
+  const body={message:'crate: '+db.albums.length+' album — '+new Date().toISOString(),
+    content:b64enc(JSON.stringify(db,null,1))};
+  if(sha)body.sha=sha;
+  const r=await fetch(ghApi(c),{method:'PUT',headers:Object.assign({'Content-Type':'application/json'},ghHead(c)),
+    body:JSON.stringify(body)});
+  if(r.status===409||r.status===422)return null;
+  if(!r.ok){let m='scrittura '+r.status;try{const e=await r.json();if(e.message)m+=': '+e.message}catch(x){}throw new Error(m)}
+  const d=await r.json();return (d.content&&d.content.sha)||null;
+}
+function scheduleSync(){
+  if(!ghCfg())return;
+  clearTimeout(syncTimer);
+  syncTimer=setTimeout(()=>syncNow(),2000);
+}
+async function syncNow(depth){
+  const c=ghCfg();
+  if(!c){setSync('off');return}
+  if(syncing){pending=true;return}
+  if(!navigator.onLine){setSync('offline');return}
+  syncing=true;setSync('syncing');
+  try{
+    const rem=await ghGet(c);
+    const before=canon(DB);
+    if(rem.db)DB=mergeDB(DB,rem.db);
+    const after=canon(DB);
+    if(after!==before){saveLocal();renderAll();if(openAlbum._id)openAlbum(openAlbum._id,true)}
+    if(!rem.db||canon(rem.db)!==after){
+      const res=await ghPut(c,DB,rem.sha);
+      if(res===null){ /* qualcuno ha scritto nel frattempo: rifondo e riprovo */
+        syncing=false;
+        if((depth||0)<3)return syncNow((depth||0)+1);
+        throw new Error('conflitto persistente');
+      }
+    }
+    SY.last=now();localStorage.setItem(LSS,String(SY.last));
+    setSync('idle');
+  }catch(e){
+    setSync(navigator.onLine?'error':'offline',e.message||String(e));
+  }
+  syncing=false;
+  if(pending){pending=false;setTimeout(()=>syncNow(),600)}
+}
+
+/* ==========================================================
+   4. API METADATI
+   ========================================================== */
+function jsonp(url,timeout){
+  return new Promise((res,rej)=>{
+    const cb='cb_'+uid();const s=document.createElement('script');
+    const to=setTimeout(()=>{clean();rej(new Error('timeout'))},timeout||9000);
+    function clean(){clearTimeout(to);delete window[cb];s.remove()}
+    window[cb]=d=>{clean();res(d)};
+    s.onerror=()=>{clean();rej(new Error('rete'))};
+    s.src=url+(url.includes('?')?'&':'?')+'callback='+cb;
+    document.head.appendChild(s);
+  });
+}
+function bigCover(u){return u?u.replace(/\/\d+x\d+bb\./,'/600x600bb.'):''}
+/* tipo di pubblicazione: iTunes lo mette nel suffisso del titolo e nel numero di tracce */
+function detectKind(title,tracks,type){
+  const t=String(title||'');
+  if(/\s[-–]\s*(single|singolo)\s*$/i.test(t))return 'singolo';
+  if(/\s[-–]\s*ep\s*$/i.test(t))return 'EP';
+  if(String(type||'').toLowerCase()==='compilation')return 'raccolta';
+  if(/greatest hits|best of|the best|anthology|collection|compilation|raccolta|the singles|retrospective/i.test(t))return 'raccolta';
+  if(tracks){if(tracks<=2)return 'singolo';if(tracks<=6)return 'EP'}
+  return 'album';
+}
+function cleanTitle(t){return String(t||'').replace(/\s[-–]\s*(single|singolo|ep)\s*$/i,'').trim()}
+/* MusicBrainz e' un archivio, non un negozio: contiene anche gli artisti
+   ritirati dallo streaming (Godspeed You! Black Emperor, molta autoproduzione,
+   dischi fuori catalogo). Le copertine arrivano da Cover Art Archive. */
+async function searchArchive(term){
+  const out=[];
+  try{
+    const q=String(term).replace(/[+\-!(){}\[\]^"~*?:\\/]/g,' ').replace(/\s+/g,' ').trim();
+    if(!q)return out;
+    const r=await fetch('https://musicbrainz.org/ws/2/release-group/?fmt=json&limit=15&query='+encodeURIComponent(q));
+    if(!r.ok)return out;
+    const d=await r.json();
+    (d['release-groups']||[]).forEach(rg=>{
+      const cred=(rg['artist-credit']||[])[0];
+      const art=cred&&(cred.name||(cred.artist&&cred.artist.name));
+      if(!art)return;
+      const pt=String(rg['primary-type']||'').toLowerCase();
+      const sec=(rg['secondary-types']||[]).map(String);
+      out.push({title:cleanTitle(rg.title),artist:art,
+        year:rg['first-release-date']?+rg['first-release-date'].slice(0,4)||null:null,
+        cover:'https://coverartarchive.org/release-group/'+rg.id+'/front-500',
+        genre:'',tracks:null,
+        kind:pt==='ep'?'EP':pt==='single'?'singolo':
+          (pt==='compilation'||sec.some(s=>/compilation/i.test(s)))?'raccolta':'album',
+        mbid:rg.id,src:'musicbrainz'});
+    });
+  }catch(e){}
+  return out;
+}
+async function searchAlbums(term){
+  const out=[];
+  try{
+    const d=await jsonp('https://itunes.apple.com/search?media=music&entity=album&limit=12&term='+encodeURIComponent(term));
+    (d.results||[]).forEach(r=>out.push({title:cleanTitle(r.collectionName),artist:r.artistName,
+      year:r.releaseDate?+r.releaseDate.slice(0,4):null,cover:bigCover(r.artworkUrl100),
+      genre:r.primaryGenreName||'',tracks:r.trackCount||null,
+      kind:detectKind(r.collectionName,r.trackCount,r.collectionType),
+      itunesUrl:r.collectionViewUrl||'',src:'itunes'}));
+  }catch(e){}
+  if(!out.length){
+    try{
+      const d=await jsonp('https://api.deezer.com/search/album?output=jsonp&limit=12&q='+encodeURIComponent(term));
+      (d.data||[]).forEach(r=>out.push({title:cleanTitle(r.title),artist:r.artist&&r.artist.name,year:null,
+        cover:r.cover_xl||r.cover_big||'',genre:'',tracks:r.nb_tracks||null,
+        kind:detectKind(r.title,r.nb_tracks,r.record_type),
+        deezerUrl:r.link||'',src:'deezer'}));
+    }catch(e){}
+  }
+  /* Terzo livello automatico: se i negozi non hanno nulla, provo l'archivio */
+  if(!out.length)(await searchArchive(term)).forEach(r=>out.push(r));
+  const seen=new Set();
+  return out.filter(a=>{const k=(a.artist+'|'+a.title).toLowerCase();
+    if(seen.has(k))return false;seen.add(k);return true});
+}
+async function fetchMusicBrainz(artist,title){
+  const tags=[];let year=null;
+  try{
+    const q='releasegroup:'+JSON.stringify(title)+' AND artist:'+JSON.stringify(artist);
+    const r=await fetch('https://musicbrainz.org/ws/2/release-group/?fmt=json&limit=1&query='+encodeURIComponent(q));
+    if(!r.ok)return{tags,year};
+    const rg=((await r.json())['release-groups']||[])[0];
+    if(!rg)return{tags,year};
+    if(rg['first-release-date'])year=+rg['first-release-date'].slice(0,4)||null;
+    const r2=await fetch('https://musicbrainz.org/ws/2/release-group/'+rg.id+'?fmt=json&inc=genres+tags');
+    if(r2.ok){const d2=await r2.json();
+      (d2.genres||[]).forEach(g=>tags.push(g.name));
+      (d2.tags||[]).filter(t=>t.count>0).forEach(t=>tags.push(t.name));}
+  }catch(e){}
+  return{tags,year};
+}
+/* numero di tracce dall'archivio, per gli album che i negozi non hanno */
+async function fetchTrackCount(artist,title){
+  if(!title)return 0;
+  try{
+    const q='release:'+JSON.stringify(title)+(artist?' AND artist:'+JSON.stringify(artist):'');
+    const r=await fetch('https://musicbrainz.org/ws/2/release/?fmt=json&limit=3&query='+encodeURIComponent(q));
+    if(!r.ok)return 0;
+    const d=await r.json();
+    const rel=(d.releases||[]).find(x=>+x['track-count']>0);
+    return rel?+rel['track-count']:0;
+  }catch(e){return 0}
+}
+async function fetchLastfm(artist,title){
+  const k=localStorage.getItem(LSK);
+  const empty={tags:[],about:'',listeners:0};
+  if(!k||!artist||!title)return empty;
+  try{
+    const d=await jsonp('https://ws.audioscrobbler.com/2.0/?method=album.getinfo&autocorrect=1&format=json&api_key='+
+      encodeURIComponent(k)+'&artist='+encodeURIComponent(artist)+'&album='+encodeURIComponent(title));
+    const al=d&&d.album;if(!al)return empty;
+    const t=al.tags&&al.tags.tag;
+    const tags=t?(Array.isArray(t)?t:[t]).map(x=>x.name):[];
+    let about='';
+    if(al.wiki&&al.wiki.summary){
+      about=String(al.wiki.summary).replace(/<[^>]*>/g,'').replace(/\s+/g,' ')
+        .replace(/Read more on Last\.fm.*/i,'').trim();
+      if(about.length>700)about=about.slice(0,700).replace(/\s+\S*$/,'')+'...';
+    }
+    return{tags:tags,about:about,listeners:+al.listeners||0};
+  }catch(e){return empty}
+}
+
+/* ==========================================================
+   5. GENERI E MOOD
+   ========================================================== */
+const MOOD_RULES=[
+  ['malinconico',/sad|melanchol|somber|wistful|mournful|depress|bittersweet|autumn/i],
+  ['energico',/energetic|upbeat|banger|party|dance|driving|fast|frantic|punk|hardcore/i],
+  ['calmo',/calm|mellow|chill|relax|peaceful|soothing|quiet|gentle|soft|downtempo/i],
+  ['oscuro',/dark|bleak|sinister|grim|ominous|doom|gothic|industrial|nihilis/i],
+  ['sognante',/dreamy|dream pop|shoegaze|ethereal|hazy|hypnagog|floaty|blissful/i],
+  ['aggressivo',/aggressive|angry|brutal|heavy|violent|thrash|death metal|noise|harsh/i],
+  ['notturno',/night|late night|nocturnal|smoky|after hours|midnight/i],
+  ['epico',/epic|grandiose|cinematic|orchestral|anthemic|majestic|soaring/i],
+  ['ipnotico',/hypnotic|trance|repetitive|drone|krautrock|minimal|loop/i],
+  ['solare',/summer|sunny|happy|joyful|feel good|bright|uplifting|tropical/i],
+  ['romantico',/romantic|love|sensual|intimate|tender|sultry/i],
+  ['nostalgico',/nostalgi|retro|vintage|memories|throwback/i],
+  ['sperimentale',/experimental|avant|weird|abstract|challenging|difficult/i]
+];
+const GENRE_MOODS={'shoegaze':['sognante','malinconico'],'dream pop':['sognante'],'ambient':['calmo','ipnotico'],
+  'black metal':['oscuro','aggressivo'],'death metal':['aggressivo','oscuro'],'doom metal':['oscuro'],
+  'metal':['aggressivo'],'punk':['energico'],'hardcore':['aggressivo','energico'],'jazz':['notturno'],
+  'blues':['malinconico'],'soul':['romantico'],'r&b':['romantico'],'folk':['calmo','nostalgico'],
+  'country':['nostalgico'],'classical':['epico','calmo'],'techno':['ipnotico','energico'],'house':['energico'],
+  'electronic':['ipnotico'],'hip-hop':['energico'],'hip hop':['energico'],'rap':['energico'],
+  'post-rock':['epico','sognante'],'slowcore':['malinconico','calmo'],'emo':['malinconico'],
+  'noise':['aggressivo','sperimentale'],'drone':['ipnotico'],'trip-hop':['notturno'],
+  'disco':['solare','energico'],'funk':['energico','solare'],'reggae':['solare','calmo'],
+  'indie rock':['nostalgico'],'pop':['solare'],'rock':['energico']};
+const NOISE_TAGS=/^(albums i own|favorite|favourites|seen live|awesome|beautiful|great|good|best|love|music|album|albums|10s|00s|90s|80s|70s|60s|50s|20\d\d|19\d\d|\d+)$/i;
+const PURE_MOOD=/^(sad|sadness|melanchol\w*|happy|joyful|chill|chillout|chilled|relaxing|calm|calming|mellow|dark|bleak|energetic|upbeat|dreamy|ethereal|hazy|aggressive|angry|brutal|heavy|epic|cinematic|hypnotic|romantic|sensual|intimate|nostalgic|nostalgia|retro|vintage|summer|summery|sunny|atmospheric|moody|emotional|uplifting|bittersweet|somber|haunting|dreamlike|late night|night|nocturnal|peaceful|soothing|soft|gentle)$/i;
+
+function classify(rawTags,itunesGenre){
+  const tags=[];if(itunesGenre)tags.push(itunesGenre);
+  rawTags.forEach(t=>tags.push(t));
+  const clean=[],seen=new Set();
+  tags.forEach(t=>{if(!t)return;const s=String(t).trim().toLowerCase();
+    if(!s||s.length>28||NOISE_TAGS.test(s)||seen.has(s))return;seen.add(s);clean.push(s)});
+  const moods=new Set();
+  clean.forEach(t=>{MOOD_RULES.forEach(([m,re])=>{if(re.test(t))moods.add(m)});
+    if(GENRE_MOODS[t])GENRE_MOODS[t].forEach(m=>moods.add(m))});
+  const genres=clean.filter(t=>!PURE_MOOD.test(t)&&!MOOD_RULES.some(([m])=>m===t)).slice(0,7);
+  return{genres,moods:[...moods].slice(0,5)};
+}
+
+/* ==========================================================
+   6. AGGIUNTA
+   ========================================================== */
+function findExisting(artist,title){
+  const k=((artist||'')+'|'+(title||'')).toLowerCase();
+  return DB.albums.find(a=>key(a)===k.trim());
+}
+function addAlbum(c,quiet){
+  const ex=findExisting(c.artist,c.title);
+  if(ex&&!c.pending){toast('Già in libreria');if(!quiet)openAlbum(ex.id);return ex}
+  const al={id:uid(),title:c.title||'Da identificare',artist:c.artist||'',
+    year:c.year||null,cover:c.cover||'',genres:[],moods:[],tracks:c.tracks||null,
+    kind:c.kind||'album',itunesUrl:c.itunesUrl||'',deezerUrl:c.deezerUrl||'',mbid:c.mbid||'',
+    listenUrl:c.listenUrl||'',platform:c.platform||'',
+    about:'',listeners:0,
+    rating:null,comment:c.comment||'',fav:false,listened:false,listenedAt:null,
+    addedAt:now(),updatedAt:now(),src:c.src||'manual'};
+  if(c.pending){al.pending=true;al.link=c.link||''}
+  DB.albums.unshift(al);saveLocal();scheduleSync();renderAll();
+  if(c.pending){toast('Salvato da identificare');return al}
+  toast('Aggiunto: '+al.title);
+  if(!quiet)openAlbum(al.id);
+  /* scritto a mano: cerco anche copertina e dati mancanti nei cataloghi */
+  if(al.src==='manual')queueComplete(al.id,c.genre||'');
+  else queueEnrich(al.id,c.genre||'');
+  return al;
+}
+/* MusicBrainz ammette una richiesta al secondo: le metto in fila
+   invece di sparargliele in parallelo quando aggiungo piu album insieme */
+let enrichQ=Promise.resolve();
+function queueEnrich(id,genre){
+  enrichQ=enrichQ.then(()=>enrich(id,genre)).catch(()=>{})
+    .then(()=>new Promise(r=>setTimeout(r,1100)));
+  return enrichQ;
+}
+/* ---- completamento di un album scritto a mano ----
+   Gli archivi di metadati non hanno le copertine. Quindi dopo il salvataggio
+   cerco l'album anche nei cataloghi e adotto quello che manca. Adotto solo
+   con una somiglianza alta: meglio una scheda incompleta che l'album sbagliato. */
+async function autoComplete(id){
+  const a0=DB.albums.find(x=>x.id===id);
+  if(!a0||!a0.title||a0.pending)return null;
+  if(a0.cover&&a0.itunesUrl)return null;              /* gia' completa */
+  let rs=[];
+  try{rs=await searchAlbums(((a0.artist||'')+' '+a0.title).trim())}catch(e){}
+  if(!rs.length)return null;
+  /* confronto ignorando le parentesi finali: "Souvlaki (Deluxe)" e' comunque
+     l'album giusto da cui prendere copertina e tracce */
+  const base=s=>String(s||'').replace(/\s*\([^)]*\)\s*$/,'');
+  const m=rs.find(r=>txtSim(base(a0.title),base(r.title))>=.6&&
+    (!a0.artist||txtSim(a0.artist,r.artist)>=.5));
+  if(!m)return null;
+  const a=DB.albums.find(x=>x.id===id);if(!a)return null;
+  if(!a.cover&&m.cover)a.cover=m.cover;
+  if(!a.year&&m.year)a.year=m.year;
+  if(!a.tracks&&m.tracks)a.tracks=m.tracks;
+  if(!a.itunesUrl&&m.itunesUrl)a.itunesUrl=m.itunesUrl;
+  if(!a.deezerUrl&&m.deezerUrl)a.deezerUrl=m.deezerUrl;
+  if(!a.mbid&&m.mbid)a.mbid=m.mbid;
+  if((!a.kind||a.kind==='album')&&m.kind)a.kind=m.kind;
+  if(!a.artist&&m.artist)a.artist=m.artist;
+  save(a);renderAll();
+  if(openAlbum._id===id)openAlbum(id,true);
+  return m;
+}
+/* per gli album scritti a mano: prima completa, poi arricchisce i tag,
+   e in fondo assicura l'aggancio per il link di ascolto */
+function queueComplete(id,genre){
+  enrichQ=enrichQ.then(()=>autoComplete(id)).catch(()=>{})
+    .then(()=>enrich(id,genre)).catch(()=>{})
+    .then(()=>{const a=DB.albums.find(x=>x.id===id);
+      return a&&!a.listenUrl&&!a.itunesUrl&&!a.deezerUrl?ensureSeed(a):null}).catch(()=>{})
+    .then(()=>new Promise(r=>setTimeout(r,1100)));
+  return enrichQ;
+}
+async function enrich(id,itunesGenre,merge){
+  const a0=DB.albums.find(a=>a.id===id);if(!a0)return;
+  const [mb,lfm]=await Promise.all([fetchMusicBrainz(a0.artist,a0.title),fetchLastfm(a0.artist,a0.title)]);
+  const cl=classify([...lfm.tags,...mb.tags],itunesGenre);
+  const a=DB.albums.find(x=>x.id===id);if(!a)return;
+  if(merge){
+    /* unisco senza buttare via i tag messi a mano */
+    a.genres=[...new Set([...(a.genres||[]),...cl.genres])].slice(0,12);
+    a.moods=[...new Set([...(a.moods||[]),...cl.moods])].slice(0,8);
+  }else{
+    if(!(a.genres||[]).length)a.genres=cl.genres;
+    if(!(a.moods||[]).length)a.moods=cl.moods;
+  }
+  if(!a.year&&mb.year)a.year=mb.year;
+  if(!a.about&&lfm.about)a.about=lfm.about;
+  if(lfm.listeners)a.listeners=lfm.listeners;
+  /* tracce e link di ascolto non devono mai restare vuoti: se i negozi non
+     hanno l'album, il conteggio lo prendo dall'archivio */
+  if(!a.tracks&&!a.pending){
+    await sleep(1100);                       /* una richiesta al secondo */
+    const tc=await fetchTrackCount(a.artist,a.title);
+    const cur=DB.albums.find(x=>x.id===id);
+    if(cur&&tc&&!cur.tracks)cur.tracks=tc;
+  }
+  save(a);renderAll();
+  if(openAlbum._id===id)openAlbum(id,true);
+  return cl;
+}
+
+/* ---- riaggiornamento di tutta la libreria ----
+   MusicBrainz ammette una richiesta al secondo, quindi va in fila:
+   circa un secondo per album. Si puo' fermare e riprendere. */
+let bulkRunning=false,bulkStop=false;
+async function bulkEnrich(mode){
+  if(bulkRunning)return;
+  const list=DB.albums.filter(a=>!a.pending&&(mode==='missing'
+    ? !(a.genres||[]).length||!(a.moods||[]).length : true));
+  if(!list.length){toast('Niente da aggiornare');return}
+  if(mode==='reset'&&!confirm('Rifare i tag da zero per '+list.length+' album?\n\nI tag che hai aggiunto o corretto a mano andranno persi.'))return;
+  bulkRunning=true;bulkStop=false;
+  const box=document.getElementById('bulkBox'),bar=document.getElementById('bulkBar'),
+        txt=document.getElementById('bulkTxt');
+  box.style.display='block';
+  let done=0,changed=0;
+  for(const a of list){
+    if(bulkStop)break;
+    txt.innerHTML='<b>'+(done+1)+' / '+list.length+'</b> &middot; '+esc(a.title);
+    bar.style.width=Math.round(done/list.length*100)+'%';
+    const before=(a.genres||[]).length+(a.moods||[]).length;
+    if(mode==='reset'){a.genres=[];a.moods=[];a.about=''}
+    try{await enrich(a.id,'',true)}catch(e){}
+    if((a.genres||[]).length+(a.moods||[]).length!==before)changed++;
+    done++;
+    if(!bulkStop)await new Promise(r=>setTimeout(r,1100));
+  }
+  bar.style.width='100%';
+  txt.innerHTML=(bulkStop?'Fermato.':'Finito.')+' '+done+' album ripassati, '+changed+' aggiornati.';
+  bulkRunning=false;bulkStop=false;
+  renderAll();scheduleSync();
+}
+/* ---- link di ascolto ----
+   Spotify e' sempre la prima scelta; se l'album non c'e', ripiego sulla
+   piattaforma piu' vicina invece di lasciare la scheda senza niente. */
+const PLAT_ORDER=[['spotify','Spotify'],['appleMusic','Apple Music'],
+  ['youtubeMusic','YouTube Music'],['deezer','Deezer'],['tidal','Tidal'],
+  ['amazonMusic','Amazon Music'],['bandcamp','Bandcamp'],['soundcloud','SoundCloud'],
+  ['youtube','YouTube']];
+/* un aggancio nei cataloghi serve sia per il link sia per il numero di tracce */
+async function ensureSeed(a){
+  if(a.itunesUrl||a.deezerUrl)return a.itunesUrl||a.deezerUrl;
+  if(!a.title)return '';
+  let rs=[];
+  try{rs=await searchAlbums(((a.artist||'')+' '+a.title).trim())}catch(e){}
+  const base=s=>String(s||'').replace(/\s*\([^)]*\)\s*$/,'');
+  const m=rs.find(r=>txtSim(base(a.title),base(r.title))>=.6&&
+    (!a.artist||txtSim(a.artist,r.artist)>=.5));
+  if(!m)return '';
+  const cur=DB.albums.find(x=>x.id===a.id)||a;
+  if(m.itunesUrl&&!cur.itunesUrl)cur.itunesUrl=m.itunesUrl;
+  if(m.deezerUrl&&!cur.deezerUrl)cur.deezerUrl=m.deezerUrl;
+  if(m.tracks&&!cur.tracks)cur.tracks=m.tracks;
+  if(m.cover&&!cur.cover)cur.cover=m.cover;
+  save(cur);
+  return cur.itunesUrl||cur.deezerUrl||'';
+}
+async function resolveListen(a){
+  if(a.listenUrl)return{url:a.listenUrl,name:a.platform||'Ascolta'};
+  if(a.spotify)return{url:a.spotify,name:a.platName||'Spotify'};
+  const seed=await ensureSeed(a);
+  if(!seed)return null;
+  const r=await fetch('https://api.song.link/v1-alpha.1/links?url='+encodeURIComponent(seed));
+  if(!r.ok)throw new Error('odesli '+r.status);
+  const d=await r.json();
+  const L=(d&&d.linksByPlatform)||{};
+  for(const pair of PLAT_ORDER){
+    const k=pair[0];
+    if(L[k]&&L[k].url){
+      const cur=DB.albums.find(x=>x.id===a.id)||a;
+      cur.spotify=L[k].url;cur.platName=pair[1];save(cur);
+      return{url:L[k].url,name:pair[1]};
+    }
+  }
+  return null;
+}
+
+/* ==========================================================
+   7. RICERCA UI
+   ========================================================== */
+function resultRow(r,onclick){
+  const ex=findExisting(r.artist,r.title);
+  const b=document.createElement('button');b.className='res-item';
+  b.innerHTML=(r.cover?'<img src="'+esc(r.cover)+'" alt="" loading="lazy" onerror="crateImgFail(this)">':'<img alt="">')+
+    '<div style="min-width:0"><div class="t">'+esc(r.title)+'</div><div class="s">'+esc(r.artist)+
+    (r.year?' &middot; '+r.year:'')+'</div></div>'+(ex?'<div class="have">in libreria</div>':'');
+  b.onclick=()=>onclick(r);return b;
+}
+async function runSearch(archiveOnly){
+  const term=document.getElementById('q').value.trim();
+  const box=document.getElementById('results');
+  if(!term){box.innerHTML='';return}
+  document.activeElement&&document.activeElement.blur();
+  box.innerHTML='<div class="tiny muted" style="padding:8px"><span class="spinner"></span> '+
+    (archiveOnly?'cerco nell\'archivio...':'cerco...')+'</div>';
+  const rs=archiveOnly?await searchArchive(term):await searchAlbums(term);
+  box.innerHTML='';
+  if(!rs.length){
+    box.innerHTML='<div class="tiny muted" style="padding:8px">'+
+      (archiveOnly?'Niente nemmeno nell\'archivio. Prova a scrivere solo il nome dell\'artista, oppure inseriscilo a mano.'
+                 :'Nessun risultato. Prova "artista + titolo".')+'</div>';
+  }else{
+    if(archiveOnly||rs[0].src==='musicbrainz')
+      box.insertAdjacentHTML('beforeend','<div class="tiny muted" style="padding:2px 8px">Risultati dall\'archivio MusicBrainz: alcune copertine possono mancare.</div>');
+    rs.forEach(r=>box.appendChild(resultRow(r,x=>{
+      box.innerHTML='';document.getElementById('q').value='';
+      document.getElementById('sharedBox').innerHTML='';addAlbum(x)})));
+  }
+  /* per gli artisti che si sono ritirati dallo streaming: i negozi non li hanno,
+     l'archivio si. Il ripiego e' automatico solo se i negozi non trovano nulla,
+     quindi lascio anche il pulsante per forzarlo. */
+  if(!archiveOnly){
+    const b=document.createElement('button');
+    b.className='btn gh sm';b.style.marginTop='4px';
+    b.textContent='Non è quello giusto? Cerca nell\'archivio';
+    b.onclick=()=>runSearch(true);
+    box.appendChild(b);
+  }
+}
+
+/* ==========================================================
+   8. SCREENSHOT + OCR
+   ========================================================== */
+function shrink(dataUrl,max){
+  return new Promise(res=>{
+    const im=new Image();
+    im.onload=()=>{
+      const s=Math.min(1,max/Math.max(im.width,im.height));
+      const c=document.createElement('canvas');
+      c.width=Math.round(im.width*s);c.height=Math.round(im.height*s);
+      c.getContext('2d').drawImage(im,0,0,c.width,c.height);
+      try{res(c.toDataURL('image/jpeg',.72))}catch(e){res(dataUrl)}
+    };
+    im.onerror=()=>res(dataUrl);im.src=dataUrl;
+  });
+}
+let tessReady=null,tessWorker=null,tessLog=null;
+function loadTesseract(){
+  if(tessReady)return tessReady;
+  tessReady=new Promise((res,rej)=>{
+    const s=document.createElement('script');
+    s.src='https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
+    s.onload=()=>res(window.Tesseract);s.onerror=()=>rej(new Error('cdn'));
+    document.head.appendChild(s);
+  });
+  return tessReady;
+}
+/* un solo worker riutilizzato: crearlo costa qualche secondo, e con una coda
+   di screenshot ricrearlo ogni volta sarebbe tempo buttato */
+async function getWorker(){
+  if(tessWorker)return tessWorker;
+  const T=await loadTesseract();
+  tessWorker=await T.createWorker('eng',1,{logger:m=>{if(tessLog)tessLog(m)}});
+  await tessWorker.setParameters({tessedit_pageseg_mode:'3'});
+  return tessWorker;
+}
+function loadImg(src){
+  return new Promise((res,rej)=>{const im=new Image();
+    im.onload=()=>res(im);im.onerror=()=>rej(new Error('immagine'));im.src=src});
+}
+/* ---- preelaborazione ----
+   Misurato su screenshot reali: il testo bianco con ombra su fondo chiaro
+   (le copertine dei reel) diventa leggibile solo isolando i pixel quasi
+   bianchi; le liste di testo fitto invece si distruggono con la soglia e
+   vogliono solo un ingrandimento. Nessuna delle due vince sempre, quindi
+   le provo entrambe. */
+async function prepImage(dataUrl,mode){
+  const im=await loadImg(dataUrl);
+  const w=im.naturalWidth||im.width,h=im.naturalHeight||im.height;
+  if(!w||!h)throw new Error('immagine vuota');
+  /* Misurato: la lettura peggiora con scale non intere (2,066 perdeva righe che
+     2,0 leggeva), quindi la agganciamo al mezzo punto. Bersaglio ~1400px. */
+  let s=Math.max(1,Math.min(3,Math.round((1400/w)*2)/2));
+  const maxPx=9e6;                               /* tetto per la memoria dei telefoni */
+  if(w*s*h*s>maxPx)s=Math.max(1,Math.floor(Math.sqrt(maxPx/(w*h))*2)/2);
+  const c=document.createElement('canvas');
+  c.width=Math.max(1,Math.round(w*s));c.height=Math.max(1,Math.round(h*s));
+  const ctx=c.getContext('2d',{willReadFrequently:true});
+  ctx.imageSmoothingQuality='high';
+  ctx.drawImage(im,0,0,c.width,c.height);
+  const d=ctx.getImageData(0,0,c.width,c.height),p=d.data;
+  for(let i=0;i<p.length;i+=4){
+    let v;
+    if(mode==='chroma'){
+      /* Misurato sugli screenshot dei reel: le didascalie colorate hanno la
+         stessa luminosita' dello sfondo (96 contro 105) e in scala di grigi
+         spariscono. Ma sono molto piu' sature di muri, pelle e capelli. */
+      const mx=Math.max(p[i],p[i+1],p[i+2]),mn=Math.min(p[i],p[i+1],p[i+2]);
+      v=(mx-mn)>=90?0:255;
+    }else{
+      const lum=(p[i]*0.299+p[i+1]*0.587+p[i+2]*0.114)|0;
+      const th=OCR_TH[mode];
+      v=th?(lum>=th?0:255):lum;
+    }
+    p[i]=p[i+1]=p[i+2]=v;
+  }
+  ctx.putImageData(d,0,0);
+  return c;
+}
+/* quanto promette il testo letto: le coppie "artista - titolo" valgono molto,
+   le righe con almeno due parole vere abbastanza, i singoli frammenti poco */
+const WORD_RE=/^[A-Za-z][A-Za-z'’-]{2,}$/;
+function ocrScore(text){
+  let rich=0,words=0;
+  String(text||'').split('\n').forEach(l=>{
+    const t=l.replace(/\s+/g,' ').trim();
+    if(t.length<4)return;
+    const ws=t.split(' ')
+      .map(w=>w.replace(/^[^A-Za-z]+/,'').replace(/[^A-Za-z']+$/,''))
+      .filter(w=>WORD_RE.test(w));
+    words+=ws.length;
+    if(ws.length>=2)rich++;
+  });
+  return pairLines(text).length*5+rich*2+Math.min(words,20)*.5;
+}
+/* Soglie misurate su screenshot reali:
+   240 = testo bianco su fondo chiaro (le scritte sotto le copertine dei reel)
+   120 = testo colorato dentro l'artwork (titoli stampati sulla copertina)
+   nessuna soglia = liste di testo fitto, che le soglie distruggono */
+const OCR_TH={bright:240,mid:120,plain:0};
+/* Parole "vere": quattro lettere di seguito con una vocale. Servono per
+   ordinare i candidati, perche' il punteggio del testo non basta: misurato,
+   una passata piena di spazzatura puo' segnare piu' di una buona. */
+function plausibleWords(c){
+  return String(c||'').split(/\s+/)
+    /* via la punteggiatura ai bordi: "mono." e' una parola vera, e senza
+       questo un album come "mono. by RM" veniva buttato come spazzatura */
+    .map(t=>t.replace(/^[^A-Za-z]+/,'').replace(/[^A-Za-z'’-]+$/,''))
+    .filter(t=>/^[A-Za-z][A-Za-z'’-]{3,}$/.test(t)&&/[aeiouy]/i.test(t)).length;
+}
+function plausible(c){return plausibleWords(c)>=1}
+const OCR_MODES=['bright','chroma','plain'];   /* sempre */
+const OCR_RESCUE='mid';                        /* solo se le tre non bastano */
+async function ocrPass(state,mode,n){
+  if(state.cache[mode]!==undefined)return state.cache[mode];
+  state.status('<span class="spinner"></span> leggo il testo &middot; elaborazione '+n);
+  let text='';
+  try{
+    const canvas=await prepImage(state.dataUrl,mode);
+    const w=await getWorker();
+    const r=await w.recognize(canvas);
+    text=(r&&r.data&&r.data.text)||'';
+  }catch(e){text=''}
+  state.cache[mode]=text;
+  return text;
+}
+/* Non scelgo una passata: le eseguo tutte e METTO INSIEME i candidati.
+   Misurato su 15 screenshot veri: scegliendone una sola ne indovinavo 5,
+   unendole 13. Le query sbagliate non fanno danno, la ricerca le scarta. */
+async function ocrAll(state){
+  const texts={};
+  for(let i=0;i<OCR_MODES.length;i++)
+    texts[OCR_MODES[i]]=await ocrPass(state,OCR_MODES[i],i+1);
+  return texts;
+}
+function mergeCandidates(texts){
+  const pool=new Map();
+  Object.keys(texts).forEach(m=>{
+    ocrCandidates(texts[m]||'').forEach(c=>{
+      const k=c.toLowerCase();
+      if(!pool.has(k)||pool.get(k).length<c.length)pool.set(k,c);
+    });
+  });
+  return[...pool.values()]
+    .map(c=>({c:c,p:plausibleWords(c),l:c.length}))
+    .filter(x=>x.p>=1)
+    .sort((a,b)=>b.p-a.p||b.l-a.l)
+    .slice(0,6).map(x=>x.c);
+}
+function bestPairs(texts){
+  let best=[];
+  Object.keys(texts).forEach(m=>{
+    const p=pairLines(texts[m]||'');
+    if(p.length>best.length)best=p;
+  });
+  return best;
+}
+function anyYear(texts){
+  for(const m of Object.keys(texts)){const y=yearHint(texts[m]);if(y)return y}
+  return null;
+}
+/* l'anno fra parentesi e' un regalo: serve a scegliere il risultato giusto */
+function yearHint(text){
+  const m=String(text||'').match(/\((19\d\d|20\d\d)\)/);
+  return m?+m[1]:null;
+}
+const UI_NOISE=/^(play|shuffle|save|saved|follow|following|download|share|more|album|single|ep|home|search|library|premium|spotify|apple music|deezer|tidal|bandcamp|youtube|soundcloud|instagram|reels?|rate ?your ?music|albumoftheyear|aoty|discogs|now playing|liked songs|add to|listen|explore|popular|tracks?|songs?|min|sec|ago|likes?|comments?|followers?|monthly listeners|original audio|suggested for you|aggiungi un commento|scrivi un commento|mi piace|commenta|commenti|condividi|invia|segui|gi[àa] segui|visualizza traduzione|vedi traduzione|audio originale|visualizzazioni|risposte|rispondi|altro|suggeriti per te|consigliati per te|sponsorizzato|in evidenza|cerca|profilo|salva|salvato|riproduci|casuale|brani|ascolta|scaricato|scarica|\d+[:.]\d+|[\d.,]+ ?[km]?\s*%?|[\d.,]+ ?[km]?\s*(followers|listeners|plays|ratings|reviews|likes|mi piace|visualizzazioni)?)$/i;
+/* ---- righe del tipo "Artista - Titolo" ----
+   Sono il formato piu' comune nelle liste condivise. Vanno tenute intere:
+   spezzarle sul trattino distrugge l'abbinamento, che e' il dato piu' utile. */
+const PAIR_RE=/^(.{2,60}?)\s+[-–—]\s+(.{2,90}?)$/;
+function looksLikePair(line){
+  const m=String(line||'').match(PAIR_RE);
+  if(!m)return null;
+  const artist=m[1].trim(),title=m[2].trim();
+  if(!/[a-z]{2}/i.test(artist)||!/[a-z]{2}/i.test(title))return null;
+  if(UI_NOISE.test(artist)||UI_NOISE.test(title))return null;
+  if(/^\d{4}$/.test(artist))return null;                    /* "1993 - Album" */
+  if(/\b\d+\s*(songs?|tracks?|min|brani|tracce)\b/i.test(title))return null;
+  return{artist:artist,title:title,raw:artist+' - '+title};
+}
+function pairLines(text){
+  const out=[],seen=new Set();
+  String(text||'').split('\n').forEach(raw=>{
+    const l=raw.replace(/[|_~`^]+/g,' ').replace(/\s+/g,' ').trim();
+    if(l.length<5||l.length>110)return;
+    const p=looksLikePair(l);
+    if(!p)return;
+    const k=p.raw.toLowerCase();
+    if(seen.has(k))return;
+    seen.add(k);out.push(p);
+  });
+  return out;
+}
+/* via la punteggiatura di contorno: "(STADIUMS" e "Aggiungi un commento..."
+   devono poter essere riconosciuti per quello che sono */
+function cleanSeg(s){
+  return String(s||'').replace(/\s+/g,' ').trim()
+    .replace(/^[^A-Za-z0-9]+/,'')
+    .replace(/[^A-Za-z0-9?!%')\]]+$/,'')
+    .trim();
+}
+function ocrCandidates(text){
+  const lines=[];
+  text.split('\n').forEach(raw=>{
+    const whole=raw.replace(/[|_~`^]+/g,' ').replace(/\s+/g,' ').trim();
+    /* se la riga e' una coppia valida non la spezzo */
+    if(looksLikePair(whole)){lines.push(whole);return}
+    raw.replace(/[|_~`^]+/g,' ').split(/\s{2,}|\s+[-–·•]\s+/).forEach(seg=>{
+      const l=cleanSeg(seg);
+      /* almeno tre lettere: taglia via i frammenti della barra di stato
+         tipo "Ww 151%" senza toccare titoli veri come "The 1975".
+         Eccezione per le sigle tutte maiuscole (RM, MF, XX): sono nomi
+         d'artista veri e la regola dei tre caratteri li cancellava. */
+      const letters=(l.match(/[A-Za-z]/g)||[]).length;
+      const sigla=/^[A-Z]{2,4}$/.test(l);
+      if((letters>=3||sigla)&&l.length<60&&!UI_NOISE.test(l))lines.push(l);
+    });
+  });
+  const uniq=[...new Set(lines)];
+  const scored=uniq.map(l=>({l,s:(l.length>3&&l.length<40?2:0)+(/^[A-Z]/.test(l)?1:0)-(/\d{3,}/.test(l)?2:0)}))
+    .sort((a,b)=>b.s-a.s).map(x=>x.l);
+  const c=[];
+  /* la coppia in cima copre il caso "titolo + artista" su due righe */
+  if(scored.length>=2)c.push(scored[0]+' '+scored[1]);
+  /* le righe singole coprono il caso "lista di titoli nei commenti" */
+  scored.slice(0,7).forEach(l=>c.push(l));
+  /* le virgolette curve degli screenshot non aiutano la ricerca */
+  return[...new Set(c)].map(s=>cleanSeg(s.replace(/[“”„‟"]/g,'')))
+    .filter(s=>s.length>2).slice(0,8);
+}
+/* ---- lettura in blocco + revisione a carte ----
+   Prima leggo tutti gli screenshot, poi te li presento uno per uno gia'
+   pronti: tu accetti o correggi, senza aspettare fra l'uno e l'altro.
+   La revisione parte appena il primo e' pronto, mentre gli altri continuano. */
+let deck=[],deckIdx=0,deckTotal=0,deckDone=false,deckAdded=0,deckSkipped=0;
+function queueImages(files){
+  const list=Array.from(files||[]).filter(f=>f&&(String(f.type||'').startsWith('image/')));
+  if(!list.length){toast('Nessuna immagine riconosciuta');return}
+  runBatch(list);
+}
+async function runBatch(files){
+  deck=[];deckIdx=0;deckTotal=files.length;deckDone=false;deckAdded=0;deckSkipped=0;
+  show('add');
+  openDeck();
+  for(let i=0;i<files.length;i++){
+    try{
+      const item=await analyzeImage(files[i],(msg,pct)=>setDeckProgress(i,msg,pct));
+      deck.push(item);
+    }catch(e){deck.push({kind:'none',dataUrl:'',small:'',cands:[],results:[]})}
+    if(deck.length===1)renderCard();
+    else updateDeckMeta();
+  }
+  deckDone=true;
+  updateDeckMeta();
+  if(!deck.length)closeDeck();
+}
+function setDeckProgress(i,msg,pct){
+  const el=document.getElementById('deckProg');
+  if(!el)return;
+  el.innerHTML='<span class="spinner"></span> leggo lo screenshot '+(i+1)+' di '+deckTotal+
+    (msg?' &middot; <span class="muted">'+msg+'</span>':'');
+}
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+/* quanto il risultato trovato somiglia a cio' che c'era scritto nello screenshot */
+function txtSim(a,b){
+  const norm=s=>String(s||'').toLowerCase().replace(/[^a-z0-9\s]/g,' ')
+    .replace(/\s+/g,' ').trim().split(' ').filter(w=>w.length>1);
+  const A=new Set(norm(a)),B=new Set(norm(b));
+  if(!A.size||!B.size)return 0;
+  let i=0;A.forEach(w=>{if(B.has(w))i++});
+  return i/Math.max(A.size,B.size);
+}
+/* aggiunge senza aprire la scheda: nella revisione a carte si va avanti */
+function quietAdd(c){
+  const ex=findExisting(c.artist,c.title);
+  if(ex)return ex;
+  const al={id:uid(),title:c.title||'Senza titolo',artist:c.artist||'',
+    year:c.year||null,cover:c.cover||'',genres:[],moods:[],tracks:c.tracks||null,
+    kind:c.kind||'album',itunesUrl:c.itunesUrl||'',deezerUrl:c.deezerUrl||'',mbid:c.mbid||'',
+    listenUrl:c.listenUrl||'',platform:c.platform||'',
+    about:'',listeners:0,rating:null,comment:'',fav:false,listened:false,listenedAt:null,
+    addedAt:now(),updatedAt:now(),src:c.src||'ocr'};
+  DB.albums.unshift(al);saveLocal();scheduleSync();renderAll();
+  queueEnrich(al.id,c.genre||'');
+  return al;
+}
+
+/* ---- analisi di un singolo screenshot ----
+   Nessun effetto sull'interfaccia: legge, cerca e restituisce cosa ha capito.
+   Cosi' posso lavorarne quindici di fila e mostrarli tutti dopo. */
+const LIST_MAX=25;
+/* Ogni candidato porta al massimo 4 risultati: misurato su 54 screenshot,
+   il candidato buono spesso non e' il primo, e senza tetto il primo si
+   mangiava tutto il budget impedendo agli altri di essere cercati. */
+async function doSearchList(list){
+  const out=[],seen=new Set();
+  for(const c of list.slice(0,6)){
+    let rs=[];
+    try{rs=await searchAlbums(c)}catch(e){}
+    let presi=0;
+    for(const r of rs){
+      const k=(r.artist+'|'+r.title).toLowerCase();
+      if(seen.has(k))continue;
+      seen.add(k);out.push(r);
+      if(++presi>=4)break;
+    }
+    if(out.length>=15)break;
+  }
+  return out;
+}
+/* Quale risultato mettere per primo sulla carta: quello che somiglia di piu'
+   a QUALCHE cosa che ho letto nello screenshot, non quello trovato per primo. */
+function rankResults(results,cands,hint){
+  const punteggio=r=>{
+    const testo=((r.artist||'')+' '+(r.title||'')).trim();
+    let best=0;
+    cands.forEach(c=>{
+      const s=Math.max(txtSim(c,testo),txtSim(c,r.title||''));
+      if(s>best)best=s;
+    });
+    if(hint&&r.year===hint)best+=.25;
+    else if(hint&&r.year)best-=Math.min(.15,Math.abs(r.year-hint)/200);
+    return best;
+  };
+  return results.map(r=>({r:r,s:punteggio(r)}))
+    .sort((a,b)=>b.s-a.s).map(x=>x.r);
+}
+async function analyzeImage(file,onProgress){
+  const prog=onProgress||function(){};
+  const dataUrl=await new Promise((res,rej)=>{
+    const f=new FileReader();f.onload=()=>res(f.result);f.onerror=()=>rej(new Error('file'));
+    f.readAsDataURL(file);
+  });
+  const small=await shrink(dataUrl,420);
+  const state={dataUrl:dataUrl,cache:{},status:h=>prog(String(h).replace(/<[^>]*>/g,'').trim())};
+  const texts=await ocrAll(state);
+  const hint=anyYear(texts);
+
+  /* tre o piu' righe "Artista - Titolo": e' una lista da importare */
+  const pairs=bestPairs(texts);
+  if(pairs.length>=3){
+    const work=pairs.slice(0,LIST_MAX);
+    const rows=[];
+    for(let i=0;i<work.length;i++){
+      const p=work[i];
+      prog('cerco '+(i+1)+' di '+work.length);
+      const q=(p.artist+' '+p.title.replace(/\s*\([^)]*\)\s*$/,'')).trim();
+      let match=null;
+      try{const rs=await searchAlbums(q);match=rs[0]||null}catch(e){}
+      rows.push({p:p,match:match,on:!!match,
+        conf:match?(txtSim(p.title,match.title)*.65+txtSim(p.artist,match.artist)*.35):0});
+      await sleep(280);
+    }
+    return{kind:'list',dataUrl:dataUrl,small:small,rows:rows,
+           extra:Math.max(0,pairs.length-LIST_MAX),hint:hint,cands:[]};
+  }
+
+  let cands=mergeCandidates(texts);
+  const rescue=async()=>{
+    if(state.cache[OCR_RESCUE]!==undefined)return false;
+    prog('provo una lettura diversa');
+    texts[OCR_RESCUE]=await ocrPass(state,OCR_RESCUE,OCR_MODES.length+1);
+    const c=mergeCandidates(texts);
+    if(!c.length)return false;
+    cands=c;return true;
+  };
+  if(!cands.length)await rescue();
+  let results=cands.length?await doSearchList(cands):[];
+  if(!results.length&&await rescue())results=await doSearchList(cands);
+  const y=hint||anyYear(texts);
+  if(results.length>1)results=rankResults(results,cands,y);
+  return{kind:results.length?'single':'none',dataUrl:dataUrl,small:small,
+         cands:cands,results:results,hint:y};
+}
+
+/* ==========================================================
+   8b. REVISIONE A CARTE
+   ========================================================== */
+function openDeck(){
+  document.getElementById('deck').classList.add('on');
+  document.body.style.overflow='hidden';
+  renderCard();
+}
+function closeDeck(){
+  document.getElementById('deck').classList.remove('on');
+  document.body.style.overflow='';
+  if(deckAdded||deckSkipped){
+    toast(deckAdded+(deckAdded===1?' album aggiunto':' album aggiunti')+
+      (deckSkipped?', '+deckSkipped+' saltati':''));
+    show('lib');
+  }
+  deck=[];deckIdx=0;
+}
+function updateDeckMeta(){
+  const m=document.getElementById('deckMeta');
+  if(!m)return;
+  m.textContent=(deckIdx+1)+' di '+deckTotal+(deckDone?'':' · sto ancora leggendo gli altri');
+  const p=document.getElementById('deckBar');
+  if(p)p.style.width=Math.round((deckIdx/Math.max(1,deckTotal))*100)+'%';
+}
+function nextCard(){
+  deckIdx++;
+  if(deckIdx>=deck.length&&deckDone){closeDeck();return}
+  renderCard();
+}
+function deckShot(it){
+  return it.dataUrl?'<img src="'+esc(it.dataUrl)+'" alt="" style="width:100%;max-height:38vh;'+
+    'object-fit:contain;border-radius:12px;background:#000">':'';
+}
+function renderCard(){
+  const body=document.getElementById('deckBody');
+  updateDeckMeta();
+  if(deckIdx>=deck.length){
+    body.innerHTML='<div class="empty"><div class="big">&#128247;</div>'+
+      '<div id="deckProg"><span class="spinner"></span> sto leggendo...</div></div>';
+    return;
+  }
+  const it=deck[deckIdx];
+  if(it.kind==='list')return renderCardList(it,body);
+  if(it.kind==='none')return renderCardNone(it,body);
+  return renderCardSingle(it,body);
+}
+/* --- carta con una proposta --- */
+function renderCardSingle(it,body){
+  const r=it.results[it.pick||0];
+  const have=findExisting(r.artist,r.title);
+  const alt=it.results.length-1;
+  body.innerHTML=
+    deckShot(it)+
+    '<div style="display:flex;gap:12px;align-items:center;margin-top:14px;background:var(--bg2);'+
+      'border:1px solid var(--line);border-radius:12px;padding:11px">'+
+      (r.cover?'<img src="'+esc(r.cover)+'" alt="" onerror="crateImgFail(this)" style="width:60px;height:60px;'+
+        'border-radius:7px;object-fit:cover;flex:none;background:var(--bg3)">':
+        '<div style="width:60px;height:60px;border-radius:7px;background:var(--bg3);flex:none"></div>')+
+      '<div style="min-width:0;flex:1">'+
+        '<div style="font-weight:800;font-size:16px;line-height:1.25">'+esc(r.title)+'</div>'+
+        '<div class="muted" style="font-size:14px">'+esc(r.artist)+
+          (r.year?' &middot; '+r.year:'')+(r.kind&&r.kind!=='album'?' &middot; '+esc(r.kind):'')+'</div>'+
+        (have?'<div class="tiny" style="color:var(--ok)">gi&agrave; in libreria</div>':'')+
+      '</div></div>'+
+    (it.cands&&it.cands[0]?'<div class="tiny muted" style="margin-top:7px">ho letto: &ldquo;'+esc(it.cands[0])+'&rdquo;</div>':'')+
+    '<div class="row" style="margin-top:14px;gap:10px">'+
+      '<button class="btn" id="dkYes" style="flex:1;padding:15px;font-size:16px;background:var(--ok);color:#062">&#10003; Aggiungi</button>'+
+      '<button class="btn gh" id="dkNo" style="flex:1;padding:15px;font-size:16px">&#10005; Salta</button>'+
+    '</div>'+
+    '<div class="row" style="margin-top:10px">'+
+      (alt>0?'<button class="btn gh sm" id="dkAlt">Non &egrave; questo ('+alt+' alternative)</button>':'')+
+      '<button class="btn gh sm" id="dkMan">Correggi a mano</button>'+
+    '</div>'+
+    '<div id="dkAlts" style="display:none;margin-top:10px"></div>';
+  document.getElementById('dkYes').onclick=()=>{quietAdd(r);deckAdded++;nextCard()};
+  document.getElementById('dkNo').onclick=()=>{deckSkipped++;nextCard()};
+  const a=document.getElementById('dkAlt');
+  if(a)a.onclick=()=>{
+    const box=document.getElementById('dkAlts');
+    if(box.style.display==='block'){box.style.display='none';return}
+    box.style.display='block';box.innerHTML='';
+    it.results.forEach((x,i)=>{
+      if(i===(it.pick||0))return;
+      box.appendChild(resultRow(x,()=>{it.pick=i;renderCard()}));
+    });
+  };
+  document.getElementById('dkMan').onclick=()=>deckManual(it,r);
+}
+/* --- carta senza proposta --- */
+function renderCardNone(it,body){
+  body.innerHTML=
+    deckShot(it)+
+    '<div class="warn" style="margin-top:14px">Non sono riuscito a capire quale album sia.'+
+      (it.cands&&it.cands.length?'<br><span class="tiny">ho letto: '+esc(it.cands.slice(0,2).join(' · '))+'</span>':'')+
+    '</div>'+
+    '<div class="row"><div class="grow"><input type="text" id="dkQ" placeholder="cerca: artista + titolo" '+
+      'value="'+esc((it.cands&&it.cands[0])||'')+'" enterkeyhint="search"></div>'+
+      '<button class="btn" id="dkGo">Cerca</button></div>'+
+    '<div class="res" id="dkRes"></div>'+
+    '<div class="row" style="margin-top:12px">'+
+      '<button class="btn gh sm" id="dkMan">Inserisci a mano con questo screenshot</button>'+
+      '<button class="btn gh sm" id="dkNo" style="margin-left:auto">Salta</button>'+
+    '</div>';
+  const go=async()=>{
+    const q=document.getElementById('dkQ').value.trim();
+    if(!q)return;
+    const rb=document.getElementById('dkRes');
+    rb.innerHTML='<div class="tiny muted" style="padding:6px"><span class="spinner"></span> cerco...</div>';
+    const rs=await searchAlbums(q);
+    rb.innerHTML='';
+    if(!rs.length){rb.innerHTML='<div class="tiny muted" style="padding:6px">Nessun risultato.</div>';return}
+    rs.forEach(x=>rb.appendChild(resultRow(x,y=>{quietAdd(y);deckAdded++;nextCard()})));
+  };
+  document.getElementById('dkGo').onclick=go;
+  document.getElementById('dkQ').addEventListener('keydown',e=>{if(e.key==='Enter')go()});
+  document.getElementById('dkNo').onclick=()=>{deckSkipped++;nextCard()};
+  document.getElementById('dkMan').onclick=()=>deckManual(it,null);
+}
+/* --- carta con una lista di album --- */
+function renderCardList(it,body){
+  const trovati=it.rows.filter(r=>r.match).length;
+  body.innerHTML=
+    deckShot(it)+
+    '<div class="tiny muted" style="margin-top:10px"><b>&Egrave; una lista.</b> '+
+      trovati+' album trovati su '+it.rows.length+'. Togli la spunta a quelli che non vuoi.'+
+      (it.extra?' ('+it.extra+' righe oltre il limite non elaborate)':'')+'</div>'+
+    '<div id="dkList" style="display:grid;gap:6px;margin-top:10px"></div>'+
+    '<div class="row" style="margin-top:12px;gap:10px">'+
+      '<button class="btn" id="dkYes" style="flex:1;padding:14px;background:var(--ok);color:#062">Aggiungi i selezionati</button>'+
+      '<button class="btn gh" id="dkNo" style="padding:14px">Salta</button>'+
+    '</div>';
+  const L=document.getElementById('dkList');
+  it.rows.forEach((r,i)=>{
+    const have=r.match?findExisting(r.match.artist,r.match.title):null;
+    if(have)r.on=false;
+    const low=r.match&&r.conf<.45;
+    const row=document.createElement('label');
+    row.style.cssText='display:flex;gap:10px;align-items:center;background:var(--bg2);'+
+      'border:1px solid var(--line);border-radius:10px;padding:8px;cursor:pointer';
+    row.innerHTML='<input type="checkbox" data-i="'+i+'"'+(r.on?' checked':'')+
+      (r.match?'':' disabled')+' style="width:auto;flex:none;margin:0;accent-color:var(--acc)">'+
+      (r.match&&r.match.cover?'<img src="'+esc(r.match.cover)+'" alt="" loading="lazy" onerror="crateImgFail(this)" '+
+        'style="width:42px;height:42px;border-radius:5px;object-fit:cover;flex:none;background:var(--bg3)">':
+        '<div style="width:42px;height:42px;border-radius:5px;background:var(--bg3);flex:none"></div>')+
+      '<div style="min-width:0;flex:1">'+
+        (r.match?'<div style="font-weight:700;font-size:13.5px">'+esc(r.match.title)+'</div>'+
+          '<div class="tiny muted">'+esc(r.match.artist)+(r.match.year?' &middot; '+r.match.year:'')+'</div>'
+        :'<div style="font-weight:700;font-size:13.5px;color:var(--fg3)">non trovato</div>'+
+          '<div class="tiny muted">'+esc(r.p.raw)+'</div>')+
+        (low?'<div class="tiny" style="color:var(--acc2)">controlla: c\'era &ldquo;'+esc(r.p.raw)+'&rdquo;</div>':'')+
+        (have?'<div class="tiny" style="color:var(--ok)">gi&agrave; in libreria</div>':'')+
+      '</div>';
+    L.appendChild(row);
+  });
+  L.addEventListener('change',e=>{
+    const i=e.target&&e.target.dataset&&e.target.dataset.i;
+    if(i!==undefined)it.rows[+i].on=e.target.checked;
+  });
+  document.getElementById('dkYes').onclick=()=>{
+    let n=0;it.rows.forEach(r=>{if(r.on&&r.match){quietAdd(r.match);n++}});
+    deckAdded+=n;nextCard();
+  };
+  document.getElementById('dkNo').onclick=()=>{deckSkipped++;nextCard()};
+}
+/* correggi a mano, poi torna al mazzo */
+function deckManual(it,r){
+  document.getElementById('deck').classList.remove('on');
+  manualForm({title:(r&&r.title)||(it.cands&&it.cands[0])||'',artist:(r&&r.artist)||'',
+    year:(r&&r.year)||it.hint||null,cover:it.small,
+    onDone:added=>{
+      if(added)deckAdded++;else deckSkipped++;
+      document.getElementById('deck').classList.add('on');
+      nextCard();
+    }});
+}
+
+/* ==========================================================
+   9. CONDIVISIONE DA ANDROID
+   ========================================================== */
+async function consumeShare(){
+  try{
+    const p=new URLSearchParams(location.search);
+    if(p.get('go'))show(p.get('go')==='rand'?'rand':'add');
+    if(!p.has('shared')){cleanUrl();return}
+    cleanUrl();
+    const c=await caches.open('crate-share');
+    const mr=await c.match('shared-meta');
+    const meta=mr?await mr.json():{};
+    await c.delete('shared-meta');
+    const n=+meta.count||0,files=[];
+    for(let i=0;i<n;i++){
+      const r=await c.match('shared-image-'+i);
+      if(!r)continue;
+      const blob=await r.blob();
+      await c.delete('shared-image-'+i);
+      files.push(new File([blob],'condiviso-'+(i+1)+'.png',{type:blob.type||'image/png'}));
+    }
+    if(files.length){queueImages(files);return}
+    const txt=[meta.title,meta.text,meta.url].filter(Boolean).join(' ').trim();
+    if(txt)sharedText(txt);
+  }catch(e){
+    /* una condivisione malformata non deve impedire l'apertura dell'app */
+    toast('Non ho capito la condivisione: cerca a mano');
+  }
+}
+function cleanUrl(){try{history.replaceState({},'',location.pathname)}catch(e){}}
+function sharedText(txt){
+  show('add');
+  const url=(txt.match(/https?:\/\/\S+/)||[''])[0];
+  const words=txt.replace(/https?:\/\/\S+/g,'').replace(/\s+/g,' ').trim();
+  const p=url?parseMusicUrl(url):{};
+  const known=!!(p.title||p.artist);   /* Bandcamp e SoundCloud li so leggere */
+  const box=document.getElementById('sharedBox');
+  box.innerHTML='<div class="banner"><div style="min-width:0;flex:1">'+
+    '<b>Ho ricevuto una condivisione</b><div class="tiny muted" style="margin-top:3px;word-break:break-all">'+
+    esc(url||words||'(vuota)')+'</div>'+
+    '<div class="tiny muted" style="margin-top:6px">'+
+      (known?'Riconosciuto come <b>'+esc(p.platform)+'</b>: posso compilare la scheda dall\'indirizzo, senza cercare niente.'
+            :'Instagram condivide il link del reel, non l\'immagine: per la copertina fai lo screenshot e condividi quello.')+
+    '</div></div>'+
+    (known?'<button class="btn sm" id="shFill">Compila la scheda</button>':'')+
+    '<button class="btn '+(known?'gh ':'')+'sm" id="shPend">Salva da identificare</button>'+
+    '<button class="btn gh sm" id="shX">Ignora</button></div>';
+  if(words&&!known){document.getElementById('q').value=words;runSearch()}
+  const fill=document.getElementById('shFill');
+  if(fill)fill.onclick=()=>{
+    box.innerHTML='';
+    manualForm({listenUrl:p.listenUrl,title:p.title,artist:p.artist});
+  };
+  document.getElementById('shPend').onclick=()=>{
+    addAlbum({pending:true,link:url,listenUrl:p.listenUrl||'',platform:p.platform||'',
+      comment:words?('Condiviso: '+words):'',title:p.title||'Da identificare',artist:p.artist||''});
+    box.innerHTML='';show('lib');
+  };
+  document.getElementById('shX').onclick=()=>{box.innerHTML=''};
+}
+
+/* ==========================================================
+   10. INSERIMENTO MANUALE
+   ========================================================== */
+/* Bandcamp e SoundCloud non sono interrogabili da una pagina web (API chiuse,
+   nessun header CORS). Ma l'indirizzo stesso contiene artista e titolo:
+   li ricavo dalla stringa, senza toccare la rete. */
+function parseMusicUrl(u){
+  const out={artist:'',title:'',listenUrl:'',platform:''};
+  let url;try{url=new URL(String(u||'').trim())}catch(e){return out}
+  if(!/^https?:$/.test(url.protocol))return out;
+  const host=url.hostname.replace(/^www\./,'');
+  const parts=url.pathname.split('/').filter(Boolean);
+  const pretty=s=>String(s||'').replace(/[-_]+/g,' ').replace(/\s+/g,' ').trim()
+    .replace(/\b\w/g,c=>c.toUpperCase());
+  out.listenUrl=url.href;
+  if(/(^|\.)bandcamp\.com$/.test(host)){
+    out.platform='Bandcamp';
+    out.artist=pretty(host.replace(/\.bandcamp\.com$/,''));
+    const i=parts.indexOf('album');
+    if(i>=0&&parts[i+1])out.title=pretty(parts[i+1]);
+    return out;
+  }
+  if(host==='soundcloud.com'){
+    out.platform='SoundCloud';
+    if(parts[0])out.artist=pretty(parts[0]);
+    const i=parts.indexOf('sets');
+    if(i>=0&&parts[i+1])out.title=pretty(parts[i+1]);
+    else if(parts[1])out.title=pretty(parts[1]);
+    return out;
+  }
+  const known={'open.spotify.com':'Spotify','music.apple.com':'Apple Music',
+    'youtube.com':'YouTube','youtu.be':'YouTube','music.youtube.com':'YouTube Music',
+    'deezer.com':'Deezer','tidal.com':'Tidal','archive.org':'Internet Archive'};
+  out.platform=known[host]||host;
+  return out;
+}
+function manualForm(pre){
+  pre=pre||{};openAlbum._id=null;
+  document.getElementById('modal').innerHTML='<button class="mclose" id="mclose2">&times;</button>'+
+   '<div class="mbody"><h2>Inserimento manuale</h2>'+
+   '<div><label class="f">Link Bandcamp / SoundCloud / altro</label>'+
+   '<input type="text" id="mnL" placeholder="incolla qui e compilo io" value="'+esc(pre.listenUrl||'')+'" autocapitalize="none" spellcheck="false">'+
+   '<div class="hint" id="mnLHint">Da un indirizzo Bandcamp o SoundCloud ricavo artista e titolo da solo. Resta salvato come pulsante di ascolto.</div></div>'+
+   '<div class="row"><div class="grow"><label class="f">Titolo</label><input type="text" id="mnT" value="'+esc(pre.title||'')+'"></div>'+
+   '<div class="grow"><label class="f">Artista</label><input type="text" id="mnA" value="'+esc(pre.artist||'')+'"></div>'+
+   '<div style="width:110px"><label class="f">Anno</label><input type="number" id="mnY" value="'+(pre.year||'')+'"></div></div>'+
+   '<div><label class="f">Tipo</label><select id="mnK">'+
+     ['album','EP','singolo','raccolta'].map(k=>'<option value="'+k+'"'+(pre.kind===k?' selected':'')+'>'+k+'</option>').join('')+
+   '</select></div>'+
+   (pre.cover?'<div><label class="f">Copertina</label>'+
+     '<label style="display:flex;gap:9px;align-items:center;cursor:pointer">'+
+     '<input type="checkbox" id="mnUseShot" style="width:auto;margin:0;accent-color:var(--acc)">'+
+     '<img src="'+esc(pre.cover)+'" style="width:70px;border-radius:8px">'+
+     '<span class="tiny muted">usa lo screenshot come copertina<br>'+
+     '(spesso conviene lasciarlo vuoto: la trovi meglio dopo dalla scheda)</span></label></div>':'')+
+   '<div><label class="f">Copertina da URL (opzionale)</label><input type="text" id="mnC" placeholder="https://..." value="'+esc(pre.coverUrl||'')+'"></div>'+
+   '<div id="mnSug"></div>'+
+   '<div class="row"><button class="btn" id="mnSave">Salva</button></div>'+
+   '<div class="hint">Salvando, cerco da solo copertina, anno, generi e mood. '+
+   'Se mentre scrivi compare l&rsquo;album giusto qui sopra, toccalo: &egrave; la strada pi&ugrave; veloce.</div></div>';
+  document.getElementById('mask').classList.add('on');
+  document.getElementById('mclose2').onclick=closeModal;
+  /* incollando il link riempio i campi ancora vuoti */
+  const lin=document.getElementById('mnL');
+  const fromLink=()=>{
+    const p=parseMusicUrl(lin.value);
+    if(!p.listenUrl)return;
+    const T=document.getElementById('mnT'),A=document.getElementById('mnA');
+    if(p.title&&!T.value.trim())T.value=p.title;
+    if(p.artist&&!A.value.trim())A.value=p.artist;
+    document.getElementById('mnLHint').innerHTML=p.platform
+      ? 'Riconosciuto: <b>'+esc(p.platform)+'</b>'+(p.title?' &middot; ho compilato i campi, correggi quello che serve.':'')
+      : '';
+  };
+  lin.addEventListener('input',fromLink);
+  lin.addEventListener('paste',()=>setTimeout(fromLink,30));
+  if(pre.listenUrl)fromLink();
+  /* suggerimenti dal vivo: se l'album esiste nei cataloghi, meglio prenderlo
+     da li' con tutti i dati che scriverlo a mano */
+  const sug=document.getElementById('mnSug');
+  let sugT=null;
+  const cercaSug=()=>{
+    clearTimeout(sugT);
+    sugT=setTimeout(async()=>{
+      const t=document.getElementById('mnT').value.trim();
+      const ar=document.getElementById('mnA').value.trim();
+      if(t.length<3){sug.innerHTML='';return}
+      sug.innerHTML='<div class="tiny muted" style="padding:6px 2px"><span class="spinner"></span> cerco...</div>';
+      let rs=[];try{rs=await searchAlbums((ar+' '+t).trim())}catch(e){}
+      if(!rs.length){sug.innerHTML='<div class="tiny muted" style="padding:6px 2px">Nessun album trovato con questi dati: salvando resta quello che hai scritto.</div>';return}
+      sug.innerHTML='<label class="f" style="margin-top:10px">&Egrave; uno di questi?</label>';
+      const box=document.createElement('div');box.className='res';box.style.marginTop='0';
+      rs.slice(0,4).forEach(r=>box.appendChild(resultRow(r,x=>{
+        const done=pre.onDone;
+        closeModal();
+        addAlbum(x,!!done);
+        if(done)done(true);
+      })));
+      sug.appendChild(box);
+    },600);
+  };
+  ['mnT','mnA'].forEach(i=>document.getElementById(i).addEventListener('input',cercaSug));
+  if((pre.title||'').length>=3)cercaSug();
+  document.getElementById('mnSave').onclick=()=>{
+    const t=document.getElementById('mnT').value.trim();
+    if(!t){toast('Serve almeno il titolo');return}
+    const p=parseMusicUrl(document.getElementById('mnL').value);
+    const useShot=document.getElementById('mnUseShot');
+    closeModal();
+    addAlbum({title:t,artist:document.getElementById('mnA').value.trim(),
+      year:+document.getElementById('mnY').value||null,
+      kind:document.getElementById('mnK').value,
+      listenUrl:p.listenUrl,platform:p.platform,
+      cover:document.getElementById('mnC').value.trim()||
+        ((useShot&&useShot.checked&&pre.cover)?pre.cover:''),src:'manual'},pre.onDone?true:false);
+    if(pre.onDone)pre.onDone(true);
+  };
+  if(pre.onDone){
+    const c=document.getElementById('mclose2');
+    c.onclick=()=>{closeModal();pre.onDone(false)};
+  }
+}
+
+/* ==========================================================
+   11. SCHEDA ALBUM
+   ========================================================== */
+function linkSet(a,all){
+  const q=encodeURIComponent(((a.artist||'')+' '+(a.title||'')).trim());
+  const set=[
+    ['Album of the Year','https://www.albumoftheyear.org/search/?q='+q,'voti e recensioni, critica e utenti'],
+    ['RateYourMusic','https://rateyourmusic.com/search?searchterm='+q+'&searchtype=l','la community piu approfondita, forte sul passato'],
+    ['Last.fm','https://www.last.fm/search/albums?q='+q,'da qui arrivano i tag e i mood'],
+    ['YouTube','https://www.youtube.com/results?search_query='+q,'per ascoltare cio che non sta sullo streaming'],
+    ['Bandcamp','https://bandcamp.com/search?q='+q,'autoproduzioni e artisti fuori dalle piattaforme'],
+    ['Discogs','https://www.discogs.com/search/?type=release&q='+q,'edizioni fisiche, ristampe e dischi rari']
+  ];
+  return all?set:set.filter(l=>P.links[LINK_KEYS[l[0]]]!==false);
+}
+let detailOpen=false,linksOpen=false;
+function openAlbum(id,keepScroll){
+  const a=DB.albums.find(x=>x.id===id);if(!a)return;
+  if(!keepScroll){detailOpen=false;linksOpen=false}
+  const sc=keepScroll?document.getElementById('mask').scrollTop:0;
+  openAlbum._id=id;
+  let stars='';
+  for(let i=1;i<=10;i++)stars+='<button data-r="'+i+'" class="'+(a.rating>=i?'on':'')+'">&#9733;</button>';
+  /* riepilogo compatto: massimo 3 generi + 2 mood */
+  const qg=(a.genres||[]).slice(0,3),qm=(a.moods||[]).slice(0,2);
+  const extra=Math.max(0,(a.genres||[]).length-qg.length)+Math.max(0,(a.moods||[]).length-qm.length);
+  const quick=qg.map(t=>'<span class="chip g">'+esc(t)+'</span>').join('')+
+              qm.map(t=>'<span class="chip m">'+esc(t)+'</span>').join('')||
+              '<span class="tiny muted">nessun tag ancora</span>';
+  const meta=[a.kind&&a.kind!=='album'?a.kind:'',a.year||'',a.tracks?a.tracks+' tracce':'']
+    .filter(Boolean).join(' &middot; ');
+  document.getElementById('modal').innerHTML=
+  '<button class="mclose" id="mclose3">&times;</button>'+
+  '<div class="mhead">'+
+    (a.cover?'<img src="'+esc(a.cover)+'" alt="" onerror="crateImgFail(this)">':'<div class="ph">&#127925;</div>')+
+    '<div style="min-width:0;align-self:center">'+
+      '<h2 style="font-size:22px;margin:0 0 3px">'+esc(a.title)+'</h2>'+
+      (a.artist?'<button id="bArt" class="muted" style="font-size:15px;padding:0;text-align:left;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:3px">'+esc(a.artist)+'</button>':'<div class="muted">artista ?</div>')+
+      (vis('meta')?'<div class="tiny muted" style="margin-top:6px">'+(meta||'anno ?')+'</div>':'')+
+      (a.link?'<div class="tiny" style="margin-top:6px;word-break:break-all"><a href="'+esc(a.link)+'" target="_blank" rel="noopener">link condiviso &#8599;</a></div>':'')+
+      '<div class="row" style="margin-top:12px;gap:7px">'+
+        (a.pending?'<button class="btn sm acc" id="bIdent">Identifica l\'album</button>':
+        '<button class="btn sm '+(a.listened?'':'gh')+'" id="bLis">'+(a.listened?'&#10003; Ascoltato':'Segna ascoltato')+'</button>')+
+        '<button class="btn sm gh" id="bFav" style="'+(a.fav?'border-color:var(--acc);color:var(--acc)':'')+'">'+(a.fav?'&#9829;':'&#9825;')+' Preferito</button>'+
+        (a.pending||!vis('listen')?'':'<button class="btn sm gh" id="bSpot">&#9654; '+
+          esc(a.listenUrl?(a.platform||'Ascolta'):(a.spotify?(a.platName||'Spotify'):'Spotify'))+'</button>')+
+      '</div></div></div>'+
+  '<div class="mbody">'+
+    '<div class="sec"><label class="f">Voto</label><div class="stars" id="stars">'+stars+
+      '<span class="muted tiny" style="margin-left:9px">'+(a.rating?a.rating+'/10':'non votato')+'</span>'+
+      (a.rating?' <button class="btn gh sm" id="bClr" style="margin-left:6px">azzera</button>':'')+'</div></div>'+
+    (vis('quick')?'<div class="sec"><label class="f">In due parole</label>'+
+      '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">'+quick+
+      (vis('details')?'<button class="btn gh sm" id="bMore" style="margin-left:4px">Dettagli'+(extra?' (+'+extra+')':'')+'</button>':'')+
+      '</div></div>':'')+
+    (vis('details')?'<div id="detail" style="border-top:1px solid var(--line);padding-top:16px;display:'+(detailOpen?'block':'none')+'">'+
+      '<label class="f">Generi</label><div id="gz" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px"></div>'+
+      '<label class="f">Mood</label><div id="mz" style="display:flex;gap:6px;flex-wrap:wrap"></div>'+
+      (a.about&&vis('about')?'<div style="margin-top:14px"><label class="f">Descrizione</label>'+
+        '<div class="tiny muted" style="line-height:1.6">'+esc(a.about)+'</div></div>':'')+
+      ((vis('dates')||vis('listeners'))?'<div style="margin-top:14px"><label class="f">Dettagli</label><div class="tiny muted" style="line-height:1.7">'+
+        'Tipo: '+esc(a.kind||'album')+'<br>'+
+        (a.listeners&&vis('listeners')?'Ascoltatori su Last.fm: '+a.listeners.toLocaleString('it-IT')+'<br>':'')+
+        (vis('dates')?'Aggiunto: '+new Date(a.addedAt||now()).toLocaleDateString('it-IT')+
+          (a.listenedAt?'<br>Ascoltato: '+new Date(a.listenedAt).toLocaleDateString('it-IT'):''):'')+
+        '</div></div>':'')+
+    '</div>':'')+
+    '<div class="sec"><label class="f">Commento</label><textarea id="cmt" placeholder="Cosa ne pensi, dove l\'hai trovato...">'+esc(a.comment)+'</textarea></div>'+
+    (vis('links')&&linkSet(a).length?'<div class="sec"><button id="bLinks" class="f" style="padding:0;letter-spacing:.7px">'+
+      (linksOpen?'&#9662;':'&#9656;')+' Link esterni ('+linkSet(a).length+')</button>'+
+      '<div id="linkBox" style="display:'+(linksOpen?'block':'none')+';margin-top:10px">'+
+      linkSet(a).map(l=>'<a href="'+l[1]+'" target="_blank" rel="noopener" '+
+        'style="display:block;background:var(--bg3);border:1px solid var(--line);border-radius:8px;padding:9px 12px;margin-bottom:6px;color:var(--fg)">'+
+        '<b style="font-size:13.5px">'+l[0]+' &#8599;</b>'+
+        '<div class="tiny muted" style="margin-top:1px">'+l[2]+'</div></a>').join('')+
+      '</div></div>':'')+
+    '<div class="sec"><label class="f">Copertina</label>'+
+      '<div class="row" style="gap:7px">'+
+        '<button class="btn gh sm" id="bCovFind">Cerca online</button>'+
+        '<button class="btn gh sm" id="bCovUrl">Da indirizzo</button>'+
+        '<button class="btn gh sm" id="bCovUp">Carica immagine</button>'+
+        (a.cover?'<button class="btn gh sm" id="bCovDel">Rimuovi</button>':'')+
+      '</div><div id="covBox" style="margin-top:10px"></div>'+
+      '<input type="file" id="covFile" accept="image/*" hidden></div>'+
+    '<div class="sec row"><button class="btn gh sm" id="bRe">Riprova tag automatici</button>'+
+      (a.pending||!vis('similar')?'':'<button class="btn gh sm" id="bSim">Simili a questo</button>')+
+      '<button class="btn gh sm" id="bDel" style="border-color:var(--acc);color:var(--acc);margin-left:auto">Elimina</button></div>'+
+  '</div>';
+  const mask=document.getElementById('mask');mask.classList.add('on');mask.scrollTop=sc;
+  document.getElementById('mclose3').onclick=closeModal;
+
+  const chips=(host,arr,cls,k)=>{
+    const h=document.getElementById(host);if(!h)return;h.innerHTML='';
+    (arr||[]).forEach((t,i)=>{
+      const s=document.createElement('span');s.className='chip '+cls;
+      s.innerHTML=esc(t)+' <button>&times;</button>';
+      s.querySelector('button').onclick=()=>{a[k].splice(i,1);save(a);openAlbum(id,true);renderAll()};
+      h.appendChild(s);
+    });
+    const add=document.createElement('span');add.className='chip add';add.textContent='+ aggiungi';
+    add.onclick=()=>{const v=prompt('Nuovo '+(k==='genres'?'genere':'mood')+':');
+      if(v&&v.trim()){(a[k]=a[k]||[]).push(v.trim().toLowerCase());save(a);openAlbum(id,true);renderAll()}};
+    h.appendChild(add);
+  };
+  chips('gz',a.genres,'g','genres');chips('mz',a.moods,'m','moods');
+
+  document.getElementById('stars').querySelectorAll('button[data-r]').forEach(b=>{
+    b.onclick=()=>{a.rating=+b.dataset.r;a.pending=false;
+      if(!a.listened){a.listened=true;a.listenedAt=now()}
+      save(a);openAlbum(id,true);renderAll()};
+  });
+  const clr=document.getElementById('bClr');
+  if(clr)clr.onclick=()=>{a.rating=null;save(a);openAlbum(id,true);renderAll()};
+  const lis=document.getElementById('bLis');
+  if(lis)lis.onclick=()=>{a.listened=!a.listened;a.listenedAt=a.listened?now():null;
+    save(a);openAlbum(id,true);renderAll()};
+  const ident=document.getElementById('bIdent');
+  if(ident)ident.onclick=()=>{closeModal();show('add');
+    document.getElementById('q').value=(a.title==='Da identificare'?'':a.title)||'';
+    document.getElementById('q').focus()};
+  document.getElementById('bFav').onclick=()=>{a.fav=!a.fav;save(a);openAlbum(id,true);renderAll()};
+  /* espandi i dettagli (i blocchi possono essere spenti dalle preferenze) */
+  const bMore=document.getElementById('bMore');
+  if(bMore)bMore.onclick=()=>{
+    detailOpen=!detailOpen;
+    document.getElementById('detail').style.display=detailOpen?'block':'none';
+  };
+  const bLinks=document.getElementById('bLinks');
+  if(bLinks)bLinks.onclick=e=>{
+    linksOpen=!linksOpen;
+    document.getElementById('linkBox').style.display=linksOpen?'block':'none';
+    e.currentTarget.innerHTML=(linksOpen?'&#9662;':'&#9656;')+' Link esterni ('+linkSet(a).length+')';
+  };
+  /* consigli a partire da questo album */
+  const bSim=document.getElementById('bSim');
+  if(bSim)bSim.onclick=()=>{closeModal();recommendFrom(id)};
+  /* tocca l'artista per vedere tutti i suoi album */
+  const bArt=document.getElementById('bArt');
+  if(bArt)bArt.onclick=()=>{closeModal();openArtist(a.artist)};
+  /* link diretto all'album su Spotify */
+  const bSpot=document.getElementById('bSpot');
+  if(bSpot)bSpot.onclick=async()=>{
+    const q=encodeURIComponent(((a.artist||'')+' '+(a.title||'')).trim());
+    const fallback='https://open.spotify.com/search/'+q;
+    /* un link inserito a mano ha la precedenza: per i dischi fuori dallo
+       streaming e' l'unico posto dove esistono davvero */
+    if(a.listenUrl){window.open(a.listenUrl,'_blank','noopener');return}
+    if(a.spotify){window.open(a.spotify,'_blank','noopener');return}
+    const w=window.open('','_blank');   /* apro subito: se aspetto, il browser blocca il popup */
+    const etichetta=bSpot.innerHTML;
+    bSpot.innerHTML='<span class="spinner"></span>';
+    let url=fallback;
+    try{const L=await resolveListen(a);if(L&&L.url)url=L.url}catch(e){}
+    bSpot.innerHTML=etichetta;
+    if(w)w.location=url;else window.open(url,'_blank','noopener');
+    if(openAlbum._id===id)openAlbum(id,true);
+  };
+  const cmt=document.getElementById('cmt');
+  cmt.oninput=()=>{a.comment=cmt.value;clearTimeout(cmt._t);cmt._t=setTimeout(()=>{save(a);renderAll()},500)};
+  /* --- copertina modificabile --- */
+  const covBox=document.getElementById('covBox');
+  const setCover=v=>{a.cover=v||'';save(a);openAlbum(id,true);renderAll()};
+  document.getElementById('bCovFind').onclick=async()=>{
+    covBox.innerHTML='<div class="tiny muted"><span class="spinner"></span> cerco le copertine...</div>';
+    const rs=await searchAlbums(((a.artist||'')+' '+(a.title||'')).trim());
+    const conCov=rs.filter(x=>x.cover);
+    if(!conCov.length){covBox.innerHTML='<div class="tiny muted">Nessuna copertina trovata. Prova &ldquo;Da indirizzo&rdquo; o carica un\'immagine.</div>';return}
+    covBox.innerHTML='<div class="tiny muted" style="margin-bottom:7px">Tocca quella giusta:</div>'+
+      '<div style="display:flex;gap:8px;flex-wrap:wrap" id="covGrid"></div>';
+    conCov.slice(0,8).forEach(x=>{
+      const b=document.createElement('button');
+      b.style.cssText='padding:0;border-radius:8px;overflow:hidden;border:2px solid transparent';
+      b.innerHTML='<img src="'+esc(x.cover)+'" alt="" onerror="crateImgFail(this)" '+
+        'style="width:64px;height:64px;object-fit:cover;display:block;background:var(--bg3)">'+
+        '<div class="tiny muted" style="max-width:64px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+
+        esc(x.year||'')+'</div>';
+      b.onclick=()=>setCover(x.cover);
+      document.getElementById('covGrid').appendChild(b);
+    });
+  };
+  document.getElementById('bCovUrl').onclick=()=>{
+    const v=prompt('Indirizzo dell\'immagine (https://...):',a.cover&&a.cover.indexOf('data:')!==0?a.cover:'');
+    if(v!==null)setCover(v.trim());
+  };
+  document.getElementById('bCovUp').onclick=()=>document.getElementById('covFile').click();
+  document.getElementById('covFile').onchange=async e=>{
+    const f=e.target.files&&e.target.files[0];if(!f)return;
+    const d=await new Promise(r=>{const fr=new FileReader();fr.onload=()=>r(fr.result);fr.readAsDataURL(f)});
+    setCover(await shrink(d,500));
+  };
+  const cd=document.getElementById('bCovDel');
+  if(cd)cd.onclick=()=>setCover('');
+  document.getElementById('bRe').onclick=()=>{a.genres=[];a.moods=[];save(a);toast('Cerco i tag...');queueEnrich(id,'')};
+  document.getElementById('bDel').onclick=()=>{
+    if(!confirm('Eliminare "'+a.title+'"?'))return;
+    removeAlbum(id);closeModal();renderAll();toast('Eliminato');
+  };
+}
+function closeModal(){document.getElementById('mask').classList.remove('on');openAlbum._id=null}
+
+/* ==========================================================
+   12. LIBRERIA
+   ========================================================== */
+let libState='all',libArtist='';
+function openArtist(name){
+  libArtist=name||'';libState='all';
+  document.getElementById('fq').value='';
+  ['fGenre','fMood','fDec'].forEach(i=>document.getElementById(i).value='');
+  document.getElementById('fState').querySelectorAll('button')
+    .forEach(x=>x.classList.toggle('on',x.dataset.s==='all'));
+  show('lib');renderLib();
+}
+function allValues(k){const s=new Set();DB.albums.forEach(a=>(a[k]||[]).forEach(v=>s.add(v)));return[...s].sort()}
+function decades(){const s=new Set();DB.albums.forEach(a=>{if(a.year)s.add(Math.floor(a.year/10)*10)});
+  return[...s].sort((x,y)=>y-x)}
+function fillSelect(el,vals){
+  const cur=el.value,first=el.querySelector('option').outerHTML;
+  el.innerHTML=first+vals.map(v=>'<option value="'+esc(v)+'">'+esc(v)+'</option>').join('');
+  if(vals.map(String).includes(String(cur)))el.value=cur;
+}
+function matches(a,f){
+  if(f.artist&&(a.artist||'').toLowerCase()!==f.artist.toLowerCase())return false;
+  if(f.fullOnly&&(a.kind==='singolo'||a.kind==='EP'))return false;
+  if(f.state==='pending')return !!a.pending;
+  if(a.pending&&f.state!=='all')return false;
+  if(f.state==='todo'&&a.listened)return false;
+  if(f.state==='done'&&!a.listened)return false;
+  if(f.state==='fav'&&!a.fav)return false;
+  if(f.genre&&!(a.genres||[]).includes(f.genre))return false;
+  if(f.mood&&!(a.moods||[]).includes(f.mood))return false;
+  if(f.dec&&(!a.year||Math.floor(a.year/10)*10!==+f.dec))return false;
+  if(f.q){const s=((a.title||'')+' '+(a.artist||'')+' '+(a.genres||[]).join(' ')+' '+
+    (a.moods||[]).join(' ')+' '+(a.comment||'')).toLowerCase();
+    if(!s.includes(f.q.toLowerCase()))return false}
+  return true;
+}
+function renderLib(){
+  const f={state:libState,q:document.getElementById('fq').value.trim(),
+    genre:document.getElementById('fGenre').value,mood:document.getElementById('fMood').value,
+    dec:document.getElementById('fDec').value,artist:libArtist};
+  const ab=document.getElementById('artistBox');
+  if(libArtist){
+    ab.innerHTML='<span class="chip" style="border-color:var(--acc);color:var(--acc)">artista: '+
+      esc(libArtist)+' <button id="clrArt">&times;</button></span>';
+    document.getElementById('clrArt').onclick=()=>{libArtist='';renderLib()};
+  }else ab.innerHTML='';
+  const list=DB.albums.filter(a=>matches(a,f));
+  const cmp={alpha:(x,y)=>(x.title||'').localeCompare(y.title||''),
+    artist:(x,y)=>(x.artist||'').localeCompare(y.artist||''),
+    year:(x,y)=>(y.year||0)-(x.year||0),yearold:(x,y)=>(x.year||9999)-(y.year||9999),
+    rating:(x,y)=>(y.rating||-1)-(x.rating||-1),added:(x,y)=>(y.addedAt||0)-(x.addedAt||0)
+  }[document.getElementById('fSort').value];
+  list.sort(cmp);
+  const np=DB.albums.filter(a=>a.pending).length;
+  const bp=document.getElementById('bPend');
+  bp.style.display=np?'':'none';bp.textContent='? Da identificare ('+np+')';
+  document.getElementById('libcount').textContent=
+    DB.albums.length?list.length+' album mostrati su '+DB.albums.length:'';
+  const g=document.getElementById('grid');
+  if(!DB.albums.length){
+    g.innerHTML='<div class="empty" style="grid-column:1/-1"><div class="big">&#128189;</div>La libreria è vuota.</div>';return}
+  if(!list.length){g.innerHTML='<div class="empty" style="grid-column:1/-1">Nessun album con questi filtri.</div>';return}
+  g.innerHTML='';
+  list.forEach(a=>{
+    const d=document.createElement('div');d.className='cardalb';
+    d.innerHTML='<div class="cov">'+
+      (a.cover?'<img src="'+esc(a.cover)+'" alt="" loading="lazy" onerror="crateImgFail(this)">':'<div class="ph">&#127925;</div>')+
+      '<div class="badges">'+(a.rating?'<span class="pill r">'+a.rating+'</span>':'')+
+        (a.fav?'<span class="pill f">&#9829;</span>':'')+
+        (a.pending?'<span class="pill q">?</span>':'')+
+        (a.kind==='singolo'||a.kind==='EP'?'<span class="pill" style="color:var(--fg2)">'+a.kind+'</span>':'')+'</div>'+
+      (a.listened?'<div class="lis">&#10003; ascoltato</div>':'')+
+      '</div><div class="t">'+esc(a.title)+'</div><div class="a">'+esc(a.artist||'—')+
+      (a.year?' &middot; '+a.year:'')+'</div>';
+    d.onclick=()=>openAlbum(a.id);
+    g.appendChild(d);
+  });
+}
+function renderStats(){
+  const A=DB.albums,r=A.filter(a=>a.rating);
+  const avg=r.length?(r.reduce((s,a)=>s+a.rating,0)/r.length).toFixed(1):'-';
+  document.getElementById('stats').innerHTML=
+    [[A.length,'in libreria'],[A.filter(a=>!a.listened&&!a.pending).length,'da ascoltare'],
+     [A.filter(a=>a.listened).length,'ascoltati'],[A.filter(a=>a.fav).length,'preferiti'],[avg,'voto medio']]
+    .map(x=>'<div class="stat"><b>'+x[0]+'</b><span>'+x[1]+'</span></div>').join('');
+}
+function sizeHint(){
+  const el=document.getElementById('sizeHint');if(!el)return;
+  const kb=Math.round(JSON.stringify(DB).length/1024);
+  el.textContent=DB.albums.length+' album, '+kb+' KB di dati.'+
+    (kb>800?' Attenzione: molte copertine da screenshot appesantiscono la sincronizzazione.':'');
+}
+function renderAll(){
+  ['fGenre','rGenre'].forEach(i=>fillSelect(document.getElementById(i),allValues('genres')));
+  ['fMood','rMood'].forEach(i=>fillSelect(document.getElementById(i),allValues('moods')));
+  ['fDec','rDec'].forEach(i=>fillSelect(document.getElementById(i),decades().map(String)));
+  renderStats();renderLib();updatePool();sizeHint();fillSeeds();
+}
+
+/* ==========================================================
+   13. RANDOMIZER
+   ========================================================== */
+function randPool(){
+  const f={state:document.getElementById('rState').value,q:'',
+    genre:document.getElementById('rGenre').value,mood:document.getElementById('rMood').value,
+    dec:document.getElementById('rDec').value,
+    fullOnly:document.getElementById('rKind').value==='full'};
+  return DB.albums.filter(a=>!a.pending&&matches(a,f));
+}
+function updatePool(){
+  const n=randPool().length,el=document.getElementById('slotPool');
+  if(el)el.textContent=n+' album nel mazzo';
+  const b=document.getElementById('btnSpin');if(b)b.disabled=!n;
+  const act=document.getElementById('rActive');
+  if(act){
+    const st=document.getElementById('rState').value,on=[];
+    if(st==='todo')on.push('solo da ascoltare');
+    if(st==='fav')on.push('solo preferiti');
+    if(st==='done')on.push('solo ascoltati');
+    if(document.getElementById('rKind').value==='full')on.push('senza singoli ed EP');
+    ['rGenre','rMood','rDec'].forEach(i=>{const v=document.getElementById(i).value;if(v)on.push(v)});
+    act.textContent=on.length?'filtri attivi: '+on.join(', '):'nessun filtro: pesca da tutta la libreria';
+  }
+}
+function spin(){
+  const pool=randPool();
+  if(!pool.length){toast('Nessun album con questi filtri');return}
+  const stage=document.getElementById('slotStage'),slot=document.getElementById('slot');
+  const pick=pool[Math.floor(Math.random()*pool.length)];
+  const draw=a=>{stage.innerHTML=(a.cover?'<img class="cover" src="'+esc(a.cover)+'" alt="" onerror="crateImgFail(this)">':
+    '<div class="cover" style="display:flex;align-items:center;justify-content:center;font-size:52px;opacity:.3">&#127925;</div>')+
+    '<div><h3>'+esc(a.title)+'</h3><p class="art">'+esc(a.artist||'')+
+    (a.year?' &middot; '+a.year:'')+(a.kind&&a.kind!=='album'?' &middot; '+esc(a.kind):'')+'</p></div>'};
+
+  function finish(){
+    slot.classList.remove('spinning');draw(pick);
+    const tags=[...(pick.genres||[]).slice(0,3),...(pick.moods||[]).slice(0,2)];
+    if(tags.length){
+      const bar=document.createElement('div');
+      bar.style.cssText='display:flex;gap:8px;flex-wrap:wrap;justify-content:center';
+      bar.innerHTML=tags.map(t=>'<span class="chip">'+esc(t)+'</span>').join('');
+      stage.appendChild(bar);
+    }
+    const btns=document.createElement('div');btns.className='row';
+    btns.style.cssText='justify-content:center;margin-top:10px';
+    btns.innerHTML='<button class="btn acc" id="sAgain">Rilancia</button>'+
+      '<button class="btn gh" id="sOpen">Apri la scheda</button>'+
+      '<button class="btn gh" id="sDone">&#10003; Ascoltato</button>';
+    stage.appendChild(btns);
+    document.getElementById('sAgain').onclick=spin;
+    document.getElementById('sOpen').onclick=()=>openAlbum(pick.id);
+    document.getElementById('sDone').onclick=()=>{pick.listened=true;pick.listenedAt=now();
+      save(pick);renderAll();openAlbum(pick.id)};
+  }
+  if(pool.length===1){draw(pick);finish();return}
+
+  /* slot machine: gira veloce e rallenta fino a fermarsi */
+  slot.classList.add('spinning');
+  const steps=15;let step=0;
+  (function tick(){
+    draw(pool[Math.floor(Math.random()*pool.length)]);
+    if(++step>=steps){finish();return}
+    const t=step/steps;
+    setTimeout(tick,50+Math.pow(t,3)*340);
+  })();
+}
+
+/* ==========================================================
+   13b. CONSIGLI INTERNI
+   Niente popup e niente suggerimenti non richiesti: si aprono
+   solo da qui o dal pulsante "Simili a questo" nella scheda.
+   ========================================================== */
+function jac(a,b){
+  const A=new Set(a||[]),B=new Set(b||[]);
+  if(!A.size||!B.size)return 0;
+  let i=0;A.forEach(x=>{if(B.has(x))i++});
+  return i/(A.size+B.size-i);
+}
+function similarity(x,y){
+  let s=2*jac(x.genres,y.genres)+jac(x.moods,y.moods);
+  if(x.artist&&y.artist&&x.artist.toLowerCase()===y.artist.toLowerCase())s+=.6;
+  if(x.year&&y.year&&Math.abs(x.year-y.year)<=5)s+=.25;
+  return s;
+}
+/* profilo di gusto: i voti alti tirano verso quei tag, i bassi allontanano */
+function tasteProfile(){
+  const w=new Map();
+  DB.albums.forEach(a=>{
+    if(a.pending)return;
+    let weight=0;
+    if(a.rating)weight+=a.rating-6;      /* 10 vale +4, 5 vale -1 */
+    if(a.fav)weight+=2;
+    if(!weight)return;
+    [...(a.genres||[]),...(a.moods||[])].forEach(t=>w.set(t,(w.get(t)||0)+weight));
+  });
+  return w;
+}
+function tasteScore(a,w){
+  const tags=[...(a.genres||[]),...(a.moods||[])];
+  if(!tags.length)return 0;
+  let s=0;tags.forEach(t=>{s+=(w.get(t)||0)});
+  return s/Math.sqrt(tags.length);       /* chi ha 20 tag non deve vincere per accumulo */
+}
+function recommend(seedId,onlyTodo){
+  const pool=DB.albums.filter(a=>!a.pending&&a.id!==seedId&&(!onlyTodo||!a.listened));
+  if(!pool.length)return{list:[],why:''};
+  if(seedId){
+    const seed=DB.albums.find(a=>a.id===seedId);
+    if(!seed)return{list:[],why:''};
+    const scored=pool.map(a=>({a,s:similarity(seed,a)})).filter(x=>x.s>0);
+    scored.sort((x,y)=>y.s-x.s);
+    return{list:scored.slice(0,8),seed:seed,
+      why:(seed.genres||[]).length?'per affinità di tag con &ldquo;'+esc(seed.title)+'&rdquo;'
+        :'&ldquo;'+esc(seed.title)+'&rdquo; non ha ancora tag: prima premi &ldquo;Riprova tag automatici&rdquo; nella sua scheda'};
+  }
+  const w=tasteProfile();
+  if(!w.size)return{list:[],why:'Servono un po\' di voti o preferiti: il profilo si costruisce da quelli.'};
+  const scored=pool.map(a=>({a,s:tasteScore(a,w)})).filter(x=>x.s>0);
+  scored.sort((x,y)=>y.s-x.s);
+  const top=[...w.entries()].sort((x,y)=>y[1]-x[1]).slice(0,3).map(x=>x[0]);
+  return{list:scored.slice(0,8),why:'in base a cosa voti alto: '+esc(top.join(', '))};
+}
+function renderRec(){
+  const seed=document.getElementById('recSeed').value;
+  const onlyTodo=document.getElementById('recTodo').value==='1';
+  const out=document.getElementById('recOut'),why=document.getElementById('recWhy');
+  const r=recommend(seed==='__taste'?null:seed,onlyTodo);
+  why.innerHTML=r.why||'';
+  if(!r.list.length){
+    out.innerHTML='<div class="empty" style="grid-column:1/-1;padding:30px">'+
+      (DB.albums.length<4?'Serve qualche album in più in libreria.':'Nessun consiglio con questi criteri.')+'</div>';
+    return;
+  }
+  out.innerHTML='';
+  r.list.forEach(x=>{
+    const a=x.a,d=document.createElement('div');d.className='cardalb';
+    d.innerHTML='<div class="cov">'+
+      (a.cover?'<img src="'+esc(a.cover)+'" alt="" loading="lazy" onerror="crateImgFail(this)">':'<div class="ph">&#127925;</div>')+
+      '<div class="badges">'+(a.rating?'<span class="pill r">'+a.rating+'</span>':'')+
+      (a.fav?'<span class="pill f">&#9829;</span>':'')+'</div>'+
+      (a.listened?'<div class="lis">&#10003; ascoltato</div>':'')+
+      '</div><div class="t">'+esc(a.title)+'</div><div class="a">'+esc(a.artist||'—')+'</div>'+
+      '<div class="tiny muted" style="margin-top:2px">'+
+      esc([...(a.genres||[]).slice(0,2),...(a.moods||[]).slice(0,1)].join(', '))+'</div>';
+    d.onclick=()=>openAlbum(a.id);
+    out.appendChild(d);
+  });
+}
+function fillSeeds(){
+  const sel=document.getElementById('recSeed'),cur=sel.value;
+  const list=DB.albums.filter(a=>!a.pending)
+    .slice().sort((x,y)=>(x.artist||'').localeCompare(y.artist||''));
+  sel.innerHTML='<option value="__taste">I miei voti e preferiti</option>'+
+    list.map(a=>'<option value="'+esc(a.id)+'">'+esc((a.artist?a.artist+' — ':'')+a.title)+'</option>').join('');
+  if([...sel.options].some(o=>o.value===cur))sel.value=cur;
+}
+function recommendFrom(id){
+  show('rand');
+  document.getElementById('recBody').style.display='block';
+  document.getElementById('recArrow').innerHTML='&#9662;';
+  document.getElementById('recSeed').value=id;
+  renderRec();
+  document.getElementById('recCard').scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+/* ==========================================================
+   14. NAVIGAZIONE ED EVENTI
+   ========================================================== */
+function show(v){
+  document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));
+  document.querySelectorAll('.view').forEach(s=>s.classList.toggle('on',s.id==='v-'+v));
+  window.scrollTo(0,0);
+  if(v==='rand')updatePool();
+}
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>show(b.dataset.v));
+document.getElementById('btnSearch').onclick=()=>runSearch();
+document.getElementById('q').addEventListener('keydown',e=>{if(e.key==='Enter')runSearch()});
+document.getElementById('btnManual').onclick=()=>manualForm({});
+document.getElementById('mclose').onclick=closeModal;
+document.getElementById('mask').addEventListener('click',e=>{if(e.target.id==='mask')closeModal()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal()});
+document.getElementById('syncb').onclick=()=>{show('set');if(ghCfg())syncNow()};
+
+document.getElementById('deckClose').onclick=()=>{
+  if(deckIdx<deck.length-1||!deckDone){
+    if(!confirm('Chiudere la revisione? Gli screenshot non ancora confermati vanno persi.'))return;
+  }
+  closeDeck();
+};
+const dz=document.getElementById('dz'),fileIn=document.getElementById('fileIn');
+dz.onclick=()=>fileIn.click();
+fileIn.onchange=()=>{if(fileIn.files&&fileIn.files.length)queueImages(fileIn.files);fileIn.value=''};
+['dragenter','dragover'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.add('over')}));
+['dragleave','drop'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.remove('over')}));
+dz.addEventListener('drop',e=>{const fs=e.dataTransfer&&e.dataTransfer.files;if(fs&&fs.length)queueImages(fs)});
+document.addEventListener('paste',e=>{
+  const it=[...(e.clipboardData&&e.clipboardData.items||[])].find(i=>i.type.startsWith('image/'));
+  if(it)queueImages([it.getAsFile()]);
+});
+['fq','fGenre','fMood','fDec','fSort'].forEach(i=>document.getElementById(i)
+  .addEventListener(i==='fq'?'input':'change',renderLib));
+document.getElementById('fState').querySelectorAll('button').forEach(b=>b.onclick=()=>{
+  libState=b.dataset.s;
+  document.getElementById('fState').querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));
+  renderLib()});
+['rState','rGenre','rMood','rDec','rKind'].forEach(i=>document.getElementById(i).addEventListener('change',updatePool));
+document.getElementById('btnSpin').onclick=spin;
+document.getElementById('recToggle').onclick=()=>{
+  const b=document.getElementById('recBody'),open=b.style.display==='none';
+  b.style.display=open?'block':'none';
+  document.getElementById('recArrow').innerHTML=open?'&#9662;':'&#9656;';
+  if(open&&!document.getElementById('recOut').innerHTML)renderRec();
+};
+document.getElementById('recGo').onclick=renderRec;
+['recSeed','recTodo'].forEach(i=>document.getElementById(i).addEventListener('change',renderRec));
+document.getElementById('rReset').onclick=()=>{
+  document.getElementById('rState').value='all';
+  ['rGenre','rMood','rDec','rKind'].forEach(i=>document.getElementById(i).value='');
+  updatePool();toast('Filtri azzerati');
+};
+
+/* --- opzioni --- */
+document.getElementById('btnSyncSave').onclick=async()=>{
+  const c={owner:document.getElementById('ghOwner').value.trim(),
+    repo:document.getElementById('ghRepo').value.trim().replace(/^.*\//,''),
+    token:document.getElementById('ghToken').value.trim(),path:'library.json'};
+  if(!c.owner||!c.repo||!c.token){toast('Compila tutti e tre i campi');return}
+  localStorage.setItem(LSG,JSON.stringify(c));
+  toast('Collegato, sincronizzo...');await syncNow();
+};
+document.getElementById('btnSyncNow').onclick=()=>ghCfg()?syncNow():toast('Prima collega il repository');
+document.getElementById('btnSyncOff').onclick=()=>{
+  if(!confirm('Scollegare la sincronizzazione? I dati restano su questo dispositivo.'))return;
+  localStorage.removeItem(LSG);document.getElementById('ghToken').value='';setSync('off');
+};
+/* --- preferenze della scheda --- */
+const PREF_LABELS={
+  meta:['Anno, tipo e numero di tracce','sotto il nome dell\'artista'],
+  quick:['Riepilogo dei tag','massimo 3 generi e 2 mood'],
+  details:['Pulsante Dettagli','apre i tag completi e modificabili'],
+  about:['Descrizione dell\'album','testo da Last.fm, dentro Dettagli'],
+  listeners:['Numero di ascoltatori su Last.fm','spento: e\' un dato che sposta il giudizio'],
+  dates:['Date di aggiunta e ascolto','dentro Dettagli'],
+  listen:['Pulsante di ascolto','Spotify, oppure Bandcamp e SoundCloud se hai messo il link'],
+  similar:['Pulsante Simili a questo','consigli a partire da quell\'album'],
+  links:['Sezione dei link esterni','resta comunque chiusa fino a che non la apri']
+};
+function checkRow(id,label,sub,on){
+  return '<label style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;cursor:pointer;border-bottom:1px solid var(--line)">'+
+    '<input type="checkbox" data-k="'+id+'"'+(on?' checked':'')+' style="width:auto;margin:3px 0 0;flex:none;accent-color:var(--acc)">'+
+    '<span style="min-width:0"><span style="font-size:14px">'+label+'</span>'+
+    (sub?'<span class="tiny muted" style="display:block">'+sub+'</span>':'')+'</span></label>';
+}
+function renderPrefs(){
+  document.getElementById('prMode').value=P.mode;
+  const min=P.mode==='min';
+  document.getElementById('prPanel').style.opacity=min?'.4':'1';
+  document.getElementById('prPanel').style.pointerEvents=min?'none':'auto';
+  document.getElementById('prModeHint').textContent=min
+    ? 'Copertina, titolo, artista, anno, voto, preferito, commento e pulsante di ascolto. Nient\'altro.'
+    : 'Spunta quello che vuoi vedere. Quello che togli non viene cancellato, solo nascosto.';
+  document.getElementById('prShow').innerHTML=Object.keys(PREF_LABELS)
+    .map(k=>checkRow(k,PREF_LABELS[k][0],PREF_LABELS[k][1],P.show[k]!==false)).join('');
+  document.getElementById('prLinks').innerHTML=linkSet({artist:'',title:''},true)
+    .map(l=>checkRow('L:'+LINK_KEYS[l[0]],l[0],l[2],P.links[LINK_KEYS[l[0]]]!==false)).join('');
+}
+document.getElementById('prMode').onchange=e=>{P.mode=e.target.value;savePrefs();renderPrefs()};
+['prShow','prLinks'].forEach(host=>{
+  document.getElementById(host).addEventListener('change',e=>{
+    const k=e.target&&e.target.dataset&&e.target.dataset.k;if(!k)return;
+    if(k.indexOf('L:')===0)P.links[k.slice(2)]=e.target.checked;
+    else P.show[k]=e.target.checked;
+    savePrefs();
+  });
+});
+/* --- riaggiornamento in blocco --- */
+document.getElementById('bulkMissing').onclick=()=>bulkEnrich('missing');
+document.getElementById('bulkAll').onclick=()=>bulkEnrich('all');
+document.getElementById('bulkReset').onclick=()=>bulkEnrich('reset');
+document.getElementById('bulkStop').onclick=()=>{bulkStop=true;toast('Mi fermo dopo questo album')};
+
+document.getElementById('btnSaveKey').onclick=()=>{
+  const v=document.getElementById('lfmKey').value.trim();
+  if(v)localStorage.setItem(LSK,v);else localStorage.removeItem(LSK);
+  toast(v?'Chiave salvata':'Chiave rimossa');
+};
+document.getElementById('btnExport').onclick=()=>{
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([JSON.stringify(DB,null,1)],{type:'application/json'}));
+  a.download='libreria-album.json';a.click();
+};
+document.getElementById('btnImport').onclick=()=>document.getElementById('importIn').click();
+document.getElementById('importIn').onchange=e=>{
+  const f=e.target.files[0];if(!f)return;
+  const r=new FileReader();
+  r.onload=()=>{try{
+    const p=JSON.parse(r.result);if(!p||!Array.isArray(p.albums))throw 0;
+    p.albums.forEach(a=>{if(!a.id)a.id=uid();if(!a.updatedAt)a.updatedAt=a.addedAt||now()});
+    const n0=DB.albums.length;
+    DB=mergeDB(DB,{albums:p.albums,deleted:p.deleted||[]});
+    saveLocal();scheduleSync();renderAll();
+    toast((DB.albums.length-n0)+' album importati');
+  }catch(err){toast('File non valido')}};
+  r.readAsText(f);e.target.value='';
+};
+document.getElementById('btnWipe').onclick=()=>{
+  if(!confirm('Cancellare TUTTI gli album, anche dal repository sincronizzato?'))return;
+  DB.albums.forEach(a=>DB.deleted.push({id:a.id,at:now()}));
+  DB.albums=[];saveLocal();scheduleSync();renderAll();toast('Libreria svuotata');
+};
+
+/* --- installazione --- */
+let installEvt=null;
+window.addEventListener('beforeinstallprompt',e=>{
+  e.preventDefault();installEvt=e;
+  document.getElementById('installBanner').innerHTML=
+    '<div class="banner"><div style="flex:1;min-width:0"><b>Installa Crate</b>'+
+    '<div class="tiny muted">Icona nel telefono, schermo intero, e compare nel menu Condividi.</div></div>'+
+    '<button class="btn sm acc" id="btnInstall">Installa</button></div>';
+  document.getElementById('btnInstall').onclick=async()=>{
+    document.getElementById('installBanner').innerHTML='';
+    installEvt.prompt();installEvt=null;
+  };
+});
+if(navigator.serviceWorker){
+  window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
+}
+const standalone=matchMedia('(display-mode: standalone)').matches||navigator.standalone;
+document.getElementById('shareHint').innerHTML=standalone
+  ? 'Da Instagram: screenshot &rarr; Condividi &rarr; <b>Crate</b>. Arriva qui e parte l\'OCR.'
+  : 'Installa l\'app (voce &ldquo;Installa app&rdquo; nel menu del browser) per riceverla dal menu Condividi di Android.';
+
+/* --- sincronizzazione su eventi di sistema --- */
+window.addEventListener('online',()=>{if(ghCfg())syncNow()});
+window.addEventListener('offline',()=>setSync('offline'));
+document.addEventListener('visibilitychange',()=>{
+  if(!document.hidden&&ghCfg()&&now()-SY.last>20000)syncNow();
+});
+
+/* ==========================================================
+   15. AVVIO
+   ========================================================== */
+loadLocal();loadPrefs();renderPrefs();
+document.getElementById('lfmKey').value=localStorage.getItem(LSK)||'';
+(()=>{const c=ghCfg();if(c){document.getElementById('ghOwner').value=c.owner;
+  document.getElementById('ghRepo').value=c.repo;document.getElementById('ghToken').value=c.token}})();
+renderAll();
+setSync(ghCfg()?(navigator.onLine?'idle':'offline'):'off');
+consumeShare().catch(()=>{});
+if(ghCfg())syncNow().catch(()=>{});
+</script>
+</body>
+</html>

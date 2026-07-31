@@ -1,0 +1,35 @@
+{
+  "name": "Crate — libreria album",
+  "short_name": "Crate",
+  "description": "La tua libreria personale di album da ascoltare, con tag automatici e scelta casuale.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0d0d10",
+  "theme_color": "#0d0d10",
+  "lang": "it",
+  "categories": ["music", "productivity"],
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "share_target": {
+    "action": "./share",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url",
+      "files": [
+        { "name": "image", "accept": ["image/png", "image/jpeg", "image/webp", "image/gif", "image/*"] }
+      ]
+    }
+  },
+  "shortcuts": [
+    { "name": "Cosa ascolto?", "short_name": "Random", "url": "./?go=rand", "icons": [{ "src": "icon-192.png", "sizes": "192x192" }] },
+    { "name": "Aggiungi album", "short_name": "Aggiungi", "url": "./?go=add", "icons": [{ "src": "icon-192.png", "sizes": "192x192" }] }
+  ]
+}

@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="it"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Crate — banco di prova motori OCR</title>
+<style>
+:root{--bg:#0d0d10;--bg2:#14141a;--bg3:#1b1b23;--line:#2a2a35;--fg:#eceaf0;--fg2:#9b98a8;--fg3:#6b6878;--acc:#e0533f;--ok:#4ec98a;--warn:#f0a03c}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,sans-serif;padding:20px}
+.wrap{max-width:1100px;margin:0 auto}
+h1{font-size:23px;margin:0 0 4px}p.sub{color:var(--fg2);margin:0 0 18px}
+.card{background:var(--bg2);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:14px}
+button{background:var(--fg);color:#111;border:0;padding:11px 18px;border-radius:9px;font-weight:700;cursor:pointer;font:inherit;font-weight:700}
+button.gh{background:var(--bg3);color:var(--fg);border:1px solid var(--line)}
+button:disabled{opacity:.45;cursor:not-allowed}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--fg3);text-transform:uppercase;font-size:11px;letter-spacing:.6px}
+.ok{color:var(--ok)}.no{color:var(--acc)}.warn{color:var(--warn)}
+.bar{height:6px;background:var(--bg3);border-radius:99px;overflow:hidden;margin:10px 0}
+.bar i{display:block;height:100%;background:var(--acc);width:0;transition:.2s}
+code{background:var(--bg3);padding:1px 5px;border-radius:4px;font-size:12px}
+.tiny{font-size:12px;color:var(--fg2)}
+</style></head><body><div class="wrap">
+<h1>Banco di prova: PaddleOCR contro Tesseract</h1>
+<p class="sub">Confronta il motore nuovo con quello attuale sugli stessi screenshot. I risultati di Tesseract sono gia dentro questa pagina, misurati prima: qui gira solo il motore nuovo.</p>
+
+<div class="card">
+  <b>1.</b> Seleziona gli screenshot (puoi selezionarli tutti insieme)<br><br>
+  <input type="file" id="files" accept="image/*" multiple>
+  <div class="tiny" style="margin-top:8px">Riconosce i file per nome, quindi usa gli originali della cartella <code>Screen album</code>.</div>
+</div>
+
+<div class="card">
+  <b>2.</b> Avvia il confronto<br><br>
+  <button id="go" disabled>Avvia</button>
+  <button class="gh" id="dl" disabled>Scarica i risultati (JSON)</button>
+  <div class="bar"><i id="bar"></i></div>
+  <div id="stato" class="tiny">In attesa dei file.</div>
+</div>
+
+<div class="card" id="riass" style="display:none"></div>
+<div class="card"><table id="tab"><thead><tr>
+<th style="width:14%">file</th><th style="width:24%">verita</th><th style="width:26%">Tesseract (attuale)</th><th style="width:26%">PaddleOCR (nuovo)</th><th style="width:10%">esito</th>
+</tr></thead><tbody id="corpo"></tbody></table></div>
+</div>
+
+<script type="module">
+const DATI = {"Screenshot_2026-02-22-02-47-58-36_1c337646f29875672b5a61192b9010f9.jpg": {"tess": ["PART 3: 6 albums when you need to get that work done!", "APHEX TWIN Selected Ambient Works 85-92", "Selected Ambient Works 85-92"], "vero": "Aphex Twin — Selected Ambient Works 85-92", "k": "s00"}, "Screenshot_2026-02-22-02-48-08-58_1c337646f29875672b5a61192b9010f9.jpg": {"tess": ["PART 3:6 albums when you need to get that work done !", "progressive rock / art rock", "sere peceet"], "vero": "Pink Floyd — Animals", "k": "s01"}, "Screenshot_2026-02-22-02-48-16-76_1c337646f29875672b5a61192b9010f9.jpg": {"tess": ["Velocita bloccata a 2x RUSSIAN CIRCLES", "post metal / post rock", "Velocita bloccata a 2x"], "vero": "Russian Circles — Station", "k": "s02"}, "Screenshot_2026-02-22-02-48-23-04_1c337646f29875672b5a61192b9010f9.jpg": {"tess": ["PART 3: 6 albums when you need to get that work done!", "Opalescent downtempo / new age", "downtempo / new age"], "vero": "Jon Hopkins — Opalescent", "k": "s03"}, "Screenshot_2026-02-22-02-48-29-82_1c337646f29875672b5a61192b9010f9.jpg": {"tess": ["PART 3: 6 albums when you need to get that work done!", "PART 3: 6 albums when you need to", "TIM HECKER Haunt Me, Do It Again"], "vero": "Tim Hecker — Haunt Me, Do It Again", "k": "s04"}, "Screenshot_2026-02-22-02-48-36-74_1c337646f29875672b5a61192b9010f9.jpg": {"tess": ["Ne ee ee er ot Raaeee rtalien Pyne rrr a aoe ea P", "Ne ee ee er ot Raaeee rtalien", "Fe WE A edad LP etc senl wr"], "vero": "Explosions In The Sky — The Earth Is Not a Cold Dead Place", "k": "s05"}, "Screenshot_2026-02-22-04-02-06-28_1c337646f29875672b5a61192b9010f9.jpg": {"tess": ["f7 dill Gorillaz * On Melanchol Segui", "A Deeper Understanding The War On Drugs ©)", "A Deeper Understanding Up All Night"], "vero": "The War On Drugs — A Deeper Understanding", "k": "s06"}, "Screenshot_2026-02-22-04-02-07-24_1c337646f29875672b5a61192b9010f9.jpg": {"tess": ["When Everything Was Lost P", "When Everything Was Lost", "Ultrasound Palace"], "vero": "Palace — Ultrasound", "k": "s07"}, "Screenshot_2026-02-22-04-02-08-20_1c337646f29875672b5a61192b9010f9.jpg": {"tess": ["To Record Only Water For Ten Days (U.S. Version) ©)", "To Record Only Water For Ten Days (U.S. Version)", "fi rillaz * On Melancholy Hill"], "vero": "John Frusciante — To Record Only Water For Ten Days", "k": "s08"}, "Screenshot_2026-02-22-04-02-09-10_1c337646f29875672b5a61192b9010f9.jpg": {"tess": ["The Suburbs (Deluxe) Arcade Fire", "1 z* On Melancholy Hill Gori g", "Video « Arcade Fire 2"], "vero": "Arcade Fire — The Suburbs", "k": "s09"}, "Screenshot_2026-02-22-04-02-09-93_1c337646f29875672b5a61192b9010f9.jpg": {"tess": ["Moment Of Truth You Know My Steez", "Moment Of Truth Gang Starr", "1 On Melancholy Hill Gorillaz g"], "vero": "Gang Starr — Moment Of Truth", "k": "s10"}, "Screenshot_2026-02-22-04-02-10-84_1c337646f29875672b5a61192b9010f9.jpg": {"tess": ["fi Vielancholy Hill Gorillaz » C", "Skinty Fia Le y Fontaines D.C", "In ar GCroithe go deo"], "vero": "Fontaines D.C. — Skinty Fia", "k": "s11"}, "Screenshot_2026-02-22-04-02-11-76_1c337646f29875672b5a61192b9010f9.jpg": {"tess": ["fi ancholy Hill Gorillaz * On v", "Room On Fire The Strokes", "Or 02 NSS a Room On Fire"], "vero": "The Strokes — Room On Fire", "k": "s12"}, "Screenshot_2026-02-22-04-02-12-73_1c337646f29875672b5a61192b9010f9.jpg": {"tess": ["FI joly Hill Gorillaz * On Mela", "When Your Number Isn't Up", "Reels Amici 8 Bubblegum"], "vero": "Mark Lanegan — Bubblegum", "k": "s13"}, "Screenshot_2026-02-22-04-02-13-71_1c337646f29875672b5a61192b9010f9.jpg": {"tess": ["fd Hill Gorillaz * On Melanche g", "Adult Diversion AACN", "Ones Who Love You REY"], "vero": "Alvvays — Alvvays", "k": "s14"}, "Screenshot_2026-02-22-04-02-14-82_1c337646f29875672b5a61192b9010f9.jpg": {"tess": ["What Went Down Foals", "What Went Down Disc1 ?", "What Went Down ae"], "vero": "Foals — What Went Down", "k": "s15"}, "Screenshot_2026-02-22-04-25-13-28_1c337646f29875672b5a61192b9010f9.jpg": {"tess": ["mvscenex heithoff", "Into the Wild, 2007", "Jojo Rabbit, 2019"], "vero": "(non e musica: lista di film)", "k": "s16"}, "Screenshot_2026-07-24-02-46-33-87_1c337646f29875672b5a61192b9010f9.jpg": {"tess": ["Preacher s Daughter Ethel Cain", "Preacher s Daughter", "Ethel Cain"], "vero": "Ethel Cain — Preacher’s Daughter", "k": "s17"}, "Screenshot_2026-07-24-02-46-48-49_1c337646f29875672b5a61192b9010f9.jpg": {"tess": ["Geese 3D Country", "3D Country", "Geese"], "vero": "", "k": "s18"}, "Screenshot_2026-07-24-02-46-55-55_1c337646f29875672b5a61192b9010f9.jpg": {"tess": ["the record boygenius", "02:46 Noe ee es geni", "the record"], "vero": "", "k": "s19"}, "Screenshot_2026-07-24-02-47-02-38_1c337646f29875672b5a61192b9010f9.jpg": {"tess": ["GLOW ON Turnstile", "Turnstile", "GLOW ON"], "vero": "", "k": "s20"}, "Screenshot_2026-07-24-02-47-13-30_1c337646f29875672b5a61192b9010f9.jpg": {"tess": ["Whats Your Pleasure? Jessie Ware", "Whats Your Pleasure?", "Jessie Ware"], "vero": "", "k": "s21"}, "Screenshot_2026-07-24-02-47-26-29_1c337646f29875672b5a61192b9010f9.jpg": {"tess": ["Two Star & The Dream Police Mk. gee", "A es Two Star & The Dream Police", "Two Star & The Dream Police"], "vero": "", "k": "s22"}, "Screenshot_2026-07-24-02-47-34-32_1c337646f29875672b5a61192b9010f9.jpg": {"tess": ["Qoh Rap! Ya George Clanton", "George Clanton"], "vero": "", "k": "s23"}, "Screenshot_2026-07-24-02-48-11-50_1c337646f29875672b5a61192b9010f9.jpg": {"tess": ["Revengeseekerz Jane Remover", "Jane Remover", "Revengeseekerz"], "vero": "", "k": "s24"}, "Screenshot_2026-07-24-02-48-18-59_1c337646f29875672b5a61192b9010f9.jpg": {"tess": ["The New Sound Geordie Greep", "The NewS Geordie areep", "Geordie areep"], "vero": "", "k": "s25"}, "Screenshot_2026-07-24-02-48-27-47_1c337646f29875672b5a61192b9010f9.jpg": {"tess": ["Slowdive everything is alive", "everything is alive", "Pies 1-4 IVE As -) Ah Hel) LS"], "vero": "Slowdive — everything is alive", "k": "s26"}, "Screenshot_2026-07-24-02-48-34-35_1c337646f29875672b5a61192b9010f9.jpg": {"tess": ["Drgyon Nay Wounelin I Saliayo In four Sjef Jnles", "Drgyon Nay Wounelin I Saliayo In four", "Dragon New Mountain Believe In You"], "vero": "Big Thief — Dragon New Warm Mountain I Believe In You", "k": "s27"}, "Screenshot_2026-07-24-02-48-41-44_1c337646f29875672b5a61192b9010f9.jpg": {"tess": ["Gingko Panchiko", "Panchiko", "Gingko"], "vero": "", "k": "s28"}, "Screenshot_2026-07-24-02-48-48-82_1c337646f29875672b5a61192b9010f9.jpg": {"tess": ["Heaven To A Tortured Mind Yves Tumor", "Heaven To A Tortured Mind", "Yves Tumor"], "vero": "", "k": "s29"}, "Screenshot_2026-07-24-02-48-56-91_1c337646f29875672b5a61192b9010f9.jpg": {"tess": ["SUFJAN STEVENS Javelin", "Javelin SuTjan Ea", "SUFJAN STEVENS"], "vero": "", "k": "s30"}, "Screenshot_2026-07-24-02-49-04-35_1c337646f29875672b5a61192b9010f9.jpg": {"tess": ["Adrienne Lenker"], "vero": "Adrianne Lenker — songs", "k": "s31"}, "Screenshot_2026-07-24-02-49-11-50_1c337646f29875672b5a61192b9010f9.jpg": {"tess": ["We Will Always Love You The Avalanches", "We Will Always Love You", "We YI) AYES LOVE fol? Tne A\\Alkinenes"], "vero": "", "k": "s32"}, "Screenshot_2026-07-24-02-49-22-22_1c337646f29875672b5a61192b9010f9.jpg": {"tess": ["Home Video Lucy Dacus", "Home Video Luc y Dacus", "Home Video"], "vero": "", "k": "s33"}, "Screenshot_2026-07-24-02-49-31-71_1c337646f29875672b5a61192b9010f9.jpg": {"tess": ["Calico Ryan Beatty", "Ryan Beatty", "Calico"], "vero": "", "k": "s34"}, "Screenshot_2026-07-24-02-49-38-87_1c337646f29875672b5a61192b9010f9.jpg": {"tess": ["Blue Weekend Wolf Alice", "Blue Weekend", "Wolf Alice"], "vero": "", "k": "s35"}, "Screenshot_2026-07-24-02-49-47-87_1c337646f29875672b5a61192b9010f9.jpg": {"tess": ["Hyperdrama Justice", "Hyperdrama", "Justice"], "vero": "Justice — Hyperdrama", "k": "s36"}, "Screenshot_2026-07-24-02-49-55-90_1c337646f29875672b5a61192b9010f9.jpg": {"tess": ["DECIDE Djo", "DECIDE"], "vero": "", "k": "s37"}, "Screenshot_2026-07-24-02-50-03-64_1c337646f29875672b5a61192b9010f9.jpg": {"tess": ["CINEMA The Marias", "The Marias", "CINEMA"], "vero": "", "k": "s38"}, "Screenshot_2026-07-24-02-50-11-44_1c337646f29875672b5a61192b9010f9.jpg": {"tess": ["7 fl2 Neal ynoeorto acl", "Cn p eee Da EnV ONES Ing Nal Fae", "AA ul 47% se Fae & The oro Tope"], "vero": "The Neighbourhood — Chip Chrome & The Mono-Tones", "k": "s39"}, "Screenshot_2026-07-24-02-50-19-20_1c337646f29875672b5a61192b9010f9.jpg": {"tess": [], "vero": "Dean Blunt — ZUSHI", "k": "s40"}, "Screenshot_2026-07-24-02-50-27-22_1c337646f29875672b5a61192b9010f9.jpg": {"tess": ["Skinty Fia Fontaines D.C", "Liem al San vat)", "Fontaines D.C"], "vero": "", "k": "s41"}, "Screenshot_2026-07-24-02-50-48-68_1c337646f29875672b5a61192b9010f9.jpg": {"tess": ["Untourable Album Trust", "Untourable Album", "nl Trust"], "vero": "", "k": "s42"}, "Screenshot_2026-07-24-02-50-56-21_1c337646f29875672b5a61192b9010f9.jpg": {"tess": ["Chemtrails Over The Country Club", "FeTTo Pa ICE MAPLE SALES", "ICE MAPLE SALES"], "vero": "Lana Del Rey — Chemtrails Over The Country Club", "k": "s43"}, "Screenshot_2026-07-24-02-51-04-03_1c337646f29875672b5a61192b9010f9.jpg": {"tess": ["Love Nindjiracht uter", "Nindjiracht uter", "Love"], "vero": "Ninajirachi — I Love My Computer", "k": "s44"}, "Screenshot_2026-07-24-02-51-11-31_1c337646f29875672b5a61192b9010f9.jpg": {"tess": ["Imaginal Disk Magdalena Bay", "MaGingiawsK Uclefeleior)<) fehY", "Imaginal Disk"], "vero": "", "k": "s45"}, "Screenshot_2026-07-24-02-51-19-99_1c337646f29875672b5a61192b9010f9.jpg": {"tess": ["Sling Clairo", "Clairo", "Sling"], "vero": "", "k": "s46"}, "Screenshot_2026-07-24-02-51-34-24_1c337646f29875672b5a61192b9010f9.jpg": {"tess": ["Wet Le moisturizer", "moisturizer"], "vero": "Wet Leg — moisturizer", "k": "s47"}, "Screenshot_2026-07-24-02-51-42-35_1c337646f29875672b5a61192b9010f9.jpg": {"tess": ["NOVA TEEN NGO We Ciyzicll 67.6", "Charli xcx how i'm feeling now", "NOVA TEEN NGO We"], "vero": "Charli XCX — how i’m feeling now", "k": "s48"}, "Screenshot_2026-07-24-02-51-51-04_1c337646f29875672b5a61192b9010f9.jpg": {"tess": ["Wallsocket underscores", "mf atel soe orsy", "underscores"], "vero": "", "k": "s49"}, "Screenshot_2026-07-24-02-52-00-03_1c337646f29875672b5a61192b9010f9.jpg": {"tess": ["What Could Possibly Go Wrong? Dominic Fike", "What Could Possibly Go Wrong?", "Dominic Fike"], "vero": "", "k": "s50"}, "Screenshot_2026-07-24-02-52-07-22_1c337646f29875672b5a61192b9010f9.jpg": {"tess": ["C)yei pros icicle iricn tiie", "Into The Rift Quarters", "icicle iricn tiie"], "vero": "Quarters — Into The Rift", "k": "s51"}, "Screenshot_2026-07-24-02-52-14-33_1c337646f29875672b5a61192b9010f9.jpg": {"tess": ["Being Funny In A Foreign Language The 1975", "Being Funny In A Foreign Language"], "vero": "", "k": "s52"}, "Screenshot_2026-07-24-02-52-21-49_1c337646f29875672b5a61192b9010f9.jpg": {"tess": ["PinkPantheéress to hell with it", "to hell with it", "PinkPantheress 02:52 NR FZ il 46%"], "vero": "", "k": "s53"}};
+
+/* ---- logica identica a quella dell'app ---- */
+const UI_NOISE=/^(play|shuffle|save|saved|follow|following|download|share|more|album|single|ep|home|search|library|premium|spotify|apple music|deezer|tidal|bandcamp|youtube|soundcloud|instagram|reels?|rate ?your ?music|albumoftheyear|aoty|discogs|now playing|liked songs|add to|listen|explore|popular|tracks?|songs?|min|sec|ago|likes?|comments?|followers?|monthly listeners|original audio|suggested for you|aggiungi un commento|scrivi un commento|mi piace|commenta|commenti|condividi|invia|segui|gi[àa] segui|visualizza traduzione|vedi traduzione|audio originale|visualizzazioni|risposte|rispondi|altro|suggeriti per te|consigliati per te|sponsorizzato|in evidenza|cerca|profilo|salva|salvato|riproduci|casuale|brani|ascolta|scaricato|scarica|\d+[:.]\d+|[\d.,]+ ?[km]?\s*%?|[\d.,]+ ?[km]?\s*(followers|listeners|plays|ratings|reviews|likes|mi piace|visualizzazioni)?)$/i;
+const PAIR_RE=/^(.{2,60}?)\s+[-–—]\s+(.{2,90}?)$/;
+const WORD_RE=/^[A-Za-z][A-Za-z'’-]{2,}$/;
+function looksLikePair(line){
+  const m=String(line||'').match(PAIR_RE);
+  if(!m)return null;
+  const artist=m[1].trim(),title=m[2].trim();
+  if(!/[a-z]{2}/i.test(artist)||!/[a-z]{2}/i.test(title))return null;
+  if(UI_NOISE.test(artist)||UI_NOISE.test(title))return null;
+  if(/^\d{4}$/.test(artist))return null;                    /* "1993 - Album" */
+  if(/\b\d+\s*(songs?|tracks?|min|brani|tracce)\b/i.test(title))return null;
+  return{artist:artist,title:title,raw:artist+' - '+title};
+}
+function pairLines(text){
+  const out=[],seen=new Set();
+  String(text||'').split('\n').forEach(raw=>{
+    const l=raw.replace(/[|_~`^]+/g,' ').replace(/\s+/g,' ').trim();
+    if(l.length<5||l.length>110)return;
+    const p=looksLikePair(l);
+    if(!p)return;
+    const k=p.raw.toLowerCase();
+    if(seen.has(k))return;
+    seen.add(k);out.push(p);
+  });
+  return out;
+}
+function cleanSeg(s){
+  return String(s||'').replace(/\s+/g,' ').trim()
+    .replace(/^[^A-Za-z0-9]+/,'')
+    .replace(/[^A-Za-z0-9?!%')\]]+$/,'')
+    .trim();
+}
+function ocrCandidates(text){
+  const lines=[];
+  text.split('\n').forEach(raw=>{
+    const whole=raw.replace(/[|_~`^]+/g,' ').replace(/\s+/g,' ').trim();
+    /* se la riga e' una coppia valida non la spezzo */
+    if(looksLikePair(whole)){lines.push(whole);return}
+    raw.replace(/[|_~`^]+/g,' ').split(/\s{2,}|\s+[-–·•]\s+/).forEach(seg=>{
+      const l=cleanSeg(seg);
+      /* almeno tre lettere: taglia via i frammenti della barra di stato
+         tipo "Ww 151%" senza toccare titoli veri come "The 1975".
+         Eccezione per le sigle tutte maiuscole (RM, MF, XX): sono nomi
+         d'artista veri e la regola dei tre caratteri li cancellava. */
+      const letters=(l.match(/[A-Za-z]/g)||[]).length;
+      const sigla=/^[A-Z]{2,4}$/.test(l);
+      if((letters>=3||sigla)&&l.length<60&&!UI_NOISE.test(l))lines.push(l);
+    });
+  });
+  const uniq=[...new Set(lines)];
+  const scored=uniq.map(l=>({l,s:(l.length>3&&l.length<40?2:0)+(/^[A-Z]/.test(l)?1:0)-(/\d{3,}/.test(l)?2:0)}))
+    .sort((a,b)=>b.s-a.s).map(x=>x.l);
+  const c=[];
+  /* la coppia in cima copre il caso "titolo + artista" su due righe */
+  if(scored.length>=2)c.push(scored[0]+' '+scored[1]);
+  /* le righe singole coprono il caso "lista di titoli nei commenti" */
+  scored.slice(0,7).forEach(l=>c.push(l));
+  /* le virgolette curve degli screenshot non aiutano la ricerca */
+  return[...new Set(c)].map(s=>cleanSeg(s.replace(/[“”„‟"]/g,'')))
+    .filter(s=>s.length>2).slice(0,8);
+}
+function plausibleWords(c){
+  return String(c||'').split(/\s+/)
+    /* via la punteggiatura ai bordi: "mono." e' una parola vera, e senza
+       questo un album come "mono. by RM" veniva buttato come spazzatura */
+    .map(t=>t.replace(/^[^A-Za-z]+/,'').replace(/[^A-Za-z'’-]+$/,''))
+    .filter(t=>/^[A-Za-z][A-Za-z'’-]{3,}$/.test(t)&&/[aeiouy]/i.test(t)).length;
+}
+function mergeCandidates(texts){
+  const pool=new Map();
+  Object.keys(texts).forEach(m=>{
+    ocrCandidates(texts[m]||'').forEach(c=>{
+      const k=c.toLowerCase();
+      if(!pool.has(k)||pool.get(k).length<c.length)pool.set(k,c);
+    });
+  });
+  return[...pool.values()]
+    .map(c=>({c:c,p:plausibleWords(c),l:c.length}))
+    .filter(x=>x.p>=1)
+    .sort((a,b)=>b.p-a.p||b.l-a.l)
+    .slice(0,6).map(x=>x.c);
+}
+function bestPairs(texts){
+  let best=[];
+  Object.keys(texts).forEach(m=>{
+    const p=pairLines(texts[m]||'');
+    if(p.length>best.length)best=p;
+  });
+  return best;
+}
+function txtSim(a,b){
+  const norm=s=>String(s||'').toLowerCase().replace(/[^a-z0-9\s]/g,' ')
+    .replace(/\s+/g,' ').trim().split(' ').filter(w=>w.length>1);
+  const A=new Set(norm(a)),B=new Set(norm(b));
+  if(!A.size||!B.size)return 0;
+  let i=0;A.forEach(w=>{if(B.has(w))i++});
+  return i/Math.max(A.size,B.size);
+}
+
+let service=null, esiti=[];
+const $=i=>document.getElementById(i);
+const norm=s=>String(s||'').toLowerCase().replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
+function copre(testo,vero){
+  const w=norm(vero.replace(/—/g,' ')).split(' ').filter(x=>x.length>2);
+  if(!w.length)return 0;
+  const t=norm(testo);
+  return w.filter(x=>t.includes(x)).length/w.length;
+}
+$('files').onchange=()=>{ $('go').disabled=!$('files').files.length;
+  $('stato').textContent=$('files').files.length+' file pronti.'; };
+
+$('go').onclick=async()=>{
+  $('go').disabled=true;
+  const files=[...$('files').files];
+  $('stato').innerHTML='Scarico il modello PaddleOCR (una volta sola, pochi MB)...';
+  try{
+    const mod=await import('https://esm.sh/ppu-paddle-ocr@latest/web');
+    service=new mod.PaddleOcrService();
+    await service.initialize();
+  }catch(e){
+    $('stato').innerHTML='<span class="no">Non sono riuscito a caricare PaddleOCR: '+e.message+
+      '</span><br>Serve una connessione e la pagina deve stare su https (non aperta da disco).';
+    return;
+  }
+  $('stato').textContent='Modello pronto. Elaboro...';
+  let n=0;
+  for(const f of files){
+    n++;
+    $('bar').style.width=Math.round(n/files.length*100)+'%';
+    $('stato').textContent='['+n+'/'+files.length+'] '+f.name;
+    let testo='';
+    try{
+      const img=new Image(); img.src=URL.createObjectURL(f);
+      await new Promise(r=>{img.onload=r;img.onerror=r});
+      const c=document.createElement('canvas');
+      c.width=img.naturalWidth||img.width; c.height=img.naturalHeight||img.height;
+      c.getContext('2d').drawImage(img,0,0);
+      const res=await service.recognize(c);
+      testo=(res&&res.text)||'';
+      URL.revokeObjectURL(img.src);
+    }catch(e){ testo=''; }
+    const t={paddle:testo};
+    const coppie=bestPairs(t), cands=mergeCandidates(t);
+    const rif=DATI[f.name]||{tess:[],vero:''};
+    const tessTop=(rif.tess[0]||'');
+    const padTop=coppie.length>=3?('LISTA di '+coppie.length+' righe'):(cands[0]||'');
+    let esito='—', cls='';
+    if(rif.vero&&!/non e musica/.test(rif.vero)){
+      const a=copre(rif.tess.join(' '),rif.vero), b=copre(cands.join(' ')||padTop,rif.vero);
+      if(b>a+0.15){esito='MEGLIO';cls='ok'}
+      else if(b<a-0.15){esito='PEGGIO';cls='no'}
+      else {esito='pari';cls=''}
+      if(b>=0.6&&a<0.6){esito='RECUPERATO';cls='ok'}
+      if(a>=0.6&&b<0.6){esito='PERSO';cls='no'}
+    }
+    esiti.push({file:f.name,vero:rif.vero,tess:rif.tess,paddle:cands.slice(0,3),coppie:coppie.length,esito:esito});
+    const tr=document.createElement('tr');
+    tr.innerHTML='<td class="tiny">'+f.name.slice(11,30)+'</td>'+
+      '<td class="tiny">'+(rif.vero||'<i style="color:#555">non verificata</i>')+'</td>'+
+      '<td class="tiny">'+(tessTop||'<span class="no">niente</span>')+'</td>'+
+      '<td class="tiny">'+(padTop||'<span class="no">niente</span>')+'</td>'+
+      '<td class="'+cls+'"><b>'+esito+'</b></td>';
+    $('corpo').appendChild(tr);
+  }
+  const c={MEGLIO:0,PEGGIO:0,pari:0,RECUPERATO:0,PERSO:0};
+  esiti.forEach(e=>{if(c[e.esito]!==undefined)c[e.esito]++});
+  $('riass').style.display='block';
+  $('riass').innerHTML='<b>Riepilogo sui casi con verita nota</b><br><br>'+
+    '<span class="ok">recuperati (prima falliva, ora funziona): '+c.RECUPERATO+'</span> &nbsp;·&nbsp; '+
+    '<span class="ok">migliorati: '+c.MEGLIO+'</span> &nbsp;·&nbsp; pari: '+c.pari+' &nbsp;·&nbsp; '+
+    '<span class="no">peggiorati: '+c.PEGGIO+'</span> &nbsp;·&nbsp; '+
+    '<span class="no">persi (prima funzionava, ora no): '+c.PERSO+'</span>';
+  $('stato').textContent='Finito. Scarica il JSON e mandamelo per l\'analisi completa.';
+  $('dl').disabled=false;
+};
+$('dl').onclick=()=>{
+  const b=new Blob([JSON.stringify(esiti,null,1)],{type:'application/json'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(b);
+  a.download='confronto-motori.json'; a.click();
+};
+</script></body></html>
