@@ -188,6 +188,8 @@ label.f{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.7p
 .toast.on{transform:translateX(-50%);opacity:1}
 .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:10px;margin-bottom:18px}
 .stat{background:var(--bg2);border:1px solid var(--line);border-radius:11px;padding:12px}
+.stat.tap{cursor:pointer;border-color:var(--acc)}
+.stat.tap:active{transform:scale(.97)}
 .stat b{display:block;font-size:22px;letter-spacing:-.5px}
 .stat span{font-size:11px;color:var(--fg3);text-transform:uppercase;letter-spacing:.6px;font-weight:700}
 .spinner{display:inline-block;width:13px;height:13px;border:2px solid var(--fg3);border-top-color:var(--fg);border-radius:50%;animation:rot .7s linear infinite;vertical-align:-2px}
@@ -531,7 +533,7 @@ label.f{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.7p
 /* ==========================================================
    1. STATO
    ========================================================== */
-const APP_VER='42';
+const APP_VER='43';
 const LS='crate.v1', LSK='crate.lfmkey', LSG='crate.gh', LSS='crate.lastsync', LSP='crate.prefs';
 const LSSP='crate.spot';   /* accesso a Spotify: resta su QUESTO dispositivo */
 let DB={albums:[],deleted:[],cfg:{}};
@@ -1501,8 +1503,13 @@ const MACRO=[
   ['blues',/blues/i],
   ['reggae',/reggae|dub|ska|dancehall/i],
   ['sperimentale',/experimental|avant|drone|musique|field recording/i],
-  ['colonne sonore',/soundtrack|score|ost/i]
+  ['colonne sonore',/soundtrack|score|ost/i],
+  /* Ultimo di proposito: "indie rock" deve restare rock e "indie folk" deve
+     restare folk. L'indie non e' un genere alternativo agli altri, e' un modo
+     di stare dentro un genere, quindi lo aggiungo invece di sostituirlo. */
+  ['indie',/indie|indietronica/i]
 ];
+const RE_INDIE=/indie|indietronica/i;
 function macroDi(tag){
   for(const m of MACRO)if(m[1].test(tag))return m[0];
   return null;
@@ -1510,6 +1517,9 @@ function macroDi(tag){
 function macroDiAlbum(a){
   const s=new Set();
   (a.genres||[]).forEach(g=>{const m=macroDi(g);if(m)s.add(m)});
+  /* un album con "indie folk" finisce sia in folk sia in indie: cosi' puoi
+     filtrare per indie senza perderlo quando cerchi il folk */
+  if((a.genres||[]).some(g=>RE_INDIE.test(g)))s.add('indie');
   return[...s];
 }
 function classify(rawTags,itunesGenre){
@@ -3720,9 +3730,82 @@ function renderStats(){
   const A=DB.albums,r=A.filter(a=>a.rating);
   const avg=r.length?(r.reduce((s,a)=>s+a.rating,0)/r.length).toFixed(1):'-';
   document.getElementById('stats').innerHTML=
-    [[A.length,'in libreria'],[A.filter(a=>!a.listened&&!a.pending).length,'da ascoltare'],
-     [A.filter(a=>a.listened).length,'ascoltati'],[A.filter(a=>a.fav).length,'preferiti'],[avg,'voto medio']]
-    .map(x=>'<div class="stat"><b>'+x[0]+'</b><span>'+x[1]+'</span></div>').join('');
+    [[A.length,'in libreria',''],[A.filter(a=>!a.listened&&!a.pending).length,'da ascoltare',''],
+     [A.filter(a=>a.listened).length,'ascoltati',''],[A.filter(a=>a.fav).length,'preferiti',''],
+     [avg,'voto medio',r.length?' tap':'']]
+    .map(x=>'<div class="stat'+x[2]+'"'+(x[2]?' id="statVoto"':'')+'><b>'+x[0]+'</b><span>'+x[1]+
+      '</span>'+(x[2]?'<span class="tiny" style="text-transform:none;letter-spacing:0;color:var(--acc)">per genere &rsaquo;</span>':'')+'</div>').join('');
+  const sv=document.getElementById('statVoto');
+  if(sv)sv.onclick=()=>apriMedie();
+}
+/* ---- il voto medio, spacchettato ----
+   Una media sola non dice niente: quello che serve sapere e' se i dischi che
+   voti meglio hanno qualcosa in comune. Quindi la stessa media, per genere e
+   per mood, ordinata dal migliore. */
+function mediePer(quali){
+  const m=new Map();
+  DB.albums.forEach(a=>{
+    if(!a.rating||a.pending)return;
+    const vals=quali==='generi'?macroDiAlbum(a):(a.moods||[]);
+    [...new Set(vals)].forEach(v=>{
+      if(!v)return;
+      const c=m.get(v)||{n:0,s:0};
+      c.n++;c.s+=a.rating;m.set(v,c);
+    });
+  });
+  return[...m.entries()].map(x=>({k:x[0],n:x[1].n,media:x[1].s/x[1].n}))
+    .sort((a,b)=>b.media-a.media||b.n-a.n);
+}
+let medieMin=2;
+function apriMedie(){
+  const votati=DB.albums.filter(a=>a.rating&&!a.pending);
+  const media=votati.length?votati.reduce((s,a)=>s+a.rating,0)/votati.length:0;
+  const riga=x=>{
+    const largo=Math.max(2,Math.round(x.media*10));
+    const sopra=x.media>=media;
+    return '<div style="display:grid;grid-template-columns:1fr auto;gap:2px 10px;padding:9px 0;'+
+      'border-bottom:1px solid var(--line)">'+
+      '<span style="font-size:14px">'+esc(x.k)+'</span>'+
+      '<span style="font-size:14px;font-weight:700;color:'+(sopra?'var(--gold,#e8c56a)':'var(--fg2)')+'">'+
+        x.media.toFixed(1)+'</span>'+
+      '<div class="bar" style="height:5px"><i style="width:'+largo+'%;background:'+
+        (sopra?'var(--gold,#e8c56a)':'var(--fg3)')+'"></i></div>'+
+      '<span class="tiny muted" style="white-space:nowrap">'+x.n+(x.n===1?' album':' album')+'</span>'+
+    '</div>';
+  };
+  const blocco=(titolo,dati)=>{
+    const tenuti=dati.filter(x=>x.n>=medieMin);
+    if(!tenuti.length)return '<label class="f">'+titolo+'</label>'+
+      '<div class="tiny muted" style="margin-bottom:16px">Nessuno con almeno '+medieMin+
+      ' album votati.</div>';
+    return '<label class="f">'+titolo+'</label><div style="margin-bottom:18px">'+
+      tenuti.map(riga).join('')+'</div>';
+  };
+  openAlbum._id=null;
+  document.getElementById('modal').innerHTML=
+    '<button class="mclose" id="mclose3">&times;</button>'+
+    '<div class="mbody"><h2>Cosa ti piace davvero</h2>'+
+    (votati.length
+      ? '<div class="tiny muted" style="margin:-8px 0 4px">Media su <b>'+votati.length+
+          '</b> album votati: <b>'+media.toFixed(1)+'</b>. In oro quelli sopra la tua media. '+
+          'Il numero di album conta: una media su due dischi dice poco.</div>'+
+        '<div class="row" style="gap:8px;margin-bottom:4px">'+
+          [1,2,3,5].map(v=>'<button class="btn '+(v===medieMin?'':'gh ')+'sm" data-min="'+v+'">'+
+            (v===1?'tutti':'da '+v+'+')+'</button>').join('')+'</div>'+
+        blocco('Generi',mediePer('generi'))+
+        blocco('Mood',mediePer('mood'))
+      : '<div class="tiny muted">Non hai ancora votato nessun album. Dai qualche voto e qui '+
+        'vedrai quali generi e quali mood ti convincono di piu&rsquo;.</div>')+
+    '</div>';
+  const mask=document.getElementById('mask');
+  const eraAperta=mask.classList.contains('on');
+  mask.classList.add('on');mask.scrollTop=0;
+  if(!eraAperta)apriTappa('medie');
+  document.body.style.overflow='hidden';
+  document.getElementById('mclose3').onclick=closeModal;
+  document.querySelectorAll('#modal [data-min]').forEach(b=>b.onclick=()=>{
+    medieMin=+b.dataset.min;apriMedie();
+  });
 }
 function sizeHint(){
   const el=document.getElementById('sizeHint');if(!el)return;
@@ -4014,6 +4097,50 @@ window.addEventListener('popstate',()=>{
 document.getElementById('btnSearch').onclick=()=>runSearch();
 document.getElementById('q').addEventListener('keydown',e=>{if(e.key==='Enter')runSearch()});
 document.getElementById('btnManual').onclick=()=>manualForm({});
+/* Trascinare la scheda verso il basso per chiuderla, come si fa con i
+   pannelli. Vale solo quando sei gia' in cima: se stai leggendo le tracce a
+   meta' scheda, il dito serve a scorrere, non a chiudere. */
+const TIRO_CHIUDE=110;
+function tiroChiude(dy,scrollTop){return scrollTop<=0&&dy>=TIRO_CHIUDE}
+(function(){
+  const mask=document.getElementById('mask');
+  if(!mask)return;
+  let y0=null,tira=false;
+  const modale=()=>document.getElementById('modal');
+  const suCampo=t=>{
+    for(let n=t;n&&n!==mask;n=n.parentNode){
+      const tag=(n.tagName||'').toLowerCase();
+      if(tag==='input'||tag==='textarea'||tag==='select')return true;
+    }
+    return false;
+  };
+  const rilascia=()=>{
+    const m=modale();if(!m)return;
+    m.style.transition='transform .18s ease, opacity .18s ease';
+    m.style.transform='';m.style.opacity='';
+    setTimeout(()=>{if(m)m.style.transition=''},220);
+  };
+  mask.addEventListener('touchstart',e=>{
+    tira=false;
+    y0=(e.touches.length===1&&mask.scrollTop<=0&&!suCampo(e.target))?e.touches[0].clientY:null;
+  },{passive:true});
+  mask.addEventListener('touchmove',e=>{
+    if(y0===null||!e.touches.length)return;
+    const dy=e.touches[0].clientY-y0;
+    if(dy<=0||mask.scrollTop>0)return;
+    tira=true;
+    const m=modale();
+    if(m){m.style.transform='translateY('+Math.min(dy*.45,140)+'px)';
+      m.style.opacity=String(Math.max(.5,1-dy/460))}
+  },{passive:true});
+  mask.addEventListener('touchend',e=>{
+    const dy=y0===null?0:e.changedTouches[0].clientY-y0;
+    const chiudo=tira&&tiroChiude(dy,mask.scrollTop);
+    y0=null;tira=false;
+    rilascia();
+    if(chiudo)closeModal();
+  },{passive:true});
+})();
 document.getElementById('mclose').onclick=closeModal;
 document.getElementById('mask').addEventListener('click',e=>{if(e.target.id==='mask')closeModal()});
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal()});
