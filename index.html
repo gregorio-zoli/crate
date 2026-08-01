@@ -531,7 +531,7 @@ label.f{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.7p
 /* ==========================================================
    1. STATO
    ========================================================== */
-const APP_VER='41';
+const APP_VER='42';
 const LS='crate.v1', LSK='crate.lfmkey', LSG='crate.gh', LSS='crate.lastsync', LSP='crate.prefs';
 const LSSP='crate.spot';   /* accesso a Spotify: resta su QUESTO dispositivo */
 let DB={albums:[],deleted:[],cfg:{}};
@@ -793,8 +793,13 @@ function spotCarica(){
   /* il Client ID arrivato dall'altro dispositivo vince, se qui non c'e' */
   const dalSync=(DB.cfg&&DB.cfg.spotClientId)||'';
   if(dalSync&&!SPOT.clientId)SPOT.clientId=dalSync;
-  /* una sospensione dura ore: se la dimentico riavviando l'app, ricomincio a
-     bussare e Spotify me la allunga. Quindi me la ricordo. */
+  /* Una sospensione dura ore: se la dimentico riavviando l'app ricomincio a
+     bussare e Spotify me la allunga, quindi me la ricordo. Ma appartiene a
+     QUELL'applicazione: se hai messo un altro Client ID, la vecchia penalita'
+     non c'entra piu' niente e trascinarsela dietro sarebbe assurdo. */
+  if(SPOT.attesaApp&&SPOT.clientId&&SPOT.attesaApp!==SPOT.clientId){
+    SPOT.attesa=0;SPOT.rinuncia=0;SPOT.attesaApp='';spotSalva();
+  }
   if(+SPOT.attesa>Date.now())spotAttesaFino=+SPOT.attesa;
 }
 function spotSalva(){try{localStorage.setItem(LSSP,JSON.stringify(SPOT))}catch(e){}}
@@ -899,7 +904,9 @@ function spotRiposa(){spotRallenta=false;spotCode=0;spotPasso=0}
 const SPOT_TREGUA=30*60*1000;
 function spotArrenditi(){
   spotAttesaFino=Math.max(spotAttesaFino,Date.now()+SPOT_TREGUA);
-  SPOT.attesa=spotAttesaFino;SPOT.rinuncia=Date.now();spotSalva();
+  SPOT.attesa=spotAttesaFino;SPOT.rinuncia=Date.now();
+  SPOT.attesaApp=SPOT.clientId;   /* di CHI e' questa sospensione */
+  spotSalva();
   if(typeof renderSpot==='function')renderSpot();
 }
 function spotFinePausa(){
@@ -932,7 +939,7 @@ async function spotChiama(percorso,tentativo){
     spotCode++;
     const detto=Math.max(2,+(r.headers.get('Retry-After')||3)+2);
     spotAttesaFino=Date.now()+detto*1000;
-    SPOT.attesa=spotAttesaFino;spotSalva();
+    SPOT.attesa=spotAttesaFino;SPOT.attesaApp=SPOT.clientId;spotSalva();
     spotRallenta=true;
     /* Distinguo i due casi, che prima confondevo. Se mi chiede pochi secondi
        non mi sta bandendo: mi sta dicendo di andare piano, e allora rallento
@@ -4214,6 +4221,14 @@ function renderSpot(){
   if(inp&&document.activeElement!==inp)inp.value=SPOT.clientId||'';
   const out=document.getElementById('spotOut');
   if(out)out.style.display=spotCollegato()?'':'none';
+  const sb=document.getElementById('spotSblocca');
+  if(sb)sb.onclick=()=>{
+    /* l'attesa e' contabilita' mia: se e' sbagliata, la butto e riprovo.
+       Se Spotify sta ancora rifiutando se ne accorge da solo in un attimo. */
+    spotAttesaFino=0;SPOT.attesa=0;SPOT.rinuncia=0;SPOT.attesaApp='';
+    spotRiposa();spotSalva();renderSpot();renderSpotOra();
+    toast('Riprovo: se Spotify rifiuta ancora, lo scopro subito');
+  };
   const g=spotGiorni();
   const mia=SPOT.rinuncia&&spotInCoda();
   const pausa=spotInCoda()?'<div style="margin-top:6px;color:var(--acc)">'+
@@ -4222,7 +4237,10 @@ function renderSpot(){
          'continuare a bussare allunga la sospensione e non collega niente.'
         :' Ogni richiesta mandata prima della scadenza allungherebbe l\'attesa, quindi sto fermo.')+
     ' Non devi fare niente e non si perde nulla: nel frattempo l\'app usa archivio, '+
-    'Wikidata e Odesli. Riprende da sola.</div>':'';
+    'Wikidata e Odesli. Riprende da sola.'+
+    '<div style="margin-top:8px"><button class="btn gh sm" id="spotSblocca">Riprova adesso</button>'+
+    '<span class="tiny muted" style="margin-left:8px">se pensi che il conto sia rimasto '+
+    'indietro, per esempio dopo aver cambiato Client ID</span></div></div>':'';
   st.innerHTML=pausa+spotCollegato()
     ? '<span style="color:var(--ok,#4ade80)">&#10003; collegato</span>'+
       (SPOT.nome?' come <b>'+esc(SPOT.nome)+'</b>':'')+
