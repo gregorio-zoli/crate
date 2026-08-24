@@ -188,6 +188,10 @@ label.f{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.7p
 .toast.on{transform:translateX(-50%);opacity:1}
 .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:10px;margin-bottom:18px}
 .stat{background:var(--bg2);border:1px solid var(--line);border-radius:11px;padding:12px}
+details.hint>summary{color:var(--acc);list-style:none}
+details.hint>summary::-webkit-details-marker{display:none}
+details.hint>summary::after{content:' \203a';display:inline-block;transition:transform .15s}
+details.hint[open]>summary::after{transform:rotate(90deg)}
 .stat.tap{cursor:pointer;border-color:var(--acc)}
 .stat.tap:active{transform:scale(.97)}
 .stat b{display:block;font-size:22px;letter-spacing:-.5px}
@@ -330,6 +334,16 @@ label.f{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.7p
     <div><label class="f">Generi</label><div class="mchip" id="rGenreMenu"></div></div>
     <div><label class="f">Mood</label><div class="mchip" id="rMoodMenu"></div></div>
     <div><label class="f">Decennio</label><select id="rDec"><option value="">Qualsiasi</option></select></div>
+    <div><label class="f">Durata</label><select id="rLen">
+      <option value="">Qualsiasi</option>
+      <option value="0">sotto 30 min</option>
+      <option value="30">30 &ndash; 40 min</option>
+      <option value="40">40 &ndash; 50 min</option>
+      <option value="50">50 &ndash; 60 min</option>
+      <option value="60">1h &ndash; 1h15</option>
+      <option value="75">1h15 &ndash; 1h30</option>
+      <option value="90">oltre 1h30</option>
+    </select></div>
     <div><label class="f">Tipo</label><select id="rKind">
       <option value="">Tutto</option>
       <option value="full">Solo album interi</option>
@@ -371,7 +385,7 @@ label.f{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.7p
 
   <div class="card" style="margin-bottom:14px">
     <h2>Sincronizzazione tra telefono e PC</h2>
-    <p class="tiny muted" style="margin-top:0">La libreria vive in un file dentro un tuo repository <b>privato</b> su GitHub. Le stesse tre voci qui sotto vanno inserite su ogni dispositivo: da quel momento si allinea da sola. Le modifiche si <b>fondono</b>, non si sovrascrivono.</p>
+    <p class="tiny muted" style="margin-top:0">Le tre voci vanno messe su ogni dispositivo.</p>
     <div class="row" style="margin-bottom:9px">
       <div class="grow"><label class="f">Utente GitHub</label><input type="text" id="ghOwner" placeholder="il-tuo-username" autocapitalize="none" autocomplete="off" spellcheck="false"></div>
       <div class="grow"><label class="f">Repository dei dati</label><input type="text" id="ghRepo" placeholder="crate-data" autocapitalize="none" autocomplete="off" spellcheck="false"></div>
@@ -387,7 +401,7 @@ label.f{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.7p
 
   <div class="card" style="margin-bottom:14px">
     <h2>Tag automatici più ricchi (opzionale)</h2>
-    <p class="tiny muted" style="margin-top:0">Senza chiave i tag arrivano da iTunes e MusicBrainz. Con una chiave gratuita Last.fm diventano molto più specifici. Si prende in un minuto su <a href="https://www.last.fm/api/account/create" target="_blank" rel="noopener">last.fm/api</a>.</p>
+    <p class="tiny muted" style="margin-top:0">Facoltativa: rende i tag pi&ugrave; specifici. <a href="https://www.last.fm/api/account/create" target="_blank" rel="noopener">Prendine una</a>.</p>
     <div class="row">
       <div class="grow"><input type="text" id="lfmKey" placeholder="API key Last.fm" autocomplete="off" spellcheck="false"></div>
       <button class="btn gh" id="btnSaveKey">Salva</button>
@@ -414,13 +428,13 @@ label.f{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.7p
 
   <div class="card" style="margin-bottom:14px">
     <h2>Riaggiorna i tag di tutta la libreria</h2>
-    <p class="tiny muted" style="margin-top:0">Utile dopo aver messo la chiave Last.fm, o quando un disco appena uscito non aveva ancora tag. Circa un secondo per album, perch&eacute; MusicBrainz accetta una richiesta al secondo.</p>
+    <p class="tiny muted" style="margin-top:0">Circa un secondo per album.</p>
     <div class="row">
       <button class="btn" id="bulkMissing">Completa quelli senza tag</button>
       <button class="btn gh" id="bulkAll">Ripassa tutti</button>
       <button class="btn gh sm" id="bulkReset" style="border-color:var(--acc);color:var(--acc)">Rifai da zero</button>
     </div>
-    <div class="hint">&ldquo;Ripassa tutti&rdquo; aggiunge i tag nuovi e non tocca quelli che hai messo tu. &ldquo;Rifai da zero&rdquo; li cancella e li riscarica: usalo solo se sono sbagliati.</div>
+    <div class="hint">&ldquo;Rifai da zero&rdquo; cancella anche i tag messi da te.</div>
     <div id="bulkBox" style="display:none;margin-top:14px">
       <div class="bar"><i id="bulkBar"></i></div>
       <div class="tiny muted" id="bulkTxt" style="margin-top:8px"></div>
@@ -430,7 +444,7 @@ label.f{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.7p
 
   <div class="card" style="margin-bottom:14px">
     <h2>Account Spotify</h2>
-    <p class="tiny muted" style="margin-top:0">Collegando il tuo account, Crate pu&ograve; chiedere gli album direttamente a Spotify: titolo, tipo, tracce, durata, copertina e pagina esatta, senza pi&ugrave; ricostruirli da altre fonti. Serve una registrazione gratuita, una volta sola.</p>
+    <p class="tiny muted" style="margin-top:0">Con l&rsquo;account, i dati arrivano da Spotify invece che ricostruiti da altre fonti. Registrazione gratuita, una volta sola.</p>
     <div id="spotStato" class="tiny" style="margin:10px 0 12px"></div>
     <label class="f">Client ID</label>
     <input type="text" id="spotId" placeholder="le 32 lettere e numeri che ti d&agrave; Spotify" autocapitalize="none" spellcheck="false">
@@ -444,33 +458,24 @@ label.f{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.7p
       <button class="btn" id="spotLogin">Collega account</button>
       <button class="btn gh sm" id="spotOut" style="border-color:var(--acc);color:var(--acc)">Scollega</button>
     </div>
-    <div class="hint"><b>Come si fa, in cinque minuti.</b><br>
-      1. Vai su <b>developer.spotify.com/dashboard</b> e accedi con il tuo account Spotify.<br>
-      2. <b>Create app</b>. Nome e descrizione: quello che vuoi (&ldquo;Crate&rdquo; va bene).<br>
-      3. In <b>Redirect URI</b> incolla l&rsquo;indirizzo qui sopra e premi <b>Add</b>.<br>
-      4. Spunta <b>Web API</b>, accetta i termini, salva.<br>
-      5. Nella scheda dell&rsquo;app apri <b>Settings</b> e copia il <b>Client ID</b> qui sopra.<br>
-      6. Premi <b>Collega account</b>: Spotify ti chiede il permesso, dici di s&igrave;, e torni qui.<br><br>
-      Il <b>Client Secret</b> che vedi accanto <b>non serve</b>: non incollarlo da nessuna parte. Il permesso resta su questo dispositivo, quindi ripeti solo il punto 6 sul telefono.<br><br>
-      <b>Se Spotify ti blocca a lungo.</b> Il tetto di richieste vale per <i>applicazione</i>, non per account: se un&rsquo;app finisce in penalit&agrave; e non ne esce, puoi crearne una seconda dal cruscotto (stessi sei passi, stesso indirizzo di ritorno) e incollare qui il nuovo Client ID. Ricomincia con la quota pulita. Cambiando Client ID il permesso va ridato, ed &egrave; normale: &egrave; un&rsquo;altra app.<br><br>
-      <b>Ogni sei mesi va ridato.</b> Spotify fa scadere il permesso 180 giorni dopo che l&rsquo;hai concesso, e usarlo non sposta la scadenza. Non si rompe niente e non si perde niente: torni qui e premi di nuovo <b>Collega account</b>. Ti avviso io due settimane prima, e nel frattempo l&rsquo;app continua a funzionare con le fonti anonime.</div>
+    <details class="hint"><summary style="cursor:pointer">Come si fa, in cinque minuti</summary><div style="margin-top:8px">1. <b>developer.spotify.com/dashboard</b>, accedi.<br>2. <b>Create app</b>, nome a piacere.<br>3. In <b>Redirect URI</b> incolla l&rsquo;indirizzo qui sopra, poi <b>Add</b>.<br>4. Spunta <b>Web API</b>, salva.<br>5. <b>Settings</b> &rsaquo; copia il <b>Client ID</b>.<br>6. Incollalo qui e premi <b>Collega account</b>.<br><br>Il <b>Client Secret</b> non serve: non incollarlo da nessuna parte.<br>Il permesso vale su questo dispositivo e <b>scade ogni 6 mesi</b>: ti avviso io.<br>Se Spotify blocca a lungo, crea una seconda app e cambia Client ID: il limite &egrave; per app.</div></details>
   </div>
 
   <div class="card" style="margin-bottom:14px">
     <h2>Dove ascolti</h2>
-    <p class="tiny muted" style="margin-top:0">Quando cerco il link di riproduzione provo queste piattaforme in quest&rsquo;ordine e mi fermo alla prima che ha l&rsquo;album. Togli quelle che non usi: un link a un servizio a cui non sei abbonato apre solo una richiesta di abbonamento.</p>
+    <p class="tiny muted" style="margin-top:0">Provate in quest&rsquo;ordine, mi fermo alla prima che ha l&rsquo;album. Togli quelle a cui non sei abbonato.</p>
     <div id="prPlat"></div>
-    <div class="hint">Spotify resta sempre in cima. Le altre le sposti con le frecce. Quelle spente restano qui sotto, spente.</div>
+    <div class="hint">Spotify resta in cima. Le altre si spostano con le frecce.</div>
   </div>
 
   <div class="card" style="margin-bottom:14px">
     <h2>Collegamenti a Spotify</h2>
-    <p class="tiny muted" style="margin-top:0">Cerca in anticipo la pagina esatta dell&rsquo;album su Spotify e se la ricorda. Fatto una volta, il tasto <b>&#9654;</b> apre subito il disco invece di restare sulla schermata bianca ad aspettare.</p>
+    <p class="tiny muted" style="margin-top:0">Trova in anticipo la pagina dell&rsquo;album, cos&igrave; il tasto <b>&#9654;</b> apre subito.</p>
     <div class="row">
       <button class="btn" id="spotMissing">Collega quelli che mancano</button>
       <button class="btn gh" id="spotAll">Ricontrolla tutti</button>
     </div>
-    <div class="hint">&ldquo;Ricontrolla tutti&rdquo; riprova anche gli album finiti su un&rsquo;altra piattaforma, per vedere se nel frattempo Spotify li ha. Gli indirizzi che hai incollato tu non vengono mai toccati.<br><br>Va piano di proposito. Con l&rsquo;account collegato conta un paio di album al secondo; senza, circa otto al minuto, perch&eacute; la fonte anonima migliore ne accetta dieci. Se Spotify mi mette in coda aspetto e riprovo l&rsquo;album, invece di darlo per disperso. Puoi fermarlo e riprenderlo quando vuoi, quelli gi&agrave; collegati non li rifa&agrave;. Alla fine ti dico perch&eacute; gli altri non ci sono, e quali sono.</div>
+    <div class="hint">&ldquo;Ricontrolla tutti&rdquo; riprova anche quelli finiti altrove. I link che hai incollato tu non si toccano. Lancialo una volta e lascialo finire.</div>
     <div id="spotOra" style="margin-top:14px"></div>
     <div id="spotRiprendi"></div>
     <div id="spotBox" style="display:none;margin-top:14px">
@@ -482,7 +487,7 @@ label.f{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.7p
 
   <div class="card" style="margin-bottom:14px">
     <h2>Diagnostica</h2>
-    <p class="tiny muted" style="margin-top:0">Prova una per una le fonti che l&rsquo;app interroga. Se qualcosa non funziona, qui si vede quale.</p>
+    <p class="tiny muted" style="margin-top:0">Se qualcosa non funziona, qui si vede cosa.</p>
     <button class="btn" id="btnDiag">Prova le fonti</button>
     <div id="diagBox" style="margin-top:12px"></div>
   </div>
@@ -533,7 +538,7 @@ label.f{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.7p
 /* ==========================================================
    1. STATO
    ========================================================== */
-const APP_VER='44';
+const APP_VER='45';
 const LS='crate.v1', LSK='crate.lfmkey', LSG='crate.gh', LSS='crate.lastsync', LSP='crate.prefs';
 const LSSP='crate.spot';   /* accesso a Spotify: resta su QUESTO dispositivo */
 let DB={albums:[],deleted:[],cfg:{}};
@@ -1779,6 +1784,25 @@ async function bulkEnrich(mode){
   txt.innerHTML=(bulkStop?'Fermato.':'Finito.')+' '+done+' album ripassati, '+changed+' aggiornati.';
   bulkRunning=false;bulkStop=false;
   renderAll();scheduleSync();
+}
+/* Apre l'album dove si ascolta. Sta qui e non dentro la scheda perche' lo
+   usa anche la schermata random: un solo posto, un solo comportamento. */
+async function apriAscolto(a,bottone){
+  if(!a)return null;
+  /* un link tuo ha la precedenza: per i dischi fuori dallo streaming e'
+     l'unico posto dove esistono davvero */
+  if(a.listenUrl){window.open(a.listenUrl,'_blank','noopener');return a.listenUrl}
+  if(a.spotify){window.open(a.spotify,'_blank','noopener');return a.spotify}
+  const w=window.open('','_blank');   /* apro subito: se aspetto, il browser blocca il popup */
+  const et=bottone?bottone.innerHTML:'';
+  if(bottone)bottone.innerHTML='<span class="spinner"></span>';
+  const q=encodeURIComponent(((a.artist||'')+' '+(a.title||'')).trim());
+  let url='https://open.spotify.com/search/'+q+'/albums',diretto=false;
+  try{const L=await resolveListen(a);if(L&&L.url){url=L.url;diretto=true}}catch(e){}
+  if(bottone)bottone.innerHTML=et;
+  if(!diretto)toast(resolveListen.motivo?('Ricerca: '+resolveListen.motivo):'Scheda esatta non trovata');
+  if(w)w.location=url;else window.open(url,'_blank','noopener');
+  return diretto?url:null;
 }
 /* ---- collegamento a Spotify in blocco ----
    La prima volta che premi il tasto riproduci l'app deve ancora scoprire
@@ -3558,23 +3582,7 @@ function openAlbum(id,keepScroll){
   if(bArt)bArt.onclick=()=>{closeModal();openArtist(a.artist)};
   /* link diretto all'album su Spotify */
   const bSpot=document.getElementById('bSpot');
-  if(bSpot)bSpot.onclick=async()=>{
-    const q=encodeURIComponent(((a.artist||'')+' '+(a.title||'')).trim());
-    const fallback='https://open.spotify.com/search/'+q+'/albums';
-    /* un link inserito a mano ha la precedenza: per i dischi fuori dallo
-       streaming e' l'unico posto dove esistono davvero */
-    if(a.listenUrl){window.open(a.listenUrl,'_blank','noopener');return}
-    if(a.spotify){window.open(a.spotify,'_blank','noopener');return}
-    const w=window.open('','_blank');   /* apro subito: se aspetto, il browser blocca il popup */
-    const etichetta=bSpot.innerHTML;
-    bSpot.innerHTML='<span class="spinner"></span>';
-    let url=fallback,diretto=false;
-    try{const L=await resolveListen(a);if(L&&L.url){url=L.url;diretto=true}}catch(e){}
-    bSpot.innerHTML=etichetta;
-    if(!diretto)toast(resolveListen.motivo?('Ricerca: '+resolveListen.motivo):'Scheda esatta non trovata');
-    if(w)w.location=url;else window.open(url,'_blank','noopener');
-    if(openAlbum._id===id)openAlbum(id,true);
-  };
+  if(bSpot)bSpot.onclick=()=>apriAscolto(a,bSpot);
   const cmt=document.getElementById('cmt');
   cmt.oninput=()=>{a.comment=cmt.value;clearTimeout(cmt._t);cmt._t=setTimeout(()=>{save(a);renderAll()},500)};
   /* --- tracce --- */
@@ -3760,7 +3768,18 @@ function fillSelect(el,vals){
   el.innerHTML=first+vals.map(v=>'<option value="'+esc(v)+'">'+esc(v)+'</option>').join('');
   if(vals.map(String).includes(String(cur)))el.value=cur;
 }
+/* Gli intervalli di durata, scelti da te sulla libreria vera. Il valore e'
+   il minuto di partenza, cosi' la tendina e il filtro non possono divergere. */
+const FASCE={0:[0,30],30:[30,40],40:[40,50],50:[50,60],60:[60,75],75:[75,90],90:[90,1e9]};
+function nellaFascia(a,chiave){
+  const f=FASCE[chiave];
+  if(!f)return true;
+  if(!a.durata)return false;      /* durata ignota: fuori, e' proprio il punto del filtro */
+  const min=a.durata/60000;
+  return min>=f[0]&&min<f[1];
+}
 function matches(a,f){
+  if(f.len!==undefined&&f.len!==''&&!nellaFascia(a,f.len))return false;
   if(f.artist&&(a.artist||'').toLowerCase()!==f.artist.toLowerCase())return false;
   if(f.fullOnly&&(a.kind==='singolo'||a.kind==='EP'))return false;
   if(f.state==='pending')return !!a.pending;
@@ -3933,6 +3952,7 @@ function randPool(){
   const f={state:document.getElementById('rState').value,q:'',
     generi:[...SEL.rGen],moods:[...SEL.rMoo],
     dec:document.getElementById('rDec').value,
+    len:document.getElementById('rLen').value,
     fullOnly:document.getElementById('rKind').value==='full'};
   return DB.albums.filter(a=>!a.pending&&matches(a,f));
 }
@@ -3949,6 +3969,8 @@ function updatePool(){
     if(document.getElementById('rKind').value==='full')on.push('senza singoli ed EP');
     [...SEL.rGen,...SEL.rMoo].forEach(v=>on.push(v));
     const dec=document.getElementById('rDec').value;if(dec)on.push(dec);
+    const len=document.getElementById('rLen');
+    if(len&&len.value!=='')on.push(len.options[len.selectedIndex].text);
     act.textContent=on.length?'filtri attivi: '+on.join(', '):'nessun filtro: pesca da tutta la libreria';
   }
 }
@@ -3960,7 +3982,8 @@ function spin(){
   const draw=a=>{stage.innerHTML=(a.cover?'<img class="cover" src="'+esc(a.cover)+'" alt="" onerror="crateImgFail(this)">':
     '<div class="cover" style="display:flex;align-items:center;justify-content:center;font-size:52px;opacity:.3">&#127925;</div>')+
     '<div><h3>'+esc(a.title)+'</h3><p class="art">'+esc(a.artist||'')+
-    (a.year?' &middot; '+a.year:'')+(a.kind&&a.kind!=='album'?' &middot; '+esc(a.kind):'')+'</p></div>'};
+    (a.year?' &middot; '+a.year:'')+(a.kind&&a.kind!=='album'?' &middot; '+esc(a.kind):'')+
+    ' &middot; '+(a.durata?durataUmana(a.durata):'&ndash;')+'</p></div>'};
 
   function finish(){
     slot.classList.remove('spinning');draw(pick);
@@ -3975,12 +3998,17 @@ function spin(){
     btns.style.cssText='justify-content:center;margin-top:10px';
     btns.innerHTML='<button class="btn acc" id="sAgain">Rilancia</button>'+
       '<button class="btn gh" id="sOpen">Apri la scheda</button>'+
-      '<button class="btn gh" id="sDone">&#10003; Ascoltato</button>';
+      '<button class="btn gh" id="sPlay">&#9654; Riproduci</button>';
     stage.appendChild(btns);
     document.getElementById('sAgain').onclick=spin;
     document.getElementById('sOpen').onclick=()=>openAlbum(pick.id);
-    document.getElementById('sDone').onclick=()=>{pick.listened=true;pick.listenedAt=now();
-      save(pick);renderAll();openAlbum(pick.id)};
+    /* Se lo apri per ascoltarlo, per me e' ascoltato: nel dubbio si toglie
+       dalla libreria in due tocchi, ma cosi' non devi ricordartene. */
+    document.getElementById('sPlay').onclick=async e=>{
+      const b=e.currentTarget;
+      if(!pick.listened){pick.listened=true;pick.listenedAt=now();save(pick);renderAll()}
+      await apriAscolto(pick,b);
+    };
   }
   if(pool.length===1){draw(pick);finish();return}
 
@@ -4267,7 +4295,7 @@ document.getElementById('fState').querySelectorAll('button').forEach(b=>b.onclic
   libState=b.dataset.s;
   document.getElementById('fState').querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));
   renderLib()});
-['rState','rDec','rKind'].forEach(i=>document.getElementById(i).addEventListener('change',updatePool));
+['rState','rDec','rKind','rLen'].forEach(i=>document.getElementById(i).addEventListener('change',updatePool));
 document.getElementById('btnSpin').onclick=spin;
 document.getElementById('recToggle').onclick=()=>{
   const b=document.getElementById('recBody'),open=b.style.display==='none';
@@ -4279,7 +4307,7 @@ document.getElementById('recGo').onclick=renderRec;
 ['recSeed','recTodo'].forEach(i=>document.getElementById(i).addEventListener('change',renderRec));
 document.getElementById('rReset').onclick=()=>{
   document.getElementById('rState').value='all';
-  ['rDec','rKind'].forEach(i=>document.getElementById(i).value='');
+  ['rDec','rKind','rLen'].forEach(i=>document.getElementById(i).value='');
   SEL.rGen.clear();SEL.rMoo.clear();renderAll();
   updatePool();toast('Filtri azzerati');
 };
@@ -4664,6 +4692,23 @@ document.getElementById('btnDiag').onclick=async()=>{
       const n=((((await r.json())||{}).results||{}).bindings||[]).length;
       if(!n)throw new Error('risponde ma senza dati');
       return 'raggiungibile, e conosce gli identificativi Spotify';
+    }],
+    ['Discogs (generi e sottogeneri)',async()=>{
+      /* La domanda vera non e' se Discogs abbia i dati - li ha - ma se si
+         lasci interrogare da una pagina web. Provo l'album di prova gia'
+         verificato: se torna "Rock" con dentro Post-Punk e Goth Rock,
+         possiamo costruirci sopra i generi a due livelli. */
+      let r;
+      try{r=await fetch('https://api.discogs.com/masters/2602640')}
+      catch(e){throw new Error('non si lascia chiamare dal browser (manca l\'autorizzazione '+
+        'CORS). E\' la risposta che aspettavo di misurare: senza, i generi restano '+
+        'quelli di MusicBrainz.')}
+      if(r.status===401||r.status===403)throw new Error('chiede una chiave (HTTP '+r.status+')');
+      if(!r.ok)throw new Error('HTTP '+r.status);
+      const d=(await r.json())||{};
+      const gen=(d.genres||[]).join(', '),sty=(d.styles||[]).join(', ');
+      if(!gen&&!sty)throw new Error('risponde ma senza generi');
+      return 'funziona! genere: '+(gen||'-')+' \u00b7 sottogeneri: '+(sty||'-');
     }],
     ['Copertine (Cover Art)',async()=>{
       await new Promise((res,rej)=>{
