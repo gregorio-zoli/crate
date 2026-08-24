@@ -533,7 +533,7 @@ label.f{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.7p
 /* ==========================================================
    1. STATO
    ========================================================== */
-const APP_VER='43';
+const APP_VER='44';
 const LS='crate.v1', LSK='crate.lfmkey', LSG='crate.gh', LSS='crate.lastsync', LSP='crate.prefs';
 const LSSP='crate.spot';   /* accesso a Spotify: resta su QUESTO dispositivo */
 let DB={albums:[],deleted:[],cfg:{}};
@@ -835,11 +835,22 @@ async function spotEntra(){
     '&code_challenge_method=S256&code_challenge='+sfida+'&state='+stato;
 }
 async function spotToken(corpo){
-  const r=await fetch(SPOT_TOKEN,{method:'POST',
+  let r;
+  /* Distinguo due fallimenti opposti che prima confondevo:
+     "Spotify dice che il permesso non vale piu'" e "non sono riuscito a
+     parlargli". Il primo va accettato, il secondo va solo riprovato. */
+  try{r=await fetch(SPOT_TOKEN,{method:'POST',
     headers:{'Content-Type':'application/x-www-form-urlencoded'},
-    body:new URLSearchParams(corpo).toString()});
+    body:new URLSearchParams(corpo).toString()})}
+  catch(e){const err=new Error('non sono riuscito a raggiungere Spotify');err.rete=true;throw err}
   const d=await r.json().catch(()=>({}));
-  if(!r.ok)throw new Error(d.error_description||d.error||('HTTP '+r.status));
+  if(!r.ok){
+    const err=new Error(d.error_description||d.error||('HTTP '+r.status));
+    /* solo questo vuol dire davvero "permesso revocato" */
+    err.scaduto=(r.status===400&&/invalid_grant/i.test(String(d.error||d.error_description||'')));
+    if(r.status>=500||r.status===429)err.rete=true;
+    throw err;
+  }
   SPOT.token=d.access_token||'';
   if(d.refresh_token)SPOT.refresh=d.refresh_token;
   SPOT.scade=Date.now()+((+d.expires_in||3600)-90)*1000;
@@ -877,7 +888,14 @@ async function spotValido(){
     spotRinnovo=spotToken({grant_type:'refresh_token',refresh_token:SPOT.refresh,
       client_id:SPOT.clientId})
       .catch(e=>{
-        /* rinnovo rifiutato: l'accesso e' scaduto davvero, non fingo che vada */
+        /* Non ti ho raggiunto: sotto un ponte, wifi che cade, server lento.
+           Il permesso non c'entra e buttarlo via sarebbe un disastro: basta
+           un buco di due secondi per scollegarti per sempre senza dirtelo. */
+        if((e&&e.rete)||!navigator.onLine){
+          SPOT.token='';SPOT.scade=0;spotSalva();
+          return '';
+        }
+        /* qui invece Spotify ha risposto proprio "questo permesso non vale" */
         SPOT.token='';SPOT.refresh='';SPOT.scade=0;SPOT.scaduto=true;spotSalva();
         if(typeof renderSpot==='function')renderSpot();
         if(typeof toast==='function')toast('Il permesso di Spotify e\' scaduto: ricollega l\'account');
@@ -1160,10 +1178,25 @@ function detectKind(title,tracks,type){
 function cleanTitle(t){return String(t||'').replace(/\s[-–]\s*(single|singolo|ep)\s*$/i,'').trim()}
 /* Parole che segnalano un'EDIZIONE diversa, non un DISCO diverso. */
 const RUMORE_ED=/^(demos?|instrumentals?|live|remix|remixes|remixed|karaoke|tribute|commentary|acoustic|session|sessions|edit|edits|radio|single|singolo|cover|covers|backing|rehearsal|outtake|outtakes|bonus|reprise|version|versions|remaster|remastered|anniversary|deluxe|expanded|edition|explicit|clean|mono|stereo|ep)$/;
+/* Butto via le parentesi SOLO se dentro c'e' roba da edizione. La tua
+   libreria mi ha insegnato la differenza: "Misplaced Childhood (2017
+   Remaster)" e' lo stesso disco di "Misplaced Childhood", ma "American
+   Football (LP4)" non e' "American Football" — sono due album diversi con lo
+   stesso nome. Prima buttavo il contenuto di ogni parentesi e li avrei fusi. */
+function soloEdizione(testo){
+  const parole=String(testo||'').toLowerCase().replace(/[^a-z0-9\s]/g,' ')
+    .split(/\s+/).filter(Boolean);
+  if(!parole.length)return true;
+  return parole.every(w=>RUMORE_ED.test(w)||/^(18|19|20)\d\d$/.test(w)||
+    /^\d+(st|nd|rd|th|°)?$/.test(w)||w==='the'||w==='of');
+}
 function nucleoTitolo(t){
   return String(t||'').toLowerCase()
-    .replace(/\[[^\]]*\]|\([^)]*\)/g,' ')        /* via le parentesi: sono edizioni */
-    .replace(/\s[-–—]\s[^-–—]*$/,' ')            /* via il "- Deluxe Edition" finale */
+    .replace(/\[([^\]]*)\]|\(([^)]*)\)/g,(m,q,tondo)=>{
+      const dentro=q!==undefined?q:tondo;
+      return soloEdizione(dentro)?' ':' '+dentro+' ';
+    })
+    .replace(/\s[-–—]\s([^-–—]*)$/,(m,coda)=>soloEdizione(coda)?' ':m)
     .replace(/[^a-z0-9\s]/g,' ').replace(/\s+/g,' ').trim();
 }
 /* "This Old Dog" e "Old Dog Demos" si somigliano per due parole su tre, ma
@@ -1546,8 +1579,17 @@ function classify(rawTags,itunesGenre){
    6. AGGIUNTA
    ========================================================== */
 function findExisting(artist,title){
-  const k=((artist||'')+'|'+(title||'')).toLowerCase();
-  return DB.albums.find(a=>key(a)===k.trim());
+  const k=((artist||'')+'|'+(title||'')).trim().toLowerCase();
+  const esatto=DB.albums.find(a=>key(a)===k);
+  if(esatto)return esatto;
+  /* Nessuna corrispondenza esatta: ma "Album" e "Album (2017 Remaster)" sono
+     lo stesso disco, e finora ne creavo due. Confronto anche col criterio
+     buono, quello che sa distinguere un'edizione da un altro album. */
+  if(!title)return undefined;
+  return DB.albums.find(a=>!a.pending&&
+    txtSim(a.artist||'',artist||'')>=(artist?.6:0)&&
+    (!!artist===!!a.artist||!artist)&&
+    stessoTitolo(a.title||'',title));
 }
 function addAlbum(c,quiet){
   const ex=findExisting(c.artist,c.title);
@@ -2185,15 +2227,21 @@ async function albumDaSpotify(url,esito,artistaNoto){
       }
     }catch(e){}
   }
-  /* 3. il resto dai negozi, ma accettando solo chi ha DAVVERO quel titolo */
-  if(out.title&&(!out.artist||!out.tracks||!out.cover||!out.itunesUrl)){
-    let rs=[];try{rs=await cercaCompleta(out.title,out.artist||'')}catch(e){}
-    const buoni=rs.filter(r=>stessoTitolo(r.title,out.title)&&
-      (!out.artist||txtSim(r.artist||'',out.artist)>=.5));
-    const m=buoni.sort((x,y)=>simAlbum(y,out.title,out.artist||'')-simAlbum(x,out.title,out.artist||''))[0];
+  /* 3. Il resto dai negozi. Ma SOLO se so gia' chi e' l'artista.
+        Senza, cercare "Isolation" nei negozi restituisce Toto, e da li'
+        prendevo anno, tracce e generi: nasceva "Isolation di Toto" con la
+        copertina di Kali Uchis. Peggio ancora, riempendo l'artista con un
+        nome inventato disattivavo la rete di sicurezza piu' avanti, che
+        serviva esattamente a quel caso. Da un titolo solo non si ricava
+        niente: "Isolation", "So Far", "Dreams" sono di decine di dischi. */
+  if(out.title&&out.artist&&(!out.tracks||!out.cover||!out.itunesUrl)){
+    let rs=[];try{rs=await cercaCompleta(out.title,out.artist)}catch(e){}
+    const buoni=rs.filter(r=>stessoTitolo(r.title,out.title)&&txtSim(r.artist||'',out.artist)>=.5);
+    const m=buoni.sort((x,y)=>simAlbum(y,out.title,out.artist)-simAlbum(x,out.title,out.artist))[0];
     if(m){trovato=true;
-      if(!out.artist&&m.artist)out.artist=m.artist;
       ['year','tracks','cover','itunesUrl','deezerUrl','mbid','kind','genre'].forEach(k=>{if(m[k]&&!out[k])out[k]=m[k]});}
+  }else if(out.title&&!out.artist){
+    dice('non so di chi sia: lascio artista e dati vuoti invece di indovinarli');
   }
   return(trovato&&out.title)?out:null;
 }
@@ -2228,9 +2276,17 @@ async function resolveListen(a,forza){
      resto fermo ad aspettarlo: le altre fonti sono piu' lente e meno precise,
      pero' rispondono. Meglio un album collegato via archivio adesso che uno
      collegato via Spotify fra mezz'ora. */
-  if(spotCollegato()&&spotInCoda()){
+  if(!navigator.onLine)esito.push('sei senza rete: quello che segue vale poco');
+  /* Se l'account non c'e', DEVE risultare da qui. Prima il gradino Spotify
+     veniva saltato in silenzio, e l'unico indizio era che nell'elenco dei
+     motivi mancasse una riga: un modo assurdo di accorgersi di qualcosa. */
+  if(!spotCollegato()){
+    esito.push(SPOT.clientId
+      ? 'Spotify non collegato su questo dispositivo: vai in Opzioni e premi "Collega account"'
+      : 'account Spotify non configurato: senza, uso solo le fonti anonime');
+  }else if(spotInCoda()){
     esito.push('Spotify in coda ('+spotSecondi()+'s): provo con le altre fonti');
-  }else if(spotCollegato()){
+  }else{
     let d=null;
     try{d=await spotCerca(a.title,a.artist,esito,resolveListen.soloLink)}
     catch(e){
@@ -3371,6 +3427,7 @@ function openAlbum(id,keepScroll){
       '</div><div id="covBox" style="margin-top:10px"></div>'+
       '<input type="file" id="covFile" accept="image/*" hidden></div>'+
     '<div class="sec row"><button class="btn gh sm" id="bRe">Riprova tag automatici</button>'+
+      (a.pending?'':'<button class="btn gh sm" id="bIncolla">Incolla link Spotify</button>')+
       (a.pending||!MOTIVI.get(a.id)?'':'<div id="linkMotivo" style="flex-basis:100%;margin-bottom:6px">'+
         '<span class="tiny muted">'+esc(MOTIVI.get(a.id))+'</span></div>')+
       (a.pending?'':'<button class="btn gh sm" id="bLink"'+
@@ -3450,6 +3507,48 @@ function openAlbum(id,keepScroll){
       if(box)box.innerHTML='<span class="tiny muted">'+esc(MOTIVI.get(a.id)||resolveListen.motivo||'')+'</span>';
     }
     save(a);renderAll();
+    if(openAlbum._id===id)openAlbum(id,true);
+  };
+  /* Incollare l'indirizzo a mano: la strada che non passa da nessun
+     indovinello. Aggiorna QUESTO album, non ne crea uno nuovo, che era il
+     difetto della condivisione quando il titolo non combaciava. */
+  const bIncolla=document.getElementById('bIncolla');
+  if(bIncolla)bIncolla.onclick=async()=>{
+    const grezzo=prompt('Incolla l\'indirizzo dell\'album su Spotify.\n\n'+
+      'Nell\'app Spotify: i tre puntini \u203a Condividi \u203a Copia link.\n'+
+      'Lascia vuoto e conferma per togliere il link che c\'e\' adesso.',
+      a.linkFissato?(a.listenUrl||''):'');
+    if(grezzo===null)return;
+    const url=String(grezzo).trim();
+    if(!url){
+      a.listenUrl='';a.platform='';a.linkFissato=false;a.daLink=false;
+      save(a);renderAll();toast('Link tolto');
+      if(openAlbum._id===id)openAlbum(id,true);
+      return;
+    }
+    if(!idSpotify(url)&&!/spotify\.link|spoti\.fi/.test(url)){
+      toast('Non sembra l\'indirizzo di un album Spotify');return;
+    }
+    const et=bIncolla.innerHTML;bIncolla.innerHTML='<span class="spinner"></span> leggo...';
+    const esito=[];
+    let d=null;
+    try{d=await albumDaSpotify(url,esito,a.artist||'')}catch(e){}
+    bIncolla.innerHTML=et;
+    /* il link punta a un disco diverso da questo? meglio chiedere */
+    if(d&&d.title&&a.title&&!stessoTitolo(d.title,a.title)&&
+       !confirm('Questo indirizzo punta a \u201c'+d.title+'\u201d, '+
+         'mentre la scheda \u00e8 \u201c'+a.title+'\u201d.\n\nLo uso lo stesso?'))return;
+    if(d){applicaDati(a,d);save(a);toast('Aggiornato da Spotify')}
+    else{
+      /* non sono riuscito a leggerlo, ma il link me lo tengo: e' tuo */
+      const sp=idSpotify(url);
+      if(sp){a.listenUrl=urlSpotify(sp);a.spotify=a.listenUrl;a.platName='Spotify';
+        a.platform='Spotify';a.linkFissato=true;a.daLink=true;save(a);
+        toast('Link salvato; i dati non sono arrivati')}
+      else toast(esito.join(' \u00b7 ')||'Non sono riuscito a leggerlo');
+    }
+    MOTIVI.delete(a.id);
+    renderAll();
     if(openAlbum._id===id)openAlbum(id,true);
   };
   const bSim=document.getElementById('bSim');
@@ -4368,7 +4467,11 @@ function renderSpot(){
     '<div style="margin-top:8px"><button class="btn gh sm" id="spotSblocca">Riprova adesso</button>'+
     '<span class="tiny muted" style="margin-left:8px">se pensi che il conto sia rimasto '+
     'indietro, per esempio dopo aver cambiato Client ID</span></div></div>':'';
-  st.innerHTML=pausa+spotCollegato()
+  /* Le parentesi non sono un vezzo: senza, "pausa + spotCollegato()" diventa
+     la stringa "false", che come condizione e' VERA. Il pannello ha detto
+     "collegato" per settimane, anche quando non lo era, e ci ha fatto cercare
+     il guasto ovunque tranne che qui. */
+  st.innerHTML=pausa+(spotCollegato()
     ? '<span style="color:var(--ok,#4ade80)">&#10003; collegato</span>'+
       (SPOT.nome?' come <b>'+esc(SPOT.nome)+'</b>':'')+
       ' &middot; <span class="muted">250 richieste ogni 30 secondi, invece di 10 al minuto</span>'+
@@ -4381,7 +4484,7 @@ function renderSpot(){
     : (SPOT.scaduto?'<span style="color:var(--acc)">Il permesso &egrave; scaduto</span>'+
         ' <span class="muted">&middot; premi &ldquo;Collega account&rdquo;: il Client ID &egrave; ancora al suo posto.</span>'
       :SPOT.clientId?'<span class="muted">Client ID salvato: manca solo il permesso, premi &ldquo;Collega account&rdquo;.</span>'
-                    :'<span class="muted">Non collegato: uso le fonti anonime, che sono pi&ugrave; lente e meno precise.</span>');
+                    :'<span class="muted">Non collegato: uso le fonti anonime, che sono pi&ugrave; lente e meno precise.</span>'));
 }
 document.getElementById('spotId').addEventListener('input',e=>{
   const v=e.target.value.trim();
