@@ -545,7 +545,7 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
 /* ==========================================================
    1. STATO
    ========================================================== */
-const APP_VER='52';
+const APP_VER='54';
 const LS='crate.v1', LSK='crate.lfmkey', LSG='crate.gh', LSS='crate.lastsync', LSP='crate.prefs';
 const LSSP='crate.spot';   /* accesso a Spotify: resta su QUESTO dispositivo */
 let DB={albums:[],deleted:[],cfg:{}};
@@ -764,12 +764,25 @@ async function ghGet(c){
     if(r2.ok){const d2=await r2.json();txt=d2.content?b64dec(d2.content):''}
   }
   let db=null;
-  try{const p=JSON.parse(txt);if(p&&Array.isArray(p.albums))db={albums:p.albums,deleted:p.deleted||[]}}catch(e){}
+  /* Qui rileggevo il file remoto tenendo SOLO album e lapidi, e buttavo via
+     le impostazioni. Quando ho aggiunto "cfg" ho toccato chi scrive e chi
+     fonde, ma non chi legge: cosi' il token Discogs partiva dal PC, finiva
+     davvero nel file, e all'arrivo veniva scartato da questa riga - su ogni
+     dispositivo, compresa la Diagnostica che diceva "nel repository: niente"
+     mentre nel repository c'era. */
+  try{const p=JSON.parse(txt);
+    if(p&&Array.isArray(p.albums))db={albums:p.albums,deleted:p.deleted||[],
+      cfg:(p.cfg&&typeof p.cfg==='object')?p.cfg:{}};
+  }catch(e){}
   return{db:db,sha:d.sha};
 }
 async function ghPut(c,db,sha){
   const body={message:'crate: '+db.albums.length+' album — '+new Date().toISOString(),
-    content:b64enc(JSON.stringify(db,null,1))};
+    /* compatto, non indentato: l'indentazione sono 250 KB di spazi a ogni
+       sincronizzazione, e faceva superare il megabyte oltre il quale GitHub
+       non restituisce piu' il contenuto e tocca passare da una seconda
+       richiesta. Il file da leggere a occhio e' quello che esporti tu. */
+    content:b64enc(JSON.stringify(db))};
   if(sha)body.sha=sha;
   const r=await fetch(ghApi(c),{method:'PUT',headers:Object.assign({'Content-Type':'application/json'},ghHead(c)),
     body:JSON.stringify(body)});
