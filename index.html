@@ -467,6 +467,11 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
     <h2>Dove ascolti</h2>
     <p class="tiny muted" style="margin-top:0">Provate in quest&rsquo;ordine, mi fermo alla prima che ha l&rsquo;album. Togli quelle a cui non sei abbonato.</p>
     <div id="prPlat"></div>
+    <label style="display:flex;gap:10px;align-items:flex-start;padding:12px 0 2px;cursor:pointer">
+      <input type="checkbox" id="prSpotApp" style="width:auto;margin:3px 0 0;flex:none;accent-color:var(--acc)">
+      <span style="min-width:0"><span style="font-size:14px">Apri l&rsquo;app di Spotify invece del browser</span>
+      <span class="tiny muted" style="display:block">Vale solo su questo dispositivo. Utile sul PC, dove il tasto &#9654; aprirebbe il lettore web. La prima volta il browser chiede il permesso.</span></span>
+    </label>
     <div class="hint">Spotify resta in cima. Le altre si spostano con le frecce.</div>
   </div>
 
@@ -540,7 +545,7 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
 /* ==========================================================
    1. STATO
    ========================================================== */
-const APP_VER='50';
+const APP_VER='51';
 const LS='crate.v1', LSK='crate.lfmkey', LSG='crate.gh', LSS='crate.lastsync', LSP='crate.prefs';
 const LSSP='crate.spot';   /* accesso a Spotify: resta su QUESTO dispositivo */
 let DB={albums:[],deleted:[],cfg:{}};
@@ -556,7 +561,10 @@ const PREF_DEFAULTS={
         listen:true,similar:true,links:true,tracce:true},
   links:{aoty:true,rym:true,lastfm:true,youtube:true,bandcamp:true,discogs:true},
   /* di serie solo quelle che si ascoltano senza abbonamento */
-  plat:['spotify','youtubeMusic','youtube','bandcamp','soundcloud','archive']
+  plat:['spotify','youtubeMusic','youtube','bandcamp','soundcloud','archive'],
+  /* aprire l'app installata invece del browser: e' una scelta di questo
+     dispositivo, non della libreria, quindi sta con le preferenze */
+  spotApp:false
 };
 let P=JSON.parse(JSON.stringify(PREF_DEFAULTS));
 function loadPrefs(){
@@ -566,6 +574,7 @@ function loadPrefs(){
       if(p.mode==='min'||p.mode==='full')P.mode=p.mode;
       if(p.show)Object.keys(P.show).forEach(k=>{if(typeof p.show[k]==='boolean')P.show[k]=p.show[k]});
       if(p.links)Object.keys(P.links).forEach(k=>{if(typeof p.links[k]==='boolean')P.links[k]=p.links[k]});
+      if(typeof p.spotApp==='boolean')P.spotApp=p.spotApp;
       if(Array.isArray(p.plat)){
         const buone=p.plat.filter(k=>PIATTAFORME.some(x=>x.k===k));
         if(buone.length)P.plat=buone;
@@ -1890,13 +1899,24 @@ async function bulkEnrich(mode){
 }
 /* Apre l'album dove si ascolta. Sta qui e non dentro la scheda perche' lo
    usa anche la schermata random: un solo posto, un solo comportamento. */
+/* Un indirizzo "spotify:album:..." non e' una pagina web: e' una richiesta
+   che il sistema gira all'app installata. Sul PC evita il giro dal browser;
+   sul telefono non serve, perche' Android manda gia' i link di Spotify
+   all'app. La prima volta il browser chiede il permesso e poi se lo ricorda. */
+function apriUrl(url){
+  const id=idSpotify(url);
+  if(P.spotApp&&id){try{location.href='spotify:album:'+id;return}catch(e){}}
+  window.open(url,'_blank','noopener');
+}
 async function apriAscolto(a,bottone){
   if(!a)return null;
   /* un link tuo ha la precedenza: per i dischi fuori dallo streaming e'
      l'unico posto dove esistono davvero */
-  if(a.listenUrl){window.open(a.listenUrl,'_blank','noopener');return a.listenUrl}
-  if(a.spotify){window.open(a.spotify,'_blank','noopener');return a.spotify}
-  const w=window.open('','_blank');   /* apro subito: se aspetto, il browser blocca il popup */
+  if(a.listenUrl){apriUrl(a.listenUrl);return a.listenUrl}
+  if(a.spotify){apriUrl(a.spotify);return a.spotify}
+  /* con l'app non serve aprire una finestra in anticipo: non c'e' popup da
+     far bloccare, la richiesta la gira il sistema */
+  const w=P.spotApp?null:window.open('','_blank');
   const et=bottone?bottone.innerHTML:'';
   if(bottone)bottone.innerHTML='<span class="spinner"></span>';
   const q=encodeURIComponent(((a.artist||'')+' '+(a.title||'')).trim());
@@ -1904,7 +1924,7 @@ async function apriAscolto(a,bottone){
   try{const L=await resolveListen(a);if(L&&L.url){url=L.url;diretto=true}}catch(e){}
   if(bottone)bottone.innerHTML=et;
   if(!diretto)toast(resolveListen.motivo?('Ricerca: '+resolveListen.motivo):'Scheda esatta non trovata');
-  if(w)w.location=url;else window.open(url,'_blank','noopener');
+  if(w)w.location=url;else apriUrl(url);
   return diretto?url:null;
 }
 /* ---- collegamento a Spotify in blocco ----
@@ -4522,6 +4542,8 @@ function renderPrefs(){
     .map(k=>checkRow(k,PREF_LABELS[k][0],PREF_LABELS[k][1],P.show[k]!==false)).join('');
   document.getElementById('prLinks').innerHTML=linkSet({artist:'',title:''},true)
     .map(l=>checkRow('L:'+LINK_KEYS[l[0]],l[0],l[2],P.links[LINK_KEYS[l[0]]]!==false)).join('');
+  const sa=document.getElementById('prSpotApp');
+  if(sa)sa.checked=!!P.spotApp;
   renderPiatt();renderSpotOra();
   /* il token arriva dalla sincronizzazione anche dopo l'avvio: se non
      riscrivessi il campo, sul telefono sembrerebbe vuoto pur funzionando */
@@ -4546,6 +4568,7 @@ function renderPrefs(){
   });
 })();
 document.getElementById('prMode').onchange=e=>{P.mode=e.target.value;savePrefs();renderPrefs()};
+document.getElementById('prSpotApp').onchange=e=>{P.spotApp=e.target.checked;savePrefs()};
 ['prShow','prLinks'].forEach(host=>{
   document.getElementById(host).addEventListener('change',e=>{
     const k=e.target&&e.target.dataset&&e.target.dataset.k;if(!k)return;
