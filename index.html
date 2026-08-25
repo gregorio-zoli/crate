@@ -545,7 +545,7 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
 /* ==========================================================
    1. STATO
    ========================================================== */
-const APP_VER='54';
+const APP_VER='56';
 const LS='crate.v1', LSK='crate.lfmkey', LSG='crate.gh', LSS='crate.lastsync', LSP='crate.prefs';
 const LSSP='crate.spot';   /* accesso a Spotify: resta su QUESTO dispositivo */
 let DB={albums:[],deleted:[],cfg:{}};
@@ -1270,7 +1270,23 @@ function nucleoTitolo(t){
       return soloEdizione(dentro)?' ':' '+dentro+' ';
     })
     .replace(/\s[-–—]\s([^-–—]*)$/,(m,coda)=>soloEdizione(coda)?' ':m)
-    .replace(/[^a-z0-9\s]/g,' ').replace(/\s+/g,' ').trim();
+    /* Tengo lettere e cifre di QUALUNQUE alfabeto. Prima buttavo via tutto
+       cio' che non fosse a-z0-9: per "空中キャンプ" restava una stringa vuota,
+       il confronto falliva sempre, e ogni risposta di Discogs veniva
+       scartata. Lo stesso valeva per il riconoscimento dei doppioni. */
+    .replace(/[^\p{L}\p{N}\s]/gu,' ').replace(/\s+/g,' ').trim();
+}
+/* Per CERCARE i generi posso essere piu' brutale che per confrontare: un
+   remaster, un'edizione deluxe o una registrazione dal vivo non cambiano il
+   genere del disco, quindi tolgo tutto quello che non e' il titolo. */
+function titoloPerGeneri(t){
+  const s=String(t||'')
+    .replace(/\[[^\]]*\]|\([^)]*\)/g,' ')          /* via ogni parentesi */
+    .replace(/\s*[-–—]\s*[^-–—]*$/,' ')              /* via la coda dopo il trattino */
+    .replace(/\s*\.{2,}\s*/g,' ')                    /* via i puntini di sospensione */
+    .replace(/\b(live|dal vivo)\s+(at|from|in|a|da)\b.*$/i,' ')
+    .replace(/\s+/g,' ').trim();
+  return s||titoloPulito(t);
 }
 /* "This Old Dog" e "Old Dog Demos" si somigliano per due parole su tre, ma
    sono due dischi diversi: e' cosi' che in libreria e' finito un album di
@@ -1465,7 +1481,7 @@ async function generiDiscogs(artist,title){
   discogsTs.push(Date.now());
   /* le parentesi vanno tolte: "In Utero (20th Anniversary)" non esiste
      come master, "In Utero" si' */
-  const t=titoloPulito(title);
+  const t=titoloPerGeneri(title);
   const q=((artist||'')+' '+t).trim();
   let r;
   /* Il token va messo nell'indirizzo, non in un'intestazione Authorization.
@@ -1491,7 +1507,8 @@ async function generiDiscogs(artist,title){
   });
   const scelto=buoni[0];
   if(!scelto)return out;
-  (scelto.genre||[]).forEach(g=>out.push(g));
+  /* i nomi composti li traduco qui, prima che classify li spezzi sulle virgole */
+  normalizzaGeneri(scelto.genre||[]).forEach(g=>out.push(g));
   (scelto.style||[]).forEach(g=>out.push(g));
   return out;
 }
@@ -1500,7 +1517,7 @@ async function fetchMusicBrainz(artist,title){
   try{
     /* niente parentesi nella ricerca: le edizioni speciali non hanno un
      gruppo di pubblicazione a parte, e cercandole non si trova niente */
-  const q='releasegroup:'+JSON.stringify(titoloPulito(title))+
+  const q='releasegroup:'+JSON.stringify(titoloPerGeneri(title))+
     ' AND artist:'+JSON.stringify(artist);
     const r=await fetch('https://musicbrainz.org/ws/2/release-group/?fmt=json&limit=1&query='+encodeURIComponent(q));
     if(!r.ok)return{tags,year};
@@ -1675,6 +1692,85 @@ function macroDiAlbum(a){
    60% degli album, "nostalgico" sul 26%. Un filtro che ne tiene tre su cinque
    non filtra niente, e in un mese non l'hai mai usato. I generi curati di
    Discogs e MusicBrainz dicono molto di piu' con molto meno rumore. */
+/* Discogs ha una manciata di generi il cui NOME contiene virgole e "&":
+   "Folk, World, & Country", "Funk / Soul", "Stage & Screen". Spezzandoli sui
+   separatori come faccio con gli altri, uno diventa tre pezzi di cui due
+   inservibili: "world" da solo non dice niente e "& country" e' un rottame.
+   Quindi questi li traduco prima, invece di tagliarli. */
+/* le categorie larghe di Discogs: utili per l'ombrello, povere da sole */
+const GENERI_LARGHI=new Set(['rock','pop','electronic','hip hop','jazz','funk','soul',
+  'folk','country','classical','reggae','blues','latin','colonne sonore','banda',
+  'alternative','indie','experimental']);
+const DISCOGS_COMPOSTI={
+  'folk, world, & country':['folk','country'],
+  'funk / soul':['funk','soul'],
+  'stage & screen':['colonne sonore'],
+  'brass & military':['banda'],
+  'non-music':[],
+  "children's":[]
+};
+function normalizzaGeneri(lista){
+  const out=[],visti=new Set();
+  (lista||[]).forEach(g=>{
+    const s=String(g||'').trim().toLowerCase();
+    if(!s)return;
+    const pezzi=DISCOGS_COMPOSTI[s]!==undefined?DISCOGS_COMPOSTI[s]:[s];
+    pezzi.forEach(x=>{
+      /* i rottami di una separazione andata male: "& country", "world" nudo */
+      let v=String(x).replace(/^[&,\/\s]+/,'').replace(/[&,\/\s]+$/,'').trim();
+      if(!v||v.length<2||v==='world'||v==='non-music')return;
+      if(visti.has(v))return;visti.add(v);out.push(v);
+    });
+  });
+  return out;
+}
+/* ---- vocabolario dei generi ----
+   Last.fm ha i termini buoni (vocal jazz, bossa nova, chamber pop) mescolati
+   a umori e parole a caso (romantic, 2023, long walk). Il difetto non era la
+   fonte, ero io che non sapevo distinguerli: l'ho buttata invece di
+   filtrarla. MusicBrainz pubblica l'elenco completo dei suoi generi curati:
+   lo scarico una volta e diventa il setaccio. */
+let VOCAB=null;
+function vocabDaLibreria(){
+  /* rete di sicurezza: i termini che Discogs e MusicBrainz hanno gia'
+     assegnato ai tuoi album sono generi veri per definizione */
+  const v=new Set();
+  (DB.albums||[]).forEach(a=>(a.genres||[]).forEach(g=>{
+    const s=String(g||'').trim().toLowerCase();if(s)v.add(s);
+  }));
+  return v;
+}
+async function caricaVocabolario(){
+  if(VOCAB)return VOCAB;
+  try{
+    const raw=localStorage.getItem('crate.vocab');
+    if(raw){const d=JSON.parse(raw);
+      if(d&&d.at&&Date.now()-d.at<30*864e5&&Array.isArray(d.g)&&d.g.length>200){
+        VOCAB=new Set(d.g);return VOCAB;
+      }}
+  }catch(e){}
+  try{
+    const r=await fetch('https://musicbrainz.org/ws/2/genre/all?fmt=txt');
+    if(r.ok){
+      const righe=(await r.text()).split(/\r?\n/).map(x=>x.trim().toLowerCase()).filter(Boolean);
+      if(righe.length>200){
+        VOCAB=new Set(righe);
+        try{localStorage.setItem('crate.vocab',JSON.stringify({at:Date.now(),g:righe}))}catch(e){}
+        return VOCAB;
+      }
+    }
+  }catch(e){}
+  VOCAB=vocabDaLibreria();
+  return VOCAB;
+}
+function eUnGenere(t){
+  const s=String(t||'').trim().toLowerCase();
+  if(!s)return false;
+  if(VOCAB&&VOCAB.has(s))return true;
+  /* anche senza vocabolario, un termine composto che contiene un genere noto
+     e' quasi sempre un genere: "dream pop", "vocal jazz", "post-rock" */
+  return!!(VOCAB&&/\s|-/.test(s)&&s.split(/[\s-]+/).some(w=>VOCAB.has(w)));
+}
 function classify(rawTags,itunesGenre){
   const tags=[];if(itunesGenre)tags.push(itunesGenre);
   rawTags.forEach(t=>tags.push(t));
@@ -1690,7 +1786,7 @@ function classify(rawTags,itunesGenre){
     if(!s||s.length>28||NOISE_TAGS.test(s)||seen.has(s))return;seen.add(s);clean.push(s)});
   /* resta il filtro degli umori puri: "melancholic" non e' un genere e da
      Discogs non arriva, ma da iTunes ogni tanto si' */
-  const genres=clean.filter(t=>!PURE_MOOD.test(t)).slice(0,10);
+  const genres=normalizzaGeneri(clean.filter(t=>!PURE_MOOD.test(t))).slice(0,10);
   return{genres,moods:[]};
 }
 
@@ -1826,6 +1922,30 @@ function queueComplete(id,genre){
     .then(()=>new Promise(r=>setTimeout(r,1100)));
   return enrichQ;
 }
+/* Quando nessuna fonte sa dire niente di QUESTO disco, chiedo dell'artista.
+   Prima gratis, dagli album che hai gia' in libreria; poi a Spotify, che
+   tiene i generi a livello di artista. */
+async function generiDiRipiego(a){
+  const art=String(a.artist||'').trim().toLowerCase();
+  if(!art)return[];
+  const dai=new Map();
+  (DB.albums||[]).forEach(x=>{
+    if(x.id===a.id||x.pending)return;
+    if(String(x.artist||'').trim().toLowerCase()!==art)return;
+    (x.genres||[]).forEach(g=>{const s=String(g||'').trim().toLowerCase();
+      if(s)dai.set(s,(dai.get(s)||0)+1)});
+  });
+  if(dai.size)return[...dai.entries()].sort((x,y)=>y[1]-x[1]).map(x=>x[0]).slice(0,6);
+  if(!spotCollegato())return[];
+  try{
+    const d=await spotChiama('/search?type=artist&limit=1&q='+
+      encodeURIComponent(a.artist));
+    const it=((d&&d.artists&&d.artists.items)||[])[0];
+    if(it&&txtSim(it.name||'',a.artist)>=.6)
+      return normalizzaGeneri(it.genres||[]).slice(0,6);
+  }catch(e){}
+  return[];
+}
 async function enrich(id,itunesGenre,merge){
   const a0=DB.albums.find(a=>a.id===id);if(!a0)return;
   /* Tre fonti, ognuna per quello che sa fare: Discogs per generi e
@@ -1835,18 +1955,30 @@ async function enrich(id,itunesGenre,merge){
   /* Discogs per primo: e' veloce e ha quasi tutto. MusicBrainz costa due
      richieste in fila e i suoi server sono lenti, quindi lo interpello solo
      quando Discogs e' stato avaro - che e' il caso in cui serve davvero. */
+  await caricaVocabolario();
   const dis=await generiDiscogs(a0.artist,a0.title);
-  const servemb=dis.length<3;
+  /* Interpello MusicBrainz se Discogs non ha dato almeno due termini
+     SPECIFICI. Contare i termini e basta non serviva: tre parole larghe
+     (rock, pop, electronic) bloccavano la seconda fonte pur non dicendo
+     niente. */
+  const specifici=dis.filter(g=>!GENERI_LARGHI.has(String(g).toLowerCase()));
+  const servemb=specifici.length<2;
   const [mb,lfm]=await Promise.all([
     servemb?fetchMusicBrainz(a0.artist,a0.title):Promise.resolve({tags:[],year:null}),
-    (a0.about&&a0.year)?Promise.resolve({tags:[],about:'',listeners:0})
-                       :fetchLastfm(a0.artist,a0.title)]);
-  const cl=classify([...dis,...mb.tags],itunesGenre);
+    fetchLastfm(a0.artist,a0.title)]);
+  /* i tag di Last.fm passano dal setaccio: restano i generi, cadono gli umori */
+  const daLfm=(lfm.tags||[]).filter(eUnGenere);
+  const cl=classify([...dis,...mb.tags,...daLfm],itunesGenre);
+  let generi=cl.genres;
+  /* Ultime spiagge, in ordine di precisione. Meglio i generi dell'artista che
+     una scheda muta: un disco live dei Royston Club non e' di genere ignoto,
+     e' dello stesso genere degli altri loro dischi. */
+  if(!generi.length)generi=await generiDiRipiego(a0);
   const a=DB.albums.find(x=>x.id===id);if(!a)return;
   if(merge){
-    a.genres=[...new Set([...(a.genres||[]),...cl.genres])].slice(0,14);
+    a.genres=[...new Set([...(a.genres||[]),...generi])].slice(0,14);
   }else{
-    if(!(a.genres||[]).length)a.genres=cl.genres;
+    if(!(a.genres||[]).length)a.genres=generi;
   }
   if(!a.year&&mb.year)a.year=mb.year;
   if(!a.about&&lfm.about)a.about=lfm.about;
@@ -1891,22 +2023,25 @@ async function bulkEnrich(mode){
   const box=document.getElementById('bulkBox'),bar=document.getElementById('bulkBar'),
         txt=document.getElementById('bulkTxt');
   box.style.display='block';
-  let done=0,changed=0;
+  let done=0,changed=0,vuoti=0;
   for(const a of list){
     if(bulkStop)break;
     txt.innerHTML='<b>'+(done+1)+' / '+list.length+'</b> &middot; '+esc(a.title);
     bar.style.width=Math.round(done/list.length*100)+'%';
-    const before=(a.genres||[]).length;
+    const before=(a.genres||[]).slice().sort().join('|');
     if(mode==='reset'){a.genres=[];a.moods=[];a.about=''}
     try{await enrich(a.id,'',true)}catch(e){}
-    if((a.genres||[]).length!==before)changed++;
+    if((a.genres||[]).slice().sort().join('|')!==before)changed++;
+    if(!(a.genres||[]).length)vuoti++;
     done++;
     /* Il passo lo detta Discogs: 25 richieste al minuto senza chiave, 60 con.
        Quando serve anche MusicBrainz e' lui ad aspettare al proprio interno. */
     if(!bulkStop)await new Promise(r=>setTimeout(r,discogsKey()?1000:2500));
   }
   bar.style.width='100%';
-  txt.innerHTML=(bulkStop?'Fermato.':'Finito.')+' '+done+' album ripassati, '+changed+' aggiornati.';
+  txt.innerHTML=(bulkStop?'Fermato.':'Finito.')+' '+done+' album ripassati, '+
+    changed+' con generi diversi da prima'+
+    (vuoti?', <b>'+vuoti+' rimasti senza</b>':', nessuno rimasto senza generi')+'.';
   bulkRunning=false;bulkStop=false;
   renderAll();scheduleSync();
 }
@@ -5037,7 +5172,21 @@ document.addEventListener('visibilitychange',()=>{
    ========================================================== */
 document.getElementById('verApp').textContent='v'+APP_VER;
 (function(){const f=document.getElementById('fFav');if(f)f.innerHTML=cuore(true,15)})();
-loadLocal();spotCarica();loadPrefs();renderPrefs();renderSpot();
+loadLocal();
+/* Riparazione locale, senza rete: sistema i generi gia' salvati che si erano
+   rotti sulle virgole. Gira all'avvio, non costa niente ed e' innocua se non
+   c'e' niente da riparare. */
+(function(){
+  let tocchi=0;
+  (DB.albums||[]).forEach(a=>{
+    if(!(a.genres||[]).length)return;
+    const prima=a.genres.join('|');
+    const dopo=normalizzaGeneri(a.genres);
+    if(dopo.join('|')!==prima){a.genres=dopo;a.updatedAt=now();tocchi++}
+  });
+  if(tocchi){saveLocal();scheduleSync();}
+})();
+spotCarica();loadPrefs();renderPrefs();renderSpot();
 /* se sto tornando dal permesso di Spotify, l'indirizzo ha ?code=... */
 spotRitorno().then(ok=>{if(ok)renderSpot()});
 /* Un promemoria quando mancano due settimane, non ogni volta che apri l'app:
