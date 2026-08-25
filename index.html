@@ -461,6 +461,7 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
       <button class="btn" id="bulkMissing">Completa quelli senza generi</button>
       <button class="btn gh" id="bulkAll">Ripassa tutti</button>
       <button class="btn gh sm" id="bulkReset" style="border-color:var(--acc);color:var(--acc)">Rifai da zero</button>
+      <button class="btn gh" id="bulkDurate">Completa le durate</button>
     </div>
     <div class="hint">&ldquo;Rifai da zero&rdquo; cancella anche i generi messi da te. Su una libreria grande ci vuole una ventina di minuti: puoi fermarlo e riprenderlo.</div>
     <div id="bulkBox" style="display:none;margin-top:14px">
@@ -571,7 +572,7 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
 /* ==========================================================
    1. STATO
    ========================================================== */
-const APP_VER='64';
+const APP_VER='65';
 const LS='crate.v1', LSK='crate.lfmkey', LSG='crate.gh', LSS='crate.lastsync', LSP='crate.prefs';
 const LSSP='crate.spot';   /* accesso a Spotify: resta su QUESTO dispositivo */
 let DB={albums:[],deleted:[],cfg:{}};
@@ -2215,6 +2216,51 @@ async function bulkEnrich(mode){
     (vuoti?', <b>'+vuoti+' rimasti senza</b>':', nessuno rimasto senza generi')+'.';
   bulkRunning=false;bulkStop=false;
   renderAll();scheduleSync();
+}
+/* ---- durate mancanti ----
+   La durata si prende una volta sola, quando l'album entra in libreria. Se
+   quella volta la rete fa i capricci o l'album non e' ancora agganciato a
+   Spotify, resta senza per sempre: nella schermata random compare il
+   trattino, e il filtro per durata lo scarta. Qui la riprovo, e stavolta
+   uso anche l'archivio, che e' lento ma ha quasi tutto. */
+async function completaDurata(a,lento){
+  if(!a||a.pending||a.durata)return false;
+  try{
+    const el=await fetchTracks(a,!lento);
+    if(!el||!el.length)return false;
+    const ms=el.reduce((t,x)=>t+(+x.ms||0),0);
+    if(!ms)return false;
+    const cur=DB.albums.find(x=>x.id===a.id);
+    if(!cur||cur.durata)return false;
+    cur.durata=ms;
+    if(!cur.tracks)cur.tracks=el.length;
+    cur.updatedAt=now();
+    return true;
+  }catch(e){return false}
+}
+async function bulkDurate(){
+  if(bulkRunning)return;
+  const list=DB.albums.filter(a=>!a.pending&&!a.durata);
+  if(!list.length){toast('Hanno gia’ tutti la durata');return}
+  bulkRunning=true;bulkStop=false;
+  const box=document.getElementById('bulkBox'),bar=document.getElementById('bulkBar'),
+        txt=document.getElementById('bulkTxt');
+  box.style.display='block';
+  let done=0,ok=0;
+  for(const a of list){
+    if(bulkStop)break;
+    txt.innerHTML='<b>'+(done+1)+' / '+list.length+'</b> &middot; '+esc(a.title);
+    bar.style.width=Math.round(done/list.length*100)+'%';
+    if(await completaDurata(a,true))ok++;
+    done++;
+    if(!bulkStop)await new Promise(r=>setTimeout(r,1100));
+  }
+  bar.style.width='100%';
+  const restano=DB.albums.filter(x=>!x.pending&&!x.durata).length;
+  txt.innerHTML=(bulkStop?'Fermato.':'Finito.')+' '+done+' album provati, <b>'+ok+
+    '</b> con la durata recuperata'+(restano?', '+restano+' ancora senza.':'. Adesso ce l’hanno tutti.');
+  bulkRunning=false;bulkStop=false;
+  saveLocal();renderAll();scheduleSync();
 }
 /* Apre l'album dove si ascolta. Sta qui e non dentro la scheda perche' lo
    usa anche la schermata random: un solo posto, un solo comportamento. */
@@ -4539,6 +4585,20 @@ function spin(){
 
   function finish(){
     slot.classList.remove('spinning');draw(pick);
+    /* se e' uscito uno dei pochi senza durata, la cerco adesso in sottofondo
+       e riscrivo la riga: cosi' il trattino sparisce da solo, senza che tu
+       debba lanciare niente */
+    if(!pick.durata)completaDurata(pick,true).then(fatto=>{
+      if(!fatto)return;
+      const cur=DB.albums.find(x=>x.id===pick.id);
+      if(!cur)return;
+      pick.durata=cur.durata;pick.tracks=cur.tracks;
+      const p=stage.querySelector('p.art');
+      if(p)p.innerHTML=esc(cur.artist||'')+(cur.year?' &middot; '+cur.year:'')+
+        (cur.kind&&cur.kind!=='album'?' &middot; '+esc(cur.kind):'')+
+        ' &middot; '+durataUmana(cur.durata);
+      saveLocal();scheduleSync();
+    });
     const tags=(pick.genres||[]).slice(0,5);
     if(tags.length){
       const bar=document.createElement('div');
@@ -5028,6 +5088,7 @@ document.getElementById('prSpotApp').onchange=e=>{P.spotApp=e.target.checked;sav
   });
 });
 /* --- riaggiornamento in blocco --- */
+document.getElementById('bulkDurate').onclick=bulkDurate;
 document.getElementById('bulkMissing').onclick=()=>bulkEnrich('missing');
 document.getElementById('bulkAll').onclick=()=>bulkEnrich('all');
 document.getElementById('bulkReset').onclick=()=>bulkEnrich('reset');
