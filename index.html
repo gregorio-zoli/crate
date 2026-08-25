@@ -545,7 +545,7 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
 /* ==========================================================
    1. STATO
    ========================================================== */
-const APP_VER='51';
+const APP_VER='52';
 const LS='crate.v1', LSK='crate.lfmkey', LSG='crate.gh', LSS='crate.lastsync', LSP='crate.prefs';
 const LSSP='crate.spot';   /* accesso a Spotify: resta su QUESTO dispositivo */
 let DB={albums:[],deleted:[],cfg:{}};
@@ -4890,16 +4890,30 @@ document.getElementById('btnDiag').onclick=async()=>{
       if(!n)throw new Error('risponde ma senza dati');
       return 'raggiungibile, e conosce gli identificativi Spotify';
     }],
-    ['Impostazioni arrivate su questo dispositivo',async()=>{
+    ['Impostazioni: qui e sul repository',async()=>{
+      /* Sapere cosa c'e' su QUESTO dispositivo non basta: se un'impostazione
+         manca, il guasto puo' stare in salita (non viene caricata) o in
+         discesa (non viene scaricata). Guardo tutti e due i lati. */
       const c=DB.cfg||{};
-      const q=k=>c[k]?('\u2713 '+k.replace('discogsToken','token Discogs')
-        .replace('spotClientId','Client ID Spotify')):null;
-      const ci=[q('discogsToken'),q('spotClientId')].filter(Boolean);
-      const quando=t=>t?new Date(+t).toLocaleString():'mai';
-      if(!ci.length)throw new Error('nessuna impostazione condivisa e\' arrivata qui. '+
-        'Se l\'hai scritta altrove, aspetta una sincronizzazione o riaprila.');
-      return ci.join(' \u00b7 ')+' \u00b7 ultimo aggiornamento token: '+
-        quando(c.at_discogsToken||c.at);
+      const elenco=o=>[o.discogsToken?'token Discogs':'',
+        o.spotClientId?'Client ID Spotify':''].filter(Boolean).join(', ')||'niente';
+      const qui=elenco(c);
+      const gh=ghCfg();
+      if(!gh)return 'qui: '+qui+' \u00b7 sincronizzazione non configurata';
+      let rem;
+      try{rem=await ghGet(gh)}
+      catch(e){throw new Error('qui: '+qui+' \u00b7 non riesco a leggere il repository: '+
+        (e&&e.message||'errore'))}
+      const rc=(rem&&rem.db&&rem.db.cfg)||{};
+      const la=elenco(rc);
+      const msg='qui: '+qui+' \u2014 nel repository: '+la;
+      if(c.discogsToken&&!rc.discogsToken)
+        throw new Error(msg+'. Il token c\'e\' qui ma non e\' mai stato caricato: '+
+          'si ferma in salita.');
+      if(rc.discogsToken&&!c.discogsToken)
+        throw new Error(msg+'. Il token e\' nel repository ma non scende fin qui: '+
+          'si ferma in discesa.');
+      return msg;
     }],
     ['Discogs (generi e sottogeneri)',async()=>{
       /* La domanda vera non e' se Discogs abbia i dati - li ha - ma se si
