@@ -417,11 +417,12 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
       <div class="grow"><input type="text" id="lfmKey" placeholder="API key Last.fm" autocomplete="off" spellcheck="false"></div>
       <button class="btn gh" id="btnSaveKey">Salva</button>
     </div>
-    <div class="tiny muted" style="margin-top:6px">Ormai serve solo per la descrizione dell&rsquo;album. <a href="https://www.last.fm/api/account/create" target="_blank" rel="noopener">Prendine una</a>.</div>
+    <div class="tiny muted" style="margin-top:6px">Ormai serve solo per la descrizione dell&rsquo;album. Si sincronizza con la libreria. <a href="https://www.last.fm/api/account/create" target="_blank" rel="noopener">Prendine una</a>.</div>
   </div>
 
   <div class="card" style="margin-bottom:14px">
     <h2>Come si presenta la scheda di un album</h2>
+    <p class="tiny muted" style="margin-top:0">Si sincronizza con la libreria: quello che decidi qui lo ritrovi su tutti i dispositivi collegati.</p>
     <div style="margin-bottom:14px">
       <label class="f">Visualizzazione</label>
       <select id="prMode">
@@ -572,14 +573,17 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
 /* ==========================================================
    1. STATO
    ========================================================== */
-const APP_VER='65';
+const APP_VER='66';
 const LS='crate.v1', LSK='crate.lfmkey', LSG='crate.gh', LSS='crate.lastsync', LSP='crate.prefs';
 const LSSP='crate.spot';   /* accesso a Spotify: resta su QUESTO dispositivo */
 let DB={albums:[],deleted:[],cfg:{}};
 
 /* ---- preferenze di visualizzazione della scheda album ----
-   Restano su questo dispositivo: sul telefono puoi volere il minimale
-   e sul PC il completo. */
+   Viaggiano con la libreria: le decidi una volta e le ritrovi ovunque.
+   L'unica che resta su questo dispositivo e' "apri l'app di Spotify", che
+   riguarda davvero il dispositivo e non i gusti. La copia locale resta
+   comunque, cosi' l'app funziona anche prima che la libreria sia collegata
+   e quando sei senza rete. */
 const LINK_KEYS={'Album of the Year':'aoty','RateYourMusic':'rym','Last.fm':'lastfm',
   'YouTube':'youtube','Bandcamp':'bandcamp','Discogs':'discogs'};
 const PREF_DEFAULTS={
@@ -594,21 +598,30 @@ const PREF_DEFAULTS={
   spotApp:false
 };
 let P=JSON.parse(JSON.stringify(PREF_DEFAULTS));
-function loadPrefs(){
-  try{const raw=localStorage.getItem(LSP);if(!raw)return;
-    const p=JSON.parse(raw);
-    if(p&&typeof p==='object'){
-      if(p.mode==='min'||p.mode==='full')P.mode=p.mode;
-      if(p.show)Object.keys(P.show).forEach(k=>{if(typeof p.show[k]==='boolean')P.show[k]=p.show[k]});
-      if(p.links)Object.keys(P.links).forEach(k=>{if(typeof p.links[k]==='boolean')P.links[k]=p.links[k]});
-      if(typeof p.spotApp==='boolean')P.spotApp=p.spotApp;
-      if(Array.isArray(p.plat)){
-        const buone=p.plat.filter(k=>PIATTAFORME.some(x=>x.k===k));
-        if(buone.length)P.plat=buone;
-      }
-    }}catch(e){}
+function applicaPrefs(p){
+  if(!p||typeof p!=='object')return;
+  if(p.mode==='min'||p.mode==='full')P.mode=p.mode;
+  if(p.show)Object.keys(P.show).forEach(k=>{if(typeof p.show[k]==='boolean')P.show[k]=p.show[k]});
+  if(p.links)Object.keys(P.links).forEach(k=>{if(typeof p.links[k]==='boolean')P.links[k]=p.links[k]});
+  if(Array.isArray(p.plat)){
+    const buone=p.plat.filter(k=>PIATTAFORME.some(x=>x.k===k));
+    if(buone.length)P.plat=buone;
+  }
 }
-function savePrefs(){try{localStorage.setItem(LSP,JSON.stringify(P))}catch(e){}}
+function loadPrefs(){
+  /* prima la copia locale, poi quella della libreria: se ci sono tutte e due
+     comanda la libreria, che e' la piu' aggiornata fra i dispositivi */
+  try{applicaPrefs(JSON.parse(localStorage.getItem(LSP)||'null'))}catch(e){}
+  try{const p=JSON.parse(localStorage.getItem(LSP)||'null');
+    if(p&&typeof p.spotApp==='boolean')P.spotApp=p.spotApp}catch(e){}
+  try{applicaPrefs(JSON.parse((DB.cfg||{}).prefs||'null'))}catch(e){}
+}
+function savePrefs(){
+  try{localStorage.setItem(LSP,JSON.stringify(P))}catch(e){}
+  /* nella libreria ci va tutto tranne spotApp, che e' di questo dispositivo */
+  const cond={mode:P.mode,show:P.show,links:P.links,plat:P.plat};
+  cfgSet('prefs',JSON.stringify(cond));
+}
 /* nella vista minimale sopravvivono solo l'essenziale e le azioni */
 const MIN_KEEP={meta:1,listen:1};
 function vis(k){return P.mode==='min'?!!MIN_KEEP[k]:P.show[k]!==false}
@@ -727,6 +740,17 @@ function fondiCfg(a,b){
   out.at=Math.max(+A.at||0,+B.at||0);
   return out;
 }
+/* Come cfgSet, ma con una data volutamente antichissima: serve a portare
+   nella libreria quello che era rimasto solo su questo dispositivo, senza
+   che possa scavalcare una scelta fatta davvero altrove. Se dall'altra parte
+   non c'e' niente vince lui, se c'e' qualcosa vince l'altro. */
+function cfgSeed(chiave,valore){
+  if(!valore)return;
+  DB.cfg=DB.cfg||{};
+  if(DB.cfg[chiave])return;
+  DB.cfg[chiave]=valore;DB.cfg['at_'+chiave]=1;
+  DB.cfg.at=Math.max(+DB.cfg.at||0,1);
+}
 function cfgSet(chiave,valore){
   DB.cfg=DB.cfg||{};
   DB.cfg[chiave]=valore;
@@ -832,6 +856,9 @@ async function syncNow(depth){
     const rem=await ghGet(c);
     const before=canon(DB);
     if(rem.db)DB=mergeDB(DB,rem.db);
+    /* dalla sincronizzazione possono arrivare anche le preferenze decise su
+       un altro dispositivo: le rimetto in pratica subito */
+    loadPrefs();if(typeof renderPrefs==='function')renderPrefs();
     const after=canon(DB);
     if(after!==before){saveLocal();renderAll();if(openAlbum._id)openAlbum(openAlbum._id,true)}
     if(!rem.db||canon(rem.db)!==after){
@@ -1721,8 +1748,14 @@ async function fetchTrackCount(artist,title){
     return rel?+rel['track-count']:0;
   }catch(e){return 0}
 }
+/* La chiave Last.fm sta nella libreria come quella di Discogs: la metti una
+   volta e vale su tutti i dispositivi. La copia locale resta come riserva,
+   per quando la libreria non e' ancora arrivata. */
+function lfmKey(){
+  return ((DB.cfg||{}).lfmKey||localStorage.getItem(LSK)||'').trim();
+}
 async function fetchLastfm(artist,title){
-  const k=localStorage.getItem(LSK);
+  const k=lfmKey();
   const empty={tags:[],about:'',listeners:0};
   if(!k||!artist||!title)return empty;
   try{
@@ -5407,7 +5440,9 @@ document.getElementById('btnDiag').onclick=async()=>{
          discesa (non viene scaricata). Guardo tutti e due i lati. */
       const c=DB.cfg||{};
       const elenco=o=>[o.discogsToken?'token Discogs':'',
-        o.spotClientId?'Client ID Spotify':''].filter(Boolean).join(', ')||'niente';
+        o.spotClientId?'Client ID Spotify':'',o.lfmKey?'chiave Last.fm':'',
+        o.prefs?'preferenze':'',o.sogliaSotto?'soglia pastiglie':''
+        ].filter(Boolean).join(', ')||'niente';
       const qui=elenco(c);
       const gh=ghCfg();
       if(!gh)return 'qui: '+qui+' \u00b7 sincronizzazione non configurata';
@@ -5475,7 +5510,8 @@ document.getElementById('btnDiag').onclick=async()=>{
 document.getElementById('btnSaveKey').onclick=()=>{
   const v=document.getElementById('lfmKey').value.trim();
   if(v)localStorage.setItem(LSK,v);else localStorage.removeItem(LSK);
-  toast(v?'Chiave salvata':'Chiave rimossa');
+  cfgSet('lfmKey',v);
+  toast(v?'Chiave salvata, vale su tutti i dispositivi':'Chiave rimossa');
 };
 document.getElementById('btnExport').onclick=()=>{
   const a=document.createElement('a');
@@ -5556,7 +5592,21 @@ loadLocal();
   });
   if(tocchi){saveLocal();scheduleSync();}
 })();
-spotCarica();loadPrefs();renderPrefs();renderSpot();
+spotCarica();loadPrefs();
+/* Trasloco, una volta sola: quello che avevi impostato quando queste cose
+   stavano solo qui dentro entra nella libreria, cosi' lo ritrovi anche sugli
+   altri dispositivi. Solo se su questo dispositivo c'era davvero qualcosa. */
+(function(){
+  try{
+    if(localStorage.getItem(LSP))
+      cfgSeed('prefs',JSON.stringify({mode:P.mode,show:P.show,links:P.links,plat:P.plat}));
+    cfgSeed('lfmKey',(localStorage.getItem(LSK)||'').trim());
+    if((DB.cfg||{}).at===1||((DB.cfg||{}).at_prefs===1||(DB.cfg||{}).at_lfmKey===1)){
+      saveLocal();scheduleSync();
+    }
+  }catch(e){}
+})();
+renderPrefs();renderSpot();
 /* se sto tornando dal permesso di Spotify, l'indirizzo ha ?code=... */
 spotRitorno().then(ok=>{if(ok)renderSpot()});
 /* Un promemoria quando mancano due settimane, non ogni volta che apri l'app:
@@ -5570,7 +5620,7 @@ spotRitorno().then(ok=>{if(ok)renderSpot()});
   setTimeout(()=>toast(g<=0?'Il permesso di Spotify e\' scaduto: ricollegalo in Opzioni'
     :'Il permesso di Spotify scade fra '+g+' giorn'+(g===1?'o':'i')+': ricollegalo in Opzioni'),1500);
 })();
-document.getElementById('lfmKey').value=localStorage.getItem(LSK)||'';
+document.getElementById('lfmKey').value=lfmKey();
 document.getElementById('dcKey').value=(DB.cfg&&DB.cfg.discogsToken)||'';renderDc();
 (()=>{const c=ghCfg();if(c){document.getElementById('ghOwner').value=c.owner;
   document.getElementById('ghRepo').value=c.repo;document.getElementById('ghToken').value=c.token}})();
