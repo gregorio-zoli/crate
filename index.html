@@ -294,7 +294,7 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
   <div class="toolbar">
     <input type="text" id="fq" placeholder="Filtra...">
     <div class="mchip" id="fGenreMenu" style="min-width:150px"></div>
-    <div class="mchip" id="fMoodMenu" style="min-width:140px"></div>
+    <div class="mchip" id="fSubMenu" style="min-width:150px"></div>
     <select id="fDec"><option value="">Tutti i decenni</option></select>
     <div class="tg" id="fState">
       <button data-s="all" class="on">Tutti</button>
@@ -324,6 +324,7 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
     <button class="btn gh sm" id="rReset">&#127922; Tutto casuale &mdash; azzera i filtri</button>
     <span class="tiny muted" id="rActive"></span>
   </div>
+  <input type="text" id="rQ" placeholder="Contiene&hellip; (titolo, artista, genere)" style="margin-bottom:12px">
   <div class="filtgrid">
     <div><label class="f">Stato</label><select id="rState">
       <option value="todo">Solo da ascoltare</option>
@@ -332,7 +333,7 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
       <option value="done">Solo già ascoltati</option>
     </select></div>
     <div><label class="f">Generi</label><div class="mchip" id="rGenreMenu"></div></div>
-    <div><label class="f">Mood</label><div class="mchip" id="rMoodMenu"></div></div>
+    <div><label class="f">Sottogeneri</label><div class="mchip" id="rSubMenu"></div></div>
     <div><label class="f">Decennio</label><select id="rDec"><option value="">Qualsiasi</option></select></div>
     <div><label class="f">Durata</label><select id="rLen">
       <option value="">Qualsiasi</option>
@@ -427,14 +428,14 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
   </div>
 
   <div class="card" style="margin-bottom:14px">
-    <h2>Riaggiorna i tag di tutta la libreria</h2>
-    <p class="tiny muted" style="margin-top:0">Circa un secondo per album.</p>
+    <h2>Riaggiorna i generi di tutta la libreria</h2>
+    <p class="tiny muted" style="margin-top:0">Generi e sottogeneri da <b>Discogs</b> e <b>MusicBrainz</b>. Circa due secondi e mezzo per album.</p>
     <div class="row">
-      <button class="btn" id="bulkMissing">Completa quelli senza tag</button>
+      <button class="btn" id="bulkMissing">Completa quelli senza generi</button>
       <button class="btn gh" id="bulkAll">Ripassa tutti</button>
       <button class="btn gh sm" id="bulkReset" style="border-color:var(--acc);color:var(--acc)">Rifai da zero</button>
     </div>
-    <div class="hint">&ldquo;Rifai da zero&rdquo; cancella anche i tag messi da te.</div>
+    <div class="hint">&ldquo;Rifai da zero&rdquo; cancella anche i generi messi da te. Su una libreria grande ci vuole una ventina di minuti: puoi fermarlo e riprenderlo.</div>
     <div id="bulkBox" style="display:none;margin-top:14px">
       <div class="bar"><i id="bulkBar"></i></div>
       <div class="tiny muted" id="bulkTxt" style="margin-top:8px"></div>
@@ -538,7 +539,7 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
 /* ==========================================================
    1. STATO
    ========================================================== */
-const APP_VER='45';
+const APP_VER='46';
 const LS='crate.v1', LSK='crate.lfmkey', LSG='crate.gh', LSS='crate.lastsync', LSP='crate.prefs';
 const LSSP='crate.spot';   /* accesso a Spotify: resta su QUESTO dispositivo */
 let DB={albums:[],deleted:[],cfg:{}};
@@ -1195,6 +1196,18 @@ function soloEdizione(testo){
   return parole.every(w=>RUMORE_ED.test(w)||/^(18|19|20)\d\d$/.test(w)||
     /^\d+(st|nd|rd|th|°)?$/.test(w)||w==='the'||w==='of');
 }
+/* Il titolo pulito dalle sole indicazioni di edizione, ma con maiuscole e
+   punteggiatura intatte: "In Utero (20th Anniversary Edition)" diventa
+   "In Utero", mentre "(What's the Story) Morning Glory?" resta com'e'.
+   nucleoTitolo serve a confrontare, questo serve a cercare. */
+function titoloPulito(t){
+  const s=String(t||'')
+    .replace(/\[([^\]]*)\]|\(([^)]*)\)/g,(m,q,tondo)=>
+      soloEdizione(q!==undefined?q:tondo)?' ':m)
+    .replace(/\s[-–—]\s([^-–—]*)$/,(m,coda)=>soloEdizione(coda)?' ':m)
+    .replace(/\s+/g,' ').trim();
+  return s||String(t||'');
+}
 function nucleoTitolo(t){
   return String(t||'').toLowerCase()
     .replace(/\[([^\]]*)\]|\(([^)]*)\)/g,(m,q,tondo)=>{
@@ -1371,19 +1384,73 @@ async function searchAlbums(term){
   return out.filter(a=>{const k=(a.artist+'|'+a.title).toLowerCase();
     if(seen.has(k))return false;seen.add(k);return true});
 }
+/* ---- Discogs ----
+   Un catalogo di dischi fisici, compilato e verificato dalla comunita'.
+   Separa "genre" (una quindicina di categorie larghe) da "style" (centinaia
+   di sottogeneri precisi: shoegaze, slowcore, modal, goth rock). Niente
+   chiave, 25 richieste al minuto senza autenticarsi.
+   Attenzione al vecchio errore: una ricerca per nome puo' restituire il
+   disco di un altro. Accetto solo se titolo e artista corrispondono davvero. */
+const discogsTs=[];
+function discogsCredito(){
+  const t=Date.now();
+  while(discogsTs.length&&t-discogsTs[0]>60000)discogsTs.shift();
+  return 22-discogsTs.length;      /* il tetto e' 25: mi tengo un margine */
+}
+async function generiDiscogs(artist,title){
+  const out=[];
+  if(!title)return out;
+  /* niente credito: salto Discogs per questo album invece di prendermi un
+     rifiuto. MusicBrainz basta a non lasciarlo senza generi. */
+  if(discogsCredito()<=0)return out;
+  discogsTs.push(Date.now());
+  /* le parentesi vanno tolte: "In Utero (20th Anniversary)" non esiste
+     come master, "In Utero" si' */
+  const t=titoloPulito(title);
+  const q=((artist||'')+' '+t).trim();
+  let r;
+  try{r=await fetch('https://api.discogs.com/database/search?type=master&per_page=5&q='+
+    encodeURIComponent(q))}
+  catch(e){return out}
+  if(r.status===429){discogsTs.push(Date.now(),Date.now(),Date.now());return out}
+  if(!r.ok)return out;
+  let d;try{d=await r.json()}catch(e){return out}
+  const buoni=((d&&d.results)||[]).filter(x=>{
+    /* il titolo arriva come "Artista - Titolo", a volte con i nomi giapponesi
+       accanto: guardo la parte dopo il primo trattino */
+    const pieno=String(x.title||'');
+    const taglio=pieno.indexOf(' - ');
+    const tit=taglio>0?pieno.slice(taglio+3):pieno;
+    const art=taglio>0?pieno.slice(0,taglio):'';
+    if(!stessoTitolo(tit,t)&&simLettere(nucleoTitolo(tit),nucleoTitolo(t))<.85)return false;
+    return!artist||txtSim(art,artist)>=.45||simLettere(art,artist)>=.7;
+  });
+  const scelto=buoni[0];
+  if(!scelto)return out;
+  (scelto.genre||[]).forEach(g=>out.push(g));
+  (scelto.style||[]).forEach(g=>out.push(g));
+  return out;
+}
 async function fetchMusicBrainz(artist,title){
   const tags=[];let year=null;
   try{
-    const q='releasegroup:'+JSON.stringify(title)+' AND artist:'+JSON.stringify(artist);
+    /* niente parentesi nella ricerca: le edizioni speciali non hanno un
+     gruppo di pubblicazione a parte, e cercandole non si trova niente */
+  const q='releasegroup:'+JSON.stringify(titoloPulito(title))+
+    ' AND artist:'+JSON.stringify(artist);
     const r=await fetch('https://musicbrainz.org/ws/2/release-group/?fmt=json&limit=1&query='+encodeURIComponent(q));
     if(!r.ok)return{tags,year};
     const rg=((await r.json())['release-groups']||[])[0];
     if(!rg)return{tags,year};
     if(rg['first-release-date'])year=+rg['first-release-date'].slice(0,4)||null;
-    const r2=await fetch('https://musicbrainz.org/ws/2/release-group/'+rg.id+'?fmt=json&inc=genres+tags');
+    /* Solo "genres", non "tags". MusicBrainz tiene le due cose separate: i
+       generi sono un vocabolario curato e votato, i tag sono testo libero
+       dove chiunque scrive "irish" o "bryan adams". Prendendo tutti e due
+       mi portavo in casa proprio la spazzatura che volevamo togliere.
+       E scarto quelli con un voto solo: uno che passa non fa un genere. */
+    const r2=await fetch('https://musicbrainz.org/ws/2/release-group/'+rg.id+'?fmt=json&inc=genres');
     if(r2.ok){const d2=await r2.json();
-      (d2.genres||[]).forEach(g=>tags.push(g.name));
-      (d2.tags||[]).filter(t=>t.count>0).forEach(t=>tags.push(t.name));}
+      (d2.genres||[]).filter(g=>(+g.count||0)>=1).forEach(g=>tags.push(g.name));}
   }catch(e){}
   return{tags,year};
 }
@@ -1497,31 +1564,8 @@ async function fetchLastfm(artist,title){
 /* ==========================================================
    5. GENERI E MOOD
    ========================================================== */
-const MOOD_RULES=[
-  ['malinconico',/sad|melanchol|somber|wistful|mournful|depress|bittersweet|autumn/i],
-  ['energico',/energetic|upbeat|banger|party|dance|driving|fast|frantic|punk|hardcore/i],
-  ['calmo',/calm|mellow|chill|relax|peaceful|soothing|quiet|gentle|soft|downtempo/i],
-  ['oscuro',/dark|bleak|sinister|grim|ominous|doom|gothic|industrial|nihilis/i],
-  ['sognante',/dreamy|dream pop|shoegaze|ethereal|hazy|hypnagog|floaty|blissful/i],
-  ['aggressivo',/aggressive|angry|brutal|heavy|violent|thrash|death metal|noise|harsh/i],
-  ['notturno',/night|late night|nocturnal|smoky|after hours|midnight/i],
-  ['epico',/epic|grandiose|cinematic|orchestral|anthemic|majestic|soaring/i],
-  ['ipnotico',/hypnotic|trance|repetitive|drone|krautrock|minimal|loop/i],
-  ['solare',/summer|sunny|happy|joyful|feel good|bright|uplifting|tropical/i],
-  ['romantico',/romantic|love|sensual|intimate|tender|sultry/i],
-  ['nostalgico',/nostalgi|retro|vintage|memories|throwback/i],
-  ['sperimentale',/experimental|avant|weird|abstract|challenging|difficult/i]
-];
-const GENRE_MOODS={'shoegaze':['sognante','malinconico'],'dream pop':['sognante'],'ambient':['calmo','ipnotico'],
-  'black metal':['oscuro','aggressivo'],'death metal':['aggressivo','oscuro'],'doom metal':['oscuro'],
-  'metal':['aggressivo'],'punk':['energico'],'hardcore':['aggressivo','energico'],'jazz':['notturno'],
-  'blues':['malinconico'],'soul':['romantico'],'r&b':['romantico'],'folk':['calmo','nostalgico'],
-  'country':['nostalgico'],'classical':['epico','calmo'],'techno':['ipnotico','energico'],'house':['energico'],
-  'electronic':['ipnotico'],'hip-hop':['energico'],'hip hop':['energico'],'rap':['energico'],
-  'post-rock':['epico','sognante'],'slowcore':['malinconico','calmo'],'emo':['malinconico'],
-  'noise':['aggressivo','sperimentale'],'drone':['ipnotico'],'trip-hop':['notturno'],
-  'disco':['solare','energico'],'funk':['energico','solare'],'reggae':['solare','calmo'],
-  'indie rock':['nostalgico'],'pop':['solare'],'rock':['energico']};
+/* Le regole dei mood stavano qui. Tolte con i mood stessi: misurate sulla
+   tua libreria coprivano il 60% degli album con una parola sola. */
 const NOISE_TAGS=/^(albums i own|favorite|favourites|seen live|awesome|beautiful|great|good|best|love|music|album|albums|10s|00s|90s|80s|70s|60s|50s|20\d\d|19\d\d|\d+)$/i;
 const PURE_MOOD=/^(sad|sadness|melanchol\w*|happy|joyful|chill|chillout|chilled|relaxing|calm|calming|mellow|dark|bleak|energetic|upbeat|dreamy|ethereal|hazy|aggressive|angry|brutal|heavy|epic|cinematic|hypnotic|romantic|sensual|intimate|nostalgic|nostalgia|retro|vintage|summer|summery|sunny|atmospheric|moody|emotional|uplifting|bittersweet|somber|haunting|dreamlike|late night|night|nocturnal|peaceful|soothing|soft|gentle)$/i;
 
@@ -1560,6 +1604,10 @@ function macroDiAlbum(a){
   if((a.genres||[]).some(g=>RE_INDIE.test(g)))s.add('indie');
   return[...s];
 }
+/* I mood non ci sono piu'. Misurati sulla tua libreria: "energico" stava sul
+   60% degli album, "nostalgico" sul 26%. Un filtro che ne tiene tre su cinque
+   non filtra niente, e in un mese non l'hai mai usato. I generi curati di
+   Discogs e MusicBrainz dicono molto di piu' con molto meno rumore. */
 function classify(rawTags,itunesGenre){
   const tags=[];if(itunesGenre)tags.push(itunesGenre);
   rawTags.forEach(t=>tags.push(t));
@@ -1573,11 +1621,10 @@ function classify(rawTags,itunesGenre){
   });
   pezzi.forEach(t=>{if(!t)return;const s=String(t).trim().toLowerCase();
     if(!s||s.length>28||NOISE_TAGS.test(s)||seen.has(s))return;seen.add(s);clean.push(s)});
-  const moods=new Set();
-  clean.forEach(t=>{MOOD_RULES.forEach(([m,re])=>{if(re.test(t))moods.add(m)});
-    if(GENRE_MOODS[t])GENRE_MOODS[t].forEach(m=>moods.add(m))});
-  const genres=clean.filter(t=>!PURE_MOOD.test(t)&&!MOOD_RULES.some(([m])=>m===t)).slice(0,7);
-  return{genres,moods:[...moods].slice(0,5)};
+  /* resta il filtro degli umori puri: "melancholic" non e' un genere e da
+     Discogs non arriva, ma da iTunes ogni tanto si' */
+  const genres=clean.filter(t=>!PURE_MOOD.test(t)).slice(0,10);
+  return{genres,moods:[]};
 }
 
 /* ==========================================================
@@ -1714,16 +1761,20 @@ function queueComplete(id,genre){
 }
 async function enrich(id,itunesGenre,merge){
   const a0=DB.albums.find(a=>a.id===id);if(!a0)return;
-  const [mb,lfm]=await Promise.all([fetchMusicBrainz(a0.artist,a0.title),fetchLastfm(a0.artist,a0.title)]);
-  const cl=classify([...lfm.tags,...mb.tags],itunesGenre);
+  /* Tre fonti, ognuna per quello che sa fare: Discogs per generi e
+     sottogeneri curati, MusicBrainz per i suoi generi votati (che aggiungono
+     termini a cui Discogs si ferma), Last.fm ormai solo per la descrizione.
+     I suoi tag liberi erano l'origine di "berlin", "bryan adams" e "cqv". */
+  const [dis,mb,lfm]=await Promise.all([
+    generiDiscogs(a0.artist,a0.title),
+    fetchMusicBrainz(a0.artist,a0.title),
+    fetchLastfm(a0.artist,a0.title)]);
+  const cl=classify([...dis,...mb.tags],itunesGenre);
   const a=DB.albums.find(x=>x.id===id);if(!a)return;
   if(merge){
-    /* unisco senza buttare via i tag messi a mano */
-    a.genres=[...new Set([...(a.genres||[]),...cl.genres])].slice(0,12);
-    a.moods=[...new Set([...(a.moods||[]),...cl.moods])].slice(0,8);
+    a.genres=[...new Set([...(a.genres||[]),...cl.genres])].slice(0,14);
   }else{
     if(!(a.genres||[]).length)a.genres=cl.genres;
-    if(!(a.moods||[]).length)a.moods=cl.moods;
   }
   if(!a.year&&mb.year)a.year=mb.year;
   if(!a.about&&lfm.about)a.about=lfm.about;
@@ -1761,7 +1812,7 @@ let bulkRunning=false,bulkStop=false;
 async function bulkEnrich(mode){
   if(bulkRunning)return;
   const list=DB.albums.filter(a=>!a.pending&&(mode==='missing'
-    ? !(a.genres||[]).length||!(a.moods||[]).length : true));
+    ? !(a.genres||[]).length : true));
   if(!list.length){toast('Niente da aggiornare');return}
   if(mode==='reset'&&!confirm('Rifare i tag da zero per '+list.length+' album?\n\nI tag che hai aggiunto o corretto a mano andranno persi.'))return;
   bulkRunning=true;bulkStop=false;
@@ -1773,12 +1824,14 @@ async function bulkEnrich(mode){
     if(bulkStop)break;
     txt.innerHTML='<b>'+(done+1)+' / '+list.length+'</b> &middot; '+esc(a.title);
     bar.style.width=Math.round(done/list.length*100)+'%';
-    const before=(a.genres||[]).length+(a.moods||[]).length;
+    const before=(a.genres||[]).length;
     if(mode==='reset'){a.genres=[];a.moods=[];a.about=''}
     try{await enrich(a.id,'',true)}catch(e){}
-    if((a.genres||[]).length+(a.moods||[]).length!==before)changed++;
+    if((a.genres||[]).length!==before)changed++;
     done++;
-    if(!bulkStop)await new Promise(r=>setTimeout(r,1100));
+    /* MusicBrainz accetta una richiesta al secondo, Discogs venticinque al
+       minuto: il secondo e' il vincolo piu' stretto, e detta il passo. */
+    if(!bulkStop)await new Promise(r=>setTimeout(r,2500));
   }
   bar.style.width='100%';
   txt.innerHTML=(bulkStop?'Fermato.':'Finito.')+' '+done+' album ripassati, '+changed+' aggiornati.';
@@ -3384,9 +3437,9 @@ function openAlbum(id,keepScroll){
   openAlbum._id=id;
   let stars='';
   for(let i=1;i<=10;i++)stars+='<button data-r="'+i+'" class="'+(a.rating>=i?'on':'')+'">&#9733;</button>';
-  /* riepilogo compatto: massimo 3 generi + 2 mood */
-  const qg=(a.genres||[]).slice(0,3),qm=(a.moods||[]).slice(0,2);
-  const extra=Math.max(0,(a.genres||[]).length-qg.length)+Math.max(0,(a.moods||[]).length-qm.length);
+  /* riepilogo compatto: i primi cinque generi, il resto sotto Dettagli */
+  const qg=(a.genres||[]).slice(0,5),qm=[];
+  const extra=Math.max(0,(a.genres||[]).length-qg.length);
   const quick=qg.map(t=>'<span class="chip g">'+esc(t)+'</span>').join('')+
               qm.map(t=>'<span class="chip m">'+esc(t)+'</span>').join('')||
               '<span class="tiny muted">nessun tag ancora</span>';
@@ -3419,7 +3472,7 @@ function openAlbum(id,keepScroll){
       '</div></div>':'')+
     (vis('details')?'<div id="detail" style="border-top:1px solid var(--line);padding-top:16px;display:'+(detailOpen?'block':'none')+'">'+
       '<label class="f">Generi</label><div id="gz" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px"></div>'+
-      '<label class="f">Mood</label><div id="mz" style="display:flex;gap:6px;flex-wrap:wrap"></div>'+
+
       (a.about&&vis('about')?'<div style="margin-top:14px"><label class="f">Descrizione</label>'+
         '<div class="tiny muted" style="line-height:1.6">'+esc(a.about)+'</div></div>':'')+
       ((vis('dates')||vis('listeners'))?'<div style="margin-top:14px"><label class="f">Dettagli</label><div class="tiny muted" style="line-height:1.7">'+
@@ -3481,7 +3534,7 @@ function openAlbum(id,keepScroll){
       if(v&&v.trim()){(a[k]=a[k]||[]).push(v.trim().toLowerCase());save(a);openAlbum(id,true);renderAll()}};
     h.appendChild(add);
   };
-  chips('gz',a.genres,'g','genres');chips('mz',a.moods,'m','moods');
+  chips('gz',a.genres,'g','genres');
 
   document.getElementById('stars').querySelectorAll('button[data-r]').forEach(b=>{
     b.onclick=()=>{a.rating=+b.dataset.r;a.pending=false;
@@ -3645,7 +3698,7 @@ function openAlbum(id,keepScroll){
   };
   const cd=document.getElementById('bCovDel');
   if(cd)cd.onclick=()=>setCover('');
-  document.getElementById('bRe').onclick=()=>{a.genres=[];a.moods=[];save(a);toast('Cerco i tag...');queueEnrich(id,'')};
+  document.getElementById('bRe').onclick=()=>{a.genres=[];a.moods=[];save(a);toast('Cerco i generi...');queueEnrich(id,'')};
   document.getElementById('bDel').onclick=()=>{
     if(!confirm('Eliminare "'+a.title+'"?'))return;
     removeAlbum(id);closeModal();renderAll();toast('Eliminato');
@@ -3679,7 +3732,24 @@ function closeModal(){chiudiModale(false)}
    ========================================================== */
 let libState='all',libArtist='';
 /* filtri a selezione multipla: piu voci = ricerca piu larga, non piu stretta */
-const SEL={fGen:new Set(),fMoo:new Set(),rGen:new Set(),rMoo:new Set()};
+const SEL={fGen:new Set(),fSub:new Set(),rGen:new Set(),rSub:new Set()};
+/* Un sottogenere entra fra i filtri solo se ha abbastanza album alle spalle:
+   una pastiglia per un disco solo e' rumore. La soglia e' qui, in un posto
+   solo, cosi' si cambia con una cifra quando avremo i dati nuovi. */
+const SOGLIA_SOTTO=8;
+function sottogeneri(){
+  const conta=new Map(),macro=new Set(MACRO.map(m=>m[0]));
+  DB.albums.forEach(a=>{
+    if(a.pending)return;
+    [...new Set(a.genres||[])].forEach(g=>{
+      const s=String(g||'').trim().toLowerCase();
+      if(!s||macro.has(s))return;
+      conta.set(s,(conta.get(s)||0)+1);
+    });
+  });
+  return[...conta.entries()].filter(x=>x[1]>=SOGLIA_SOTTO)
+    .sort((x,y)=>y[1]-x[1]||(x[0]<y[0]?-1:1)).map(x=>x[0]);
+}
 /* menu a tendina con le pastiglie dentro, su piu' righe: non scorre e non
    si allunga all'infinito quando i generi aumentano */
 function chiudiMenu(){
@@ -3755,7 +3825,7 @@ document.addEventListener('click',chiudiMenu);
 function openArtist(name){
   libArtist=name||'';libState='all';
   document.getElementById('fq').value='';
-  document.getElementById('fDec').value='';SEL.fGen.clear();SEL.fMoo.clear();
+  document.getElementById('fDec').value='';SEL.fGen.clear();SEL.fSub.clear();
   document.getElementById('fState').querySelectorAll('button')
     .forEach(x=>x.classList.toggle('on',x.dataset.s==='all'));
   show('lib');renderLib();
@@ -3792,19 +3862,20 @@ function matches(a,f){
     const mg=macroDiAlbum(a);
     if(!f.generi.some(x=>mg.includes(x)))return false;
   }
-  if(f.moods&&f.moods.length){
-    const am=a.moods||[];
-    if(!f.moods.some(x=>am.includes(x)))return false;
+  /* sottogeneri: come i generi, piu' voci = ricerca piu' larga */
+  if(f.sotto&&f.sotto.length){
+    const ag=(a.genres||[]).map(x=>String(x).toLowerCase());
+    if(!f.sotto.some(x=>ag.includes(x)))return false;
   }
   if(f.dec&&(!a.year||Math.floor(a.year/10)*10!==+f.dec))return false;
   if(f.q){const s=((a.title||'')+' '+(a.artist||'')+' '+(a.genres||[]).join(' ')+' '+
-    (a.moods||[]).join(' ')+' '+(a.comment||'')).toLowerCase();
+    (a.comment||'')).toLowerCase();
     if(!s.includes(f.q.toLowerCase()))return false}
   return true;
 }
 function renderLib(){
   const f={state:libState,q:document.getElementById('fq').value.trim(),
-    generi:[...SEL.fGen],moods:[...SEL.fMoo],
+    generi:[...SEL.fGen],sotto:[...SEL.fSub],
     dec:document.getElementById('fDec').value,artist:libArtist};
   const ab=document.getElementById('artistBox');
   if(libArtist){
@@ -3864,7 +3935,8 @@ function mediePer(quali){
   const m=new Map();
   DB.albums.forEach(a=>{
     if(!a.rating||a.pending)return;
-    const vals=quali==='generi'?macroDiAlbum(a):(a.moods||[]);
+    const vals=quali==='generi'?macroDiAlbum(a):[...new Set((a.genres||[])
+      .map(g=>String(g).toLowerCase()))].filter(g=>sottogeneri().includes(g));
     [...new Set(vals)].forEach(v=>{
       if(!v)return;
       const c=m.get(v)||{n:0,s:0};
@@ -3911,7 +3983,7 @@ function apriMedie(){
           [1,2,3,5].map(v=>'<button class="btn '+(v===medieMin?'':'gh ')+'sm" data-min="'+v+'">'+
             (v===1?'tutti':'da '+v+'+')+'</button>').join('')+'</div>'+
         blocco('Generi',mediePer('generi'))+
-        blocco('Mood',mediePer('mood'))
+        blocco('Sottogeneri',mediePer('sotto'))
       : '<div class="tiny muted">Non hai ancora votato nessun album. Dai qualche voto e qui '+
         'vedrai quali generi e quali mood ti convincono di piu&rsquo;.</div>')+
     '</div>';
@@ -3933,13 +4005,13 @@ function sizeHint(){
 }
 function renderAll(){
   const macro=[...new Set(DB.albums.flatMap(macroDiAlbum))].sort();
-  const moods=allValues('moods');
+  const sub=sottogeneri();
   [...SEL.fGen,...SEL.rGen].forEach(v=>{if(!macro.includes(v)){SEL.fGen.delete(v);SEL.rGen.delete(v)}});
-  [...SEL.fMoo,...SEL.rMoo].forEach(v=>{if(!moods.includes(v)){SEL.fMoo.delete(v);SEL.rMoo.delete(v)}});
+  [...SEL.fSub,...SEL.rSub].forEach(v=>{if(!sub.includes(v)){SEL.fSub.delete(v);SEL.rSub.delete(v)}});
   menuChip('fGenreMenu','Generi',macro,SEL.fGen,renderLib);
-  menuChip('fMoodMenu','Mood',moods,SEL.fMoo,renderLib);
+  menuChip('fSubMenu','Sottogeneri',sub,SEL.fSub,renderLib);
   menuChip('rGenreMenu','Generi',macro,SEL.rGen,updatePool);
-  menuChip('rMoodMenu','Mood',moods,SEL.rMoo,updatePool);
+  menuChip('rSubMenu','Sottogeneri',sub,SEL.rSub,updatePool);
   ['fDec','rDec'].forEach(i=>fillSelect(document.getElementById(i),decades().map(String)));
   renderStats();renderLib();updatePool();sizeHint();fillSeeds();
   if(typeof renderSpotOra==='function')renderSpotOra();
@@ -3949,8 +4021,9 @@ function renderAll(){
    13. RANDOMIZER
    ========================================================== */
 function randPool(){
-  const f={state:document.getElementById('rState').value,q:'',
-    generi:[...SEL.rGen],moods:[...SEL.rMoo],
+  const f={state:document.getElementById('rState').value,
+    generi:[...SEL.rGen],sotto:[...SEL.rSub],
+    q:(document.getElementById('rQ')||{}).value||'',
     dec:document.getElementById('rDec').value,
     len:document.getElementById('rLen').value,
     fullOnly:document.getElementById('rKind').value==='full'};
@@ -3967,7 +4040,8 @@ function updatePool(){
     if(st==='fav')on.push('solo preferiti');
     if(st==='done')on.push('solo ascoltati');
     if(document.getElementById('rKind').value==='full')on.push('senza singoli ed EP');
-    [...SEL.rGen,...SEL.rMoo].forEach(v=>on.push(v));
+    [...SEL.rGen,...SEL.rSub].forEach(v=>on.push(v));
+    const rq=document.getElementById('rQ');if(rq&&rq.value.trim())on.push('\u201c'+rq.value.trim()+'\u201d');
     const dec=document.getElementById('rDec').value;if(dec)on.push(dec);
     const len=document.getElementById('rLen');
     if(len&&len.value!=='')on.push(len.options[len.selectedIndex].text);
@@ -3987,7 +4061,7 @@ function spin(){
 
   function finish(){
     slot.classList.remove('spinning');draw(pick);
-    const tags=[...(pick.genres||[]).slice(0,3),...(pick.moods||[]).slice(0,2)];
+    const tags=(pick.genres||[]).slice(0,5);
     if(tags.length){
       const bar=document.createElement('div');
       bar.style.cssText='display:flex;gap:8px;flex-wrap:wrap;justify-content:center';
@@ -4035,7 +4109,7 @@ function jac(a,b){
   return i/(A.size+B.size-i);
 }
 function similarity(x,y){
-  let s=2*jac(x.genres,y.genres)+jac(x.moods,y.moods);
+  let s=3*jac(x.genres,y.genres);
   if(x.artist&&y.artist&&x.artist.toLowerCase()===y.artist.toLowerCase())s+=.6;
   if(x.year&&y.year&&Math.abs(x.year-y.year)<=5)s+=.25;
   return s;
@@ -4049,12 +4123,12 @@ function tasteProfile(){
     if(a.rating)weight+=a.rating-6;      /* 10 vale +4, 5 vale -1 */
     if(a.fav)weight+=2;
     if(!weight)return;
-    [...(a.genres||[]),...(a.moods||[])].forEach(t=>w.set(t,(w.get(t)||0)+weight));
+    (a.genres||[]).forEach(t=>w.set(t,(w.get(t)||0)+weight));
   });
   return w;
 }
 function tasteScore(a,w){
-  const tags=[...(a.genres||[]),...(a.moods||[])];
+  const tags=(a.genres||[]);
   if(!tags.length)return 0;
   let s=0;tags.forEach(t=>{s+=(w.get(t)||0)});
   return s/Math.sqrt(tags.length);       /* chi ha 20 tag non deve vincere per accumulo */
@@ -4099,7 +4173,7 @@ function renderRec(){
       (a.listened?'<div class="lis">&#10003; ascoltato</div>':'')+
       '</div><div class="t">'+esc(a.title)+'</div><div class="a">'+esc(a.artist||'—')+'</div>'+
       '<div class="tiny muted" style="margin-top:2px">'+
-      esc([...(a.genres||[]).slice(0,2),...(a.moods||[]).slice(0,1)].join(', '))+'</div>';
+      esc((a.genres||[]).slice(0,3).join(', '))+'</div>';
     d.onclick=()=>openAlbum(a.id);
     out.appendChild(d);
   });
@@ -4308,7 +4382,9 @@ document.getElementById('recGo').onclick=renderRec;
 document.getElementById('rReset').onclick=()=>{
   document.getElementById('rState').value='all';
   ['rDec','rKind','rLen'].forEach(i=>document.getElementById(i).value='');
-  SEL.rGen.clear();SEL.rMoo.clear();renderAll();
+  SEL.rGen.clear();SEL.rSub.clear();
+  const rq=document.getElementById('rQ');if(rq)rq.value='';
+  renderAll();
   updatePool();toast('Filtri azzerati');
 };
 
@@ -4329,7 +4405,7 @@ document.getElementById('btnSyncOff').onclick=()=>{
 /* --- preferenze della scheda --- */
 const PREF_LABELS={
   meta:['Anno, tipo e numero di tracce','sotto il nome dell\'artista'],
-  quick:['Riepilogo dei tag','massimo 3 generi e 2 mood'],
+  quick:['Riepilogo dei generi','i primi cinque, il resto sotto Dettagli'],
   details:['Pulsante Dettagli','apre i tag completi e modificabili'],
   about:['Descrizione dell\'album','testo da Last.fm, dentro Dettagli'],
   listeners:['Numero di ascoltatori su Last.fm','spento: e\' un dato che sposta il giudizio'],
