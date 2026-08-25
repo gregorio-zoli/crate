@@ -547,7 +547,7 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
 /* ==========================================================
    1. STATO
    ========================================================== */
-const APP_VER='47';
+const APP_VER='48';
 const LS='crate.v1', LSK='crate.lfmkey', LSG='crate.gh', LSS='crate.lastsync', LSP='crate.prefs';
 const LSSP='crate.spot';   /* accesso a Spotify: resta su QUESTO dispositivo */
 let DB={albums:[],deleted:[],cfg:{}};
@@ -4036,6 +4036,10 @@ function renderAll(){
   ['fDec','rDec'].forEach(i=>fillSelect(document.getElementById(i),decades().map(String)));
   renderStats();renderLib();updatePool();sizeHint();fillSeeds();
   if(typeof renderSpotOra==='function')renderSpotOra();
+  if(typeof renderPrefs==='function'&&document.getElementById('dcKey')){
+    const dc=document.getElementById('dcKey');
+    if(document.activeElement!==dc)dc.value=(DB.cfg&&DB.cfg.discogsToken)||'';
+  }
 }
 
 /* ==========================================================
@@ -4477,6 +4481,10 @@ function renderPrefs(){
   document.getElementById('prLinks').innerHTML=linkSet({artist:'',title:''},true)
     .map(l=>checkRow('L:'+LINK_KEYS[l[0]],l[0],l[2],P.links[LINK_KEYS[l[0]]]!==false)).join('');
   renderPiatt();renderSpotOra();
+  /* il token arriva dalla sincronizzazione anche dopo l'avvio: se non
+     riscrivessi il campo, sul telefono sembrerebbe vuoto pur funzionando */
+  const dc=document.getElementById('dcKey');
+  if(dc&&document.activeElement!==dc)dc.value=(DB.cfg&&DB.cfg.discogsToken)||'';
 }
 (function(){
   const host=document.getElementById('prPlat');
