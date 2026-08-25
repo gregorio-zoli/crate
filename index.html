@@ -283,6 +283,16 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
 
   <div style="text-align:center;margin-top:20px">
     <button class="btn gh sm" id="btnManual">Inserisci a mano</button>
+    <button class="btn gh sm" id="btnLista">Incolla un elenco</button>
+  </div>
+  <div id="listaBox" style="display:none;margin-top:14px">
+    <label class="f">Un album per riga, come &ldquo;Artista - Titolo&rdquo;</label>
+    <textarea id="listaTxt" rows="7" placeholder="Loathe - I Let It in and It Took Everything&#10;Jesu - Jesu&#10;Holy Fawn - Death Spells" style="width:100%;resize:vertical"></textarea>
+    <div class="row" style="margin-top:8px">
+      <button class="btn" id="listaGo">Cerca questi album</button>
+      <button class="btn gh sm" id="listaX">Annulla</button>
+      <span class="tiny muted" id="listaN"></span>
+    </div>
   </div>
 </section>
 
@@ -545,7 +555,7 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
 /* ==========================================================
    1. STATO
    ========================================================== */
-const APP_VER='56';
+const APP_VER='57';
 const LS='crate.v1', LSK='crate.lfmkey', LSG='crate.gh', LSS='crate.lastsync', LSP='crate.prefs';
 const LSSP='crate.spot';   /* accesso a Spotify: resta su QUESTO dispositivo */
 let DB={albums:[],deleted:[],cfg:{}};
@@ -2967,6 +2977,44 @@ function queueImages(files){
   if(!list.length){toast('Nessuna immagine riconosciuta');return}
   runBatch(list);
 }
+/* ---- importare un elenco scritto ----
+   La macchina per le liste c'era gia', ma si poteva alimentare solo con lo
+   screenshot di una classifica. Le stesse righe incollate a mano fanno lo
+   stesso lavoro, e ti risparmiano un modulo per ogni disco. */
+function righeDaTesto(txt){
+  const out=[],visti=new Set();
+  String(txt||'').split(/\r?\n/).forEach(riga=>{
+    const l=riga.replace(/^\s*[\d]+[.)\]]\s*/,'')      /* via "1." o "3)" davanti */
+                .replace(/\s+/g,' ').trim();
+    if(l.length<5)return;
+    const p=looksLikePair(l);
+    if(!p)return;
+    const k=p.raw.toLowerCase();
+    if(visti.has(k))return;
+    visti.add(k);out.push(p);
+  });
+  return out;
+}
+async function importaElenco(txt){
+  const righe=righeDaTesto(txt);
+  if(!righe.length){toast('Non ho riconosciuto nessuna riga "Artista - Titolo"');return}
+  deck=[];deckIdx=0;deckTotal=1;deckDone=false;deckAdded=0;deckSkipped=0;
+  show('add');openDeck();
+  const work=righe.slice(0,LIST_MAX*2);
+  const rows=[];
+  for(let i=0;i<work.length;i++){
+    const p=work[i];
+    setDeckProgress(0,'cerco '+(i+1)+' di '+work.length,Math.round(100*i/work.length));
+    let match=null;
+    try{const rs=await cercaCompleta(p.title,p.artist);match=rs[0]||null}catch(e){}
+    rows.push({p:p,match:match,on:!!match,
+      conf:match?(txtSim(p.title,match.title)*.65+txtSim(p.artist,match.artist)*.35):0});
+    await sleep(260);
+  }
+  deck.push({kind:'list',dataUrl:'',small:'',rows:rows,
+    extra:Math.max(0,righe.length-work.length),hint:null,cands:[]});
+  deckDone=true;renderCard();
+}
 async function runBatch(files){
   deck=[];deckIdx=0;deckTotal=files.length;deckDone=false;deckAdded=0;deckSkipped=0;
   show('add');
@@ -4530,6 +4578,27 @@ window.addEventListener('popstate',()=>{
 document.getElementById('btnSearch').onclick=()=>runSearch();
 document.getElementById('q').addEventListener('keydown',e=>{if(e.key==='Enter')runSearch()});
 document.getElementById('btnManual').onclick=()=>manualForm({});
+document.getElementById('btnLista').onclick=()=>{
+  const b=document.getElementById('listaBox');
+  b.style.display=b.style.display==='none'?'block':'none';
+  if(b.style.display==='block')document.getElementById('listaTxt').focus();
+};
+document.getElementById('listaX').onclick=()=>{
+  document.getElementById('listaBox').style.display='none';
+  document.getElementById('listaTxt').value='';
+  document.getElementById('listaN').textContent='';
+};
+document.getElementById('listaTxt').addEventListener('input',e=>{
+  const n=righeDaTesto(e.target.value).length;
+  document.getElementById('listaN').textContent=n?n+(n===1?' riga riconosciuta':' righe riconosciute'):'';
+});
+document.getElementById('listaGo').onclick=()=>{
+  const t=document.getElementById('listaTxt').value;
+  document.getElementById('listaBox').style.display='none';
+  document.getElementById('listaTxt').value='';
+  document.getElementById('listaN').textContent='';
+  importaElenco(t);
+};
 /* Trascinare la scheda verso il basso per chiuderla, come si fa con i
    pannelli. Vale solo quando sei gia' in cima: se stai leggendo le tracce a
    meta' scheda, il dito serve a scorrere, non a chiudere. */
