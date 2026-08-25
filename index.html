@@ -401,12 +401,20 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
   </div>
 
   <div class="card" style="margin-bottom:14px">
-    <h2>Tag automatici più ricchi (opzionale)</h2>
-    <p class="tiny muted" style="margin-top:0">Facoltativa: rende i tag pi&ugrave; specifici. <a href="https://www.last.fm/api/account/create" target="_blank" rel="noopener">Prendine una</a>.</p>
+    <h2>Chiavi facoltative</h2>
+    <p class="tiny muted" style="margin-top:0">Non servono per funzionare. La prima velocizza molto il riaggiornamento dei generi.</p>
+    <label class="f">Discogs</label>
+    <div class="row"><div class="grow"><input type="text" id="dcKey" placeholder="token personale Discogs" autocomplete="off" spellcheck="false"></div></div>
+    <div class="tiny muted" style="margin:6px 0 14px">Da 25 a 60 richieste al minuto: su 600 album &egrave; la differenza fra mezz&rsquo;ora e dieci minuti. Si sincronizza con la libreria.
+      <details class="hint" style="margin-top:6px"><summary style="cursor:pointer">Dove si prende</summary>
+      <div style="margin-top:6px">discogs.com &rsaquo; il tuo account &rsaquo; <b>Settings</b> &rsaquo; <b>Developers</b> &rsaquo; <b>Generate new token</b>. Copia la riga sotto &ldquo;personal access token&rdquo;.</div></details>
+    </div>
+    <label class="f">Last.fm</label>
     <div class="row">
       <div class="grow"><input type="text" id="lfmKey" placeholder="API key Last.fm" autocomplete="off" spellcheck="false"></div>
       <button class="btn gh" id="btnSaveKey">Salva</button>
     </div>
+    <div class="tiny muted" style="margin-top:6px">Ormai serve solo per la descrizione dell&rsquo;album. <a href="https://www.last.fm/api/account/create" target="_blank" rel="noopener">Prendine una</a>.</div>
   </div>
 
   <div class="card" style="margin-bottom:14px">
@@ -539,7 +547,7 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
 /* ==========================================================
    1. STATO
    ========================================================== */
-const APP_VER='46';
+const APP_VER='47';
 const LS='crate.v1', LSK='crate.lfmkey', LSG='crate.gh', LSS='crate.lastsync', LSP='crate.prefs';
 const LSSP='crate.spot';   /* accesso a Spotify: resta su QUESTO dispositivo */
 let DB={albums:[],deleted:[],cfg:{}};
@@ -1392,10 +1400,14 @@ async function searchAlbums(term){
    Attenzione al vecchio errore: una ricerca per nome puo' restituire il
    disco di un altro. Accetto solo se titolo e artista corrispondono davvero. */
 const discogsTs=[];
+/* Senza chiave Discogs concede 25 richieste al minuto, con una chiave
+   personale gratuita 60. Su 600 album e' la differenza fra mezz'ora e dieci
+   minuti, quindi la chiave la chiedo. */
+function discogsKey(){return(DB.cfg&&DB.cfg.discogsToken)||''}
 function discogsCredito(){
   const t=Date.now();
   while(discogsTs.length&&t-discogsTs[0]>60000)discogsTs.shift();
-  return 22-discogsTs.length;      /* il tetto e' 25: mi tengo un margine */
+  return(discogsKey()?55:22)-discogsTs.length;
 }
 async function generiDiscogs(artist,title){
   const out=[];
@@ -1409,8 +1421,9 @@ async function generiDiscogs(artist,title){
   const t=titoloPulito(title);
   const q=((artist||'')+' '+t).trim();
   let r;
+  const k=discogsKey();
   try{r=await fetch('https://api.discogs.com/database/search?type=master&per_page=5&q='+
-    encodeURIComponent(q))}
+    encodeURIComponent(q),k?{headers:{Authorization:'Discogs token='+k}}:undefined)}
   catch(e){return out}
   if(r.status===429){discogsTs.push(Date.now(),Date.now(),Date.now());return out}
   if(!r.ok)return out;
@@ -1448,6 +1461,9 @@ async function fetchMusicBrainz(artist,title){
        dove chiunque scrive "irish" o "bryan adams". Prendendo tutti e due
        mi portavo in casa proprio la spazzatura che volevamo togliere.
        E scarto quelli con un voto solo: uno che passa non fa un genere. */
+    /* MusicBrainz accetta una richiesta al secondo: sparargli la seconda
+       subito dopo la prima si prende un 503 e i generi si perdono */
+    await sleep(1100);
     const r2=await fetch('https://musicbrainz.org/ws/2/release-group/'+rg.id+'?fmt=json&inc=genres');
     if(r2.ok){const d2=await r2.json();
       (d2.genres||[]).filter(g=>(+g.count||0)>=1).forEach(g=>tags.push(g.name));}
@@ -1765,10 +1781,15 @@ async function enrich(id,itunesGenre,merge){
      sottogeneri curati, MusicBrainz per i suoi generi votati (che aggiungono
      termini a cui Discogs si ferma), Last.fm ormai solo per la descrizione.
      I suoi tag liberi erano l'origine di "berlin", "bryan adams" e "cqv". */
-  const [dis,mb,lfm]=await Promise.all([
-    generiDiscogs(a0.artist,a0.title),
-    fetchMusicBrainz(a0.artist,a0.title),
-    fetchLastfm(a0.artist,a0.title)]);
+  /* Discogs per primo: e' veloce e ha quasi tutto. MusicBrainz costa due
+     richieste in fila e i suoi server sono lenti, quindi lo interpello solo
+     quando Discogs e' stato avaro - che e' il caso in cui serve davvero. */
+  const dis=await generiDiscogs(a0.artist,a0.title);
+  const servemb=dis.length<3;
+  const [mb,lfm]=await Promise.all([
+    servemb?fetchMusicBrainz(a0.artist,a0.title):Promise.resolve({tags:[],year:null}),
+    (a0.about&&a0.year)?Promise.resolve({tags:[],about:'',listeners:0})
+                       :fetchLastfm(a0.artist,a0.title)]);
   const cl=classify([...dis,...mb.tags],itunesGenre);
   const a=DB.albums.find(x=>x.id===id);if(!a)return;
   if(merge){
@@ -1829,9 +1850,9 @@ async function bulkEnrich(mode){
     try{await enrich(a.id,'',true)}catch(e){}
     if((a.genres||[]).length!==before)changed++;
     done++;
-    /* MusicBrainz accetta una richiesta al secondo, Discogs venticinque al
-       minuto: il secondo e' il vincolo piu' stretto, e detta il passo. */
-    if(!bulkStop)await new Promise(r=>setTimeout(r,2500));
+    /* Il passo lo detta Discogs: 25 richieste al minuto senza chiave, 60 con.
+       Quando serve anche MusicBrainz e' lui ad aspettare al proprio interno. */
+    if(!bulkStop)await new Promise(r=>setTimeout(r,discogsKey()?1000:2500));
   }
   bar.style.width='100%';
   txt.innerHTML=(bulkStop?'Fermato.':'Finito.')+' '+done+' album ripassati, '+changed+' aggiornati.';
@@ -4590,6 +4611,11 @@ function renderSpot(){
       :SPOT.clientId?'<span class="muted">Client ID salvato: manca solo il permesso, premi &ldquo;Collega account&rdquo;.</span>'
                     :'<span class="muted">Non collegato: uso le fonti anonime, che sono pi&ugrave; lente e meno precise.</span>'));
 }
+document.getElementById('dcKey').addEventListener('input',e=>{
+  const v=e.target.value.trim();
+  DB.cfg=DB.cfg||{};DB.cfg.discogsToken=v;DB.cfg.at=now();
+  saveLocal();scheduleSync();
+});
 document.getElementById('spotId').addEventListener('input',e=>{
   const v=e.target.value.trim();
   /* Cambiare Client ID vuol dire cambiare applicazione: il permesso vecchio
@@ -4890,6 +4916,7 @@ spotRitorno().then(ok=>{if(ok)renderSpot()});
     :'Il permesso di Spotify scade fra '+g+' giorn'+(g===1?'o':'i')+': ricollegalo in Opzioni'),1500);
 })();
 document.getElementById('lfmKey').value=localStorage.getItem(LSK)||'';
+document.getElementById('dcKey').value=(DB.cfg&&DB.cfg.discogsToken)||'';
 (()=>{const c=ghCfg();if(c){document.getElementById('ghOwner').value=c.owner;
   document.getElementById('ghRepo').value=c.repo;document.getElementById('ghToken').value=c.token}})();
 renderAll();
