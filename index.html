@@ -540,7 +540,7 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
 /* ==========================================================
    1. STATO
    ========================================================== */
-const APP_VER='49';
+const APP_VER='50';
 const LS='crate.v1', LSK='crate.lfmkey', LSG='crate.gh', LSS='crate.lastsync', LSP='crate.prefs';
 const LSSP='crate.spot';   /* accesso a Spotify: resta su QUESTO dispositivo */
 let DB={albums:[],deleted:[],cfg:{}};
@@ -660,11 +660,43 @@ function mergeDB(a,b){
   const cutoff=now()-365*864e5;
   /* impostazioni condivise (per ora solo il Client ID di Spotify):
      vince la piu' recente, come per gli album */
-  const ca=a.cfg||{},cb=b.cfg||{};
-  const cfg=((+cb.at||0)>(+ca.at||0))?cb:ca;
+  const cfg=fondiCfg(a.cfg,b.cfg);
   return{albums:[...map.values()].sort((x,y)=>(y.addedAt||0)-(x.addedAt||0)),
          deleted:[...del.values()].filter(d=>(d.at||0)>cutoff),
          cfg:cfg};
+}
+/* Le impostazioni condivise si fondono UNA PER UNA, con la loro data.
+   Prima avevano una data sola per tutto il gruppo: scrivere il Client ID di
+   Spotify su un telefono rendeva "piu' recente" anche il token Discogs che
+   li' non c'era, e il token buono spariva. Con una data per chiave ognuna
+   viaggia per conto suo. */
+function fondiCfg(a,b){
+  const A=a||{},B=b||{},out={};
+  const chiavi=[...new Set([...Object.keys(A),...Object.keys(B)])]
+    .filter(k=>k!=='at'&&k.indexOf('at_')!==0);
+  chiavi.forEach(k=>{
+    /* Concorrono solo i lati che hanno davvero qualcosa da dire. Un lato che
+       quella chiave non ce l'ha non deve vincere per il fatto di essere piu'
+       recente su altro: era proprio il caso del token Discogs cancellato dal
+       telefono che aveva scritto solo il Client ID di Spotify.
+       Conseguenza voluta: per togliere un token va tolto su ogni dispositivo,
+       perche' il vuoto non compete mai. */
+    const cand=[];
+    if(A[k])cand.push([A[k],+A['at_'+k]||+A.at||0]);
+    if(B[k])cand.push([B[k],+B['at_'+k]||+B.at||0]);
+    if(!cand.length)return;
+    cand.sort((x,y)=>y[1]-x[1]);
+    out[k]=cand[0][0];out['at_'+k]=cand[0][1];
+  });
+  out.at=Math.max(+A.at||0,+B.at||0);
+  return out;
+}
+function cfgSet(chiave,valore){
+  DB.cfg=DB.cfg||{};
+  DB.cfg[chiave]=valore;
+  DB.cfg['at_'+chiave]=now();
+  DB.cfg.at=now();
+  saveLocal();scheduleSync();
 }
 function canon(db){
   const norm=o=>{const r={};Object.keys(o).sort().forEach(k=>{
@@ -4643,13 +4675,19 @@ function renderDc(){
     : '<span class="muted">Nessun token: 25 richieste al minuto invece di 60.</span>';
 }
 function salvaDc(v){
-  DB.cfg=DB.cfg||{};DB.cfg.discogsToken=String(v||'').trim();DB.cfg.at=now();
-  saveLocal();scheduleSync();renderDc();
+  cfgSet('discogsToken',String(v||'').trim());
+  renderDc();
 }
-document.getElementById('dcKey').addEventListener('input',e=>salvaDc(e.target.value));
+/* Solo il pulsante salva. Salvare mentre scrivi sembrava comodo, ma bastava
+   sfiorare il campo su un altro dispositivo per scriverci sopra un valore
+   vuoto con l'orologio piu' avanti, e cancellare il token buono. */
+document.getElementById('dcKey').addEventListener('input',()=>{
+  const el=document.getElementById('dcStato');
+  if(el)el.innerHTML='<span class="muted">premi <b>Salva</b> per confermare</span>';
+});
 document.getElementById('dcSave').onclick=()=>{
   salvaDc(document.getElementById('dcKey').value);
-  toast(discogsKey()?'Token salvato':'Token tolto');
+  toast(discogsKey()?'Token salvato e in sincronizzazione':'Token tolto');
 };
 document.getElementById('spotId').addEventListener('input',e=>{
   const v=e.target.value.trim();
@@ -4664,8 +4702,7 @@ document.getElementById('spotId').addEventListener('input',e=>{
   }
   SPOT.clientId=v;spotSalva();
   /* lo porto anche nella libreria, cosi' lo ritrovi sull'altro dispositivo */
-  DB.cfg=DB.cfg||{};DB.cfg.spotClientId=v;DB.cfg.at=now();
-  saveLocal();scheduleSync();renderSpot();
+  cfgSet('spotClientId',v);renderSpot();
 });
 document.getElementById('spotCopy').onclick=async()=>{
   try{await navigator.clipboard.writeText(spotRedirect());toast('Indirizzo copiato')}
@@ -4829,6 +4866,17 @@ document.getElementById('btnDiag').onclick=async()=>{
       const n=((((await r.json())||{}).results||{}).bindings||[]).length;
       if(!n)throw new Error('risponde ma senza dati');
       return 'raggiungibile, e conosce gli identificativi Spotify';
+    }],
+    ['Impostazioni arrivate su questo dispositivo',async()=>{
+      const c=DB.cfg||{};
+      const q=k=>c[k]?('\u2713 '+k.replace('discogsToken','token Discogs')
+        .replace('spotClientId','Client ID Spotify')):null;
+      const ci=[q('discogsToken'),q('spotClientId')].filter(Boolean);
+      const quando=t=>t?new Date(+t).toLocaleString():'mai';
+      if(!ci.length)throw new Error('nessuna impostazione condivisa e\' arrivata qui. '+
+        'Se l\'hai scritta altrove, aspetta una sincronizzazione o riaprila.');
+      return ci.join(' \u00b7 ')+' \u00b7 ultimo aggiornamento token: '+
+        quando(c.at_discogsToken||c.at);
     }],
     ['Discogs (generi e sottogeneri)',async()=>{
       /* La domanda vera non e' se Discogs abbia i dati - li ha - ma se si
