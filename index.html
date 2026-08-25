@@ -335,16 +335,7 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
     <div><label class="f">Generi</label><div class="mchip" id="rGenreMenu"></div></div>
     <div><label class="f">Sottogeneri</label><div class="mchip" id="rSubMenu"></div></div>
     <div><label class="f">Decennio</label><select id="rDec"><option value="">Qualsiasi</option></select></div>
-    <div><label class="f">Durata</label><select id="rLen">
-      <option value="">Qualsiasi</option>
-      <option value="0">sotto 30 min</option>
-      <option value="30">30 &ndash; 40 min</option>
-      <option value="40">40 &ndash; 50 min</option>
-      <option value="50">50 &ndash; 60 min</option>
-      <option value="60">1h &ndash; 1h15</option>
-      <option value="75">1h15 &ndash; 1h30</option>
-      <option value="90">oltre 1h30</option>
-    </select></div>
+    <div><label class="f">Durata</label><div class="mchip" id="rLenMenu"></div></div>
     <div><label class="f">Tipo</label><select id="rKind">
       <option value="">Tutto</option>
       <option value="full">Solo album interi</option>
@@ -404,7 +395,9 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
     <h2>Chiavi facoltative</h2>
     <p class="tiny muted" style="margin-top:0">Non servono per funzionare. La prima velocizza molto il riaggiornamento dei generi.</p>
     <label class="f">Discogs</label>
-    <div class="row"><div class="grow"><input type="text" id="dcKey" placeholder="token personale Discogs" autocomplete="off" spellcheck="false"></div></div>
+    <div class="row"><div class="grow"><input type="text" id="dcKey" placeholder="token personale Discogs" autocomplete="off" spellcheck="false"></div>
+      <button class="btn gh" id="dcSave">Salva</button></div>
+    <div class="tiny" id="dcStato" style="margin-top:6px"></div>
     <div class="tiny muted" style="margin:6px 0 14px">Da 25 a 60 richieste al minuto: su 600 album &egrave; la differenza fra mezz&rsquo;ora e dieci minuti. Si sincronizza con la libreria.
       <details class="hint" style="margin-top:6px"><summary style="cursor:pointer">Dove si prende</summary>
       <div style="margin-top:6px">discogs.com &rsaquo; il tuo account &rsaquo; <b>Settings</b> &rsaquo; <b>Developers</b> &rsaquo; <b>Generate new token</b>. Copia la riga sotto &ldquo;personal access token&rdquo;.</div></details>
@@ -547,7 +540,7 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
 /* ==========================================================
    1. STATO
    ========================================================== */
-const APP_VER='48';
+const APP_VER='49';
 const LS='crate.v1', LSK='crate.lfmkey', LSG='crate.gh', LSS='crate.lastsync', LSP='crate.prefs';
 const LSSP='crate.spot';   /* accesso a Spotify: resta su QUESTO dispositivo */
 let DB={albums:[],deleted:[],cfg:{}};
@@ -1421,9 +1414,13 @@ async function generiDiscogs(artist,title){
   const t=titoloPulito(title);
   const q=((artist||'')+' '+t).trim();
   let r;
+  /* Il token va messo nell'indirizzo, non in un'intestazione Authorization.
+     Un'intestazione del genere fa scattare la richiesta preliminare del
+     browser, e se Discogs non le risponde la chiamata fallisce - proprio
+     mentre senza token funzionava. Come parametro invece e' una GET normale. */
   const k=discogsKey();
   try{r=await fetch('https://api.discogs.com/database/search?type=master&per_page=5&q='+
-    encodeURIComponent(q),k?{headers:{Authorization:'Discogs token='+k}}:undefined)}
+    encodeURIComponent(q)+(k?'&token='+encodeURIComponent(k):''))}
   catch(e){return out}
   if(r.status===429){discogsTs.push(Date.now(),Date.now(),Date.now());return out}
   if(!r.ok)return out;
@@ -3753,7 +3750,7 @@ function closeModal(){chiudiModale(false)}
    ========================================================== */
 let libState='all',libArtist='';
 /* filtri a selezione multipla: piu voci = ricerca piu larga, non piu stretta */
-const SEL={fGen:new Set(),fSub:new Set(),rGen:new Set(),rSub:new Set()};
+const SEL={fGen:new Set(),fSub:new Set(),rGen:new Set(),rSub:new Set(),rLen:new Set()};
 /* Un sottogenere entra fra i filtri solo se ha abbastanza album alle spalle:
    una pastiglia per un disco solo e' rumore. La soglia e' qui, in un posto
    solo, cosi' si cambia con una cifra quando avremo i dati nuovi. */
@@ -3861,16 +3858,25 @@ function fillSelect(el,vals){
 }
 /* Gli intervalli di durata, scelti da te sulla libreria vera. Il valore e'
    il minuto di partenza, cosi' la tendina e il filtro non possono divergere. */
-const FASCE={0:[0,30],30:[30,40],40:[40,50],50:[50,60],60:[60,75],75:[75,90],90:[90,1e9]};
-function nellaFascia(a,chiave){
-  const f=FASCE[chiave];
+const FASCE=[
+  {et:'sotto 30 min',da:0,a:30},
+  {et:'30 \u2013 40 min',da:30,a:40},
+  {et:'40 \u2013 50 min',da:40,a:50},
+  {et:'50 \u2013 60 min',da:50,a:60},
+  {et:'1h \u2013 1h15',da:60,a:75},
+  {et:'1h15 \u2013 1h30',da:75,a:90},
+  {et:'oltre 1h30',da:90,a:1e9}
+];
+function nellaFascia(a,etichetta){
+  const f=FASCE.filter(x=>x.et===etichetta)[0];
   if(!f)return true;
   if(!a.durata)return false;      /* durata ignota: fuori, e' proprio il punto del filtro */
   const min=a.durata/60000;
-  return min>=f[0]&&min<f[1];
+  return min>=f.da&&min<f.a;
 }
 function matches(a,f){
-  if(f.len!==undefined&&f.len!==''&&!nellaFascia(a,f.len))return false;
+  /* piu' fasce = intervallo piu' largo: 50-60 con 1h-1h15 fa 50 minuti-1h15 */
+  if(f.len&&f.len.length&&!f.len.some(et=>nellaFascia(a,et)))return false;
   if(f.artist&&(a.artist||'').toLowerCase()!==f.artist.toLowerCase())return false;
   if(f.fullOnly&&(a.kind==='singolo'||a.kind==='EP'))return false;
   if(f.state==='pending')return !!a.pending;
@@ -4033,12 +4039,14 @@ function renderAll(){
   menuChip('fSubMenu','Sottogeneri',sub,SEL.fSub,renderLib);
   menuChip('rGenreMenu','Generi',macro,SEL.rGen,updatePool);
   menuChip('rSubMenu','Sottogeneri',sub,SEL.rSub,updatePool);
+  menuChip('rLenMenu','Durata',FASCE.map(f=>f.et),SEL.rLen,updatePool);
   ['fDec','rDec'].forEach(i=>fillSelect(document.getElementById(i),decades().map(String)));
   renderStats();renderLib();updatePool();sizeHint();fillSeeds();
   if(typeof renderSpotOra==='function')renderSpotOra();
-  if(typeof renderPrefs==='function'&&document.getElementById('dcKey')){
+  if(document.getElementById('dcKey')){
     const dc=document.getElementById('dcKey');
     if(document.activeElement!==dc)dc.value=(DB.cfg&&DB.cfg.discogsToken)||'';
+    if(typeof renderDc==='function')renderDc();
   }
 }
 
@@ -4050,7 +4058,7 @@ function randPool(){
     generi:[...SEL.rGen],sotto:[...SEL.rSub],
     q:(document.getElementById('rQ')||{}).value||'',
     dec:document.getElementById('rDec').value,
-    len:document.getElementById('rLen').value,
+    len:[...SEL.rLen],
     fullOnly:document.getElementById('rKind').value==='full'};
   return DB.albums.filter(a=>!a.pending&&matches(a,f));
 }
@@ -4068,8 +4076,7 @@ function updatePool(){
     [...SEL.rGen,...SEL.rSub].forEach(v=>on.push(v));
     const rq=document.getElementById('rQ');if(rq&&rq.value.trim())on.push('\u201c'+rq.value.trim()+'\u201d');
     const dec=document.getElementById('rDec').value;if(dec)on.push(dec);
-    const len=document.getElementById('rLen');
-    if(len&&len.value!=='')on.push(len.options[len.selectedIndex].text);
+    SEL.rLen.forEach(v=>on.push(v));
     act.textContent=on.length?'filtri attivi: '+on.join(', '):'nessun filtro: pesca da tutta la libreria';
   }
 }
@@ -4394,7 +4401,9 @@ document.getElementById('fState').querySelectorAll('button').forEach(b=>b.onclic
   libState=b.dataset.s;
   document.getElementById('fState').querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));
   renderLib()});
-['rState','rDec','rKind','rLen'].forEach(i=>document.getElementById(i).addEventListener('change',updatePool));
+['rState','rDec','rKind'].forEach(i=>document.getElementById(i).addEventListener('change',updatePool));
+document.getElementById('rQ').addEventListener('input',()=>{clearTimeout(updatePool._t);
+  updatePool._t=setTimeout(updatePool,250)});
 document.getElementById('btnSpin').onclick=spin;
 document.getElementById('recToggle').onclick=()=>{
   const b=document.getElementById('recBody'),open=b.style.display==='none';
@@ -4406,7 +4415,8 @@ document.getElementById('recGo').onclick=renderRec;
 ['recSeed','recTodo'].forEach(i=>document.getElementById(i).addEventListener('change',renderRec));
 document.getElementById('rReset').onclick=()=>{
   document.getElementById('rState').value='all';
-  ['rDec','rKind','rLen'].forEach(i=>document.getElementById(i).value='');
+  ['rDec','rKind'].forEach(i=>document.getElementById(i).value='');
+  SEL.rLen.clear();
   SEL.rGen.clear();SEL.rSub.clear();
   const rq=document.getElementById('rQ');if(rq)rq.value='';
   renderAll();
@@ -4485,6 +4495,7 @@ function renderPrefs(){
      riscrivessi il campo, sul telefono sembrerebbe vuoto pur funzionando */
   const dc=document.getElementById('dcKey');
   if(dc&&document.activeElement!==dc)dc.value=(DB.cfg&&DB.cfg.discogsToken)||'';
+  if(typeof renderDc==='function')renderDc();
 }
 (function(){
   const host=document.getElementById('prPlat');
@@ -4619,11 +4630,27 @@ function renderSpot(){
       :SPOT.clientId?'<span class="muted">Client ID salvato: manca solo il permesso, premi &ldquo;Collega account&rdquo;.</span>'
                     :'<span class="muted">Non collegato: uso le fonti anonime, che sono pi&ugrave; lente e meno precise.</span>'));
 }
-document.getElementById('dcKey').addEventListener('input',e=>{
-  const v=e.target.value.trim();
-  DB.cfg=DB.cfg||{};DB.cfg.discogsToken=v;DB.cfg.at=now();
-  saveLocal();scheduleSync();
-});
+/* Uno stato che si vede. Il campo si salvava da solo mentre scrivevi, senza
+   dire niente: e' lo stesso errore del pannello Spotify che diceva sempre
+   "collegato". Ora c'e' un pulsante e una riga che dice come stanno le cose. */
+function renderDc(){
+  const el=document.getElementById('dcStato');
+  if(!el)return;
+  const k=discogsKey();
+  el.innerHTML=k
+    ? '<span style="color:var(--ok,#4ade80)">&#10003; token salvato</span>'+
+      ' <span class="muted">&middot; 60 richieste al minuto, e si sincronizza con la libreria</span>'
+    : '<span class="muted">Nessun token: 25 richieste al minuto invece di 60.</span>';
+}
+function salvaDc(v){
+  DB.cfg=DB.cfg||{};DB.cfg.discogsToken=String(v||'').trim();DB.cfg.at=now();
+  saveLocal();scheduleSync();renderDc();
+}
+document.getElementById('dcKey').addEventListener('input',e=>salvaDc(e.target.value));
+document.getElementById('dcSave').onclick=()=>{
+  salvaDc(document.getElementById('dcKey').value);
+  toast(discogsKey()?'Token salvato':'Token tolto');
+};
 document.getElementById('spotId').addEventListener('input',e=>{
   const v=e.target.value.trim();
   /* Cambiare Client ID vuol dire cambiare applicazione: il permesso vecchio
@@ -4808,8 +4835,10 @@ document.getElementById('btnDiag').onclick=async()=>{
          lasci interrogare da una pagina web. Provo l'album di prova gia'
          verificato: se torna "Rock" con dentro Post-Punk e Goth Rock,
          possiamo costruirci sopra i generi a due livelli. */
+      const k=discogsKey();
       let r;
-      try{r=await fetch('https://api.discogs.com/masters/2602640')}
+      try{r=await fetch('https://api.discogs.com/masters/2602640'+
+        (k?'?token='+encodeURIComponent(k):''))}
       catch(e){throw new Error('non si lascia chiamare dal browser (manca l\'autorizzazione '+
         'CORS). E\' la risposta che aspettavo di misurare: senza, i generi restano '+
         'quelli di MusicBrainz.')}
@@ -4818,7 +4847,8 @@ document.getElementById('btnDiag').onclick=async()=>{
       const d=(await r.json())||{};
       const gen=(d.genres||[]).join(', '),sty=(d.styles||[]).join(', ');
       if(!gen&&!sty)throw new Error('risponde ma senza generi');
-      return 'funziona! genere: '+(gen||'-')+' \u00b7 sottogeneri: '+(sty||'-');
+      return 'funziona'+(k?' CON il tuo token (60 al minuto)':' senza token (25 al minuto)')+
+        ' \u00b7 genere: '+(gen||'-')+' \u00b7 sottogeneri: '+(sty||'-');
     }],
     ['Copertine (Cover Art)',async()=>{
       await new Promise((res,rej)=>{
@@ -4924,7 +4954,7 @@ spotRitorno().then(ok=>{if(ok)renderSpot()});
     :'Il permesso di Spotify scade fra '+g+' giorn'+(g===1?'o':'i')+': ricollegalo in Opzioni'),1500);
 })();
 document.getElementById('lfmKey').value=localStorage.getItem(LSK)||'';
-document.getElementById('dcKey').value=(DB.cfg&&DB.cfg.discogsToken)||'';
+document.getElementById('dcKey').value=(DB.cfg&&DB.cfg.discogsToken)||'';renderDc();
 (()=>{const c=ghCfg();if(c){document.getElementById('ghOwner').value=c.owner;
   document.getElementById('ghRepo').value=c.repo;document.getElementById('ghToken').value=c.token}})();
 renderAll();
