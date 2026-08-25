@@ -439,6 +439,22 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
   </div>
 
   <div class="card" style="margin-bottom:14px">
+    <h2>Pastiglie dei sottogeneri</h2>
+    <p class="tiny muted" style="margin-top:0">Quante ne vuoi vedere nei filtri. Le pastiglie che spariscono non tolgono generi agli album: li trovi sempre col contenitore o cercandoli a mano.</p>
+    <div class="row" style="align-items:flex-end">
+      <div style="flex:0 0 130px"><label class="f">Da quanti album</label>
+        <input type="number" id="prSoglia" min="2" max="200" step="1"></div>
+      <button class="btn gh sm" id="prSogliaDef" style="margin-bottom:2px">Riporta a 12</button>
+    </div>
+    <label style="display:flex;gap:10px;align-items:flex-start;padding:12px 0 2px;cursor:pointer">
+      <input type="checkbox" id="prTopMacro" style="width:auto;margin:3px 0 0;flex:none;accent-color:var(--acc)">
+      <span style="min-width:0"><span style="font-size:14px">Aggiungi i primi 5 di ogni contenitore</span>
+      <span class="tiny muted" style="display:block">I mondi piccoli portano comunque le loro divisioni: senza questo, hip hop, jazz e metal restano senza pastiglie perch&eacute; nessun loro sottogenere arriva alla soglia.</span></span>
+    </label>
+    <div class="hint" id="prSogliaOra"></div>
+  </div>
+
+  <div class="card" style="margin-bottom:14px">
     <h2>Riaggiorna i generi di tutta la libreria</h2>
     <p class="tiny muted" style="margin-top:0">Generi e sottogeneri da <b>Discogs</b> e <b>MusicBrainz</b>. Circa due secondi e mezzo per album.</p>
     <div class="row">
@@ -555,7 +571,7 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
 /* ==========================================================
    1. STATO
    ========================================================== */
-const APP_VER='57';
+const APP_VER='63';
 const LS='crate.v1', LSK='crate.lfmkey', LSG='crate.gh', LSS='crate.lastsync', LSP='crate.prefs';
 const LSSP='crate.spot';   /* accesso a Spotify: resta su QUESTO dispositivo */
 let DB={albums:[],deleted:[],cfg:{}};
@@ -1292,7 +1308,11 @@ function nucleoTitolo(t){
 function titoloPerGeneri(t){
   const s=String(t||'')
     .replace(/\[[^\]]*\]|\([^)]*\)/g,' ')          /* via ogni parentesi */
-    .replace(/\s*[-–—]\s*[^-–—]*$/,' ')              /* via la coda dopo il trattino */
+    /* il trattino conta solo se e' staccato: senza spazi fa parte della
+       parola, e "Afro-Harping" diventava "Afro", "The Man-Machine" "The Man".
+       E anche staccato taglio solo se quello che segue e' un'edizione: in
+       "Melvyn Price - Rhythm and Blues" la coda e' il titolo vero. */
+    .replace(/\s+[-–—]\s+([^-–—]*)$/,(m,coda)=>soloEdizione(coda)?' ':m)              /* via la coda dopo il trattino */
     .replace(/\s*\.{2,}\s*/g,' ')                    /* via i puntini di sospensione */
     .replace(/\b(live|dal vivo)\s+(at|from|in|a|da)\b.*$/i,' ')
     .replace(/\s+/g,' ').trim();
@@ -1482,7 +1502,41 @@ function discogsCredito(){
   while(discogsTs.length&&t-discogsTs[0]>60000)discogsTs.shift();
   return(discogsKey()?55:22)-discogsTs.length;
 }
+/* Spotify accredita tutti gli artisti di un disco separandoli con la virgola:
+   "Madvillain, Madlib, MF DOOM". Cercato cosi' non lo trova nessuno. Provo
+   anche col primo nome, ma solo come seconda scelta, perche' la virgola a
+   volte fa parte del nome vero ("Tyler, The Creator", "Black Country, New
+   Road") e li' il nome intero e' quello giusto. */
+/* Giapponese, coreano, cinese, cirillico, greco, arabo, ebraico, thai.
+   Elenco chiuso: su un album scritto in alfabeto latino non scatta mai. */
+const RE_ALTRO_ALFABETO=/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{Script=Cyrillic}\p{Script=Greek}\p{Script=Arabic}\p{Script=Hebrew}\p{Script=Thai}]/u;
+function nomiArtista(a,titolo){
+  const s=String(a||'').trim();
+  const out=s?[s]:[''];
+  if(s){
+    const primo=s.split(/\s*[,;]\s*|\s+&\s+/)[0].trim();
+    if(primo&&primo.toLowerCase()!==s.toLowerCase())out.push(primo);
+    /* Ultima spiaggia, e solo qui: quando c'e' di mezzo un altro alfabeto,
+       Spotify e i cataloghi scrivono le stesse cose in modi diversi
+       (Spotify "Kinokoteikoku", MusicBrainz "きのこ帝国") e i due nomi non si
+       incontrano mai. Allora cerco per solo titolo. Lo faccio soltanto se
+       almeno uno dei due e' scritto in un altro alfabeto, il titolo e'
+       abbastanza lungo da non essere ambiguo, e comunque il risultato deve
+       combaciare quasi alla lettera. */
+    const t=String(titolo||'').trim();
+    if(t.length>=4&&RE_ALTRO_ALFABETO.test(t+s))out.push('');
+  }
+  return out;
+}
 async function generiDiscogs(artist,title){
+  for(const nome of nomiArtista(artist,title)){
+    /* senza nome dell'artista pretendo che il titolo combaci quasi esatto */
+    const r=await generiDiscogsUno(nome,title,!nome&&!!artist);
+    if(r.length)return r;
+  }
+  return[];
+}
+async function generiDiscogsUno(artist,title,severo){
   const out=[];
   if(!title)return out;
   /* niente credito: salto Discogs per questo album invece di prendermi un
@@ -1512,7 +1566,9 @@ async function generiDiscogs(artist,title){
     const taglio=pieno.indexOf(' - ');
     const tit=taglio>0?pieno.slice(taglio+3):pieno;
     const art=taglio>0?pieno.slice(0,taglio):'';
-    if(!stessoTitolo(tit,t)&&simLettere(nucleoTitolo(tit),nucleoTitolo(t))<.85)return false;
+    const soglia=severo?.97:.85;
+    if(!stessoTitolo(tit,t)&&simLettere(nucleoTitolo(tit),nucleoTitolo(t))<soglia)return false;
+    if(severo)return nucleoTitolo(tit)===nucleoTitolo(t);
     return!artist||txtSim(art,artist)>=.45||simLettere(art,artist)>=.7;
   });
   const scelto=buoni[0];
@@ -1523,16 +1579,28 @@ async function generiDiscogs(artist,title){
   return out;
 }
 async function fetchMusicBrainz(artist,title){
+  const nomi=nomiArtista(artist,title);
+  for(let i=0;i<nomi.length;i++){
+    if(i)await sleep(1100);
+    const r=await mbUno(nomi[i],title,!nomi[i]&&!!artist);
+    if(r.tags.length||r.year)return r;
+  }
+  return{tags:[],year:null};
+}
+async function mbUno(artist,title,severo){
   const tags=[];let year=null;
   try{
     /* niente parentesi nella ricerca: le edizioni speciali non hanno un
      gruppo di pubblicazione a parte, e cercandole non si trova niente */
-  const q='releasegroup:'+JSON.stringify(titoloPerGeneri(title))+
-    ' AND artist:'+JSON.stringify(artist);
+  const tp=titoloPerGeneri(title);
+  const q='releasegroup:'+JSON.stringify(tp)+
+    (artist?' AND artist:'+JSON.stringify(artist):'');
     const r=await fetch('https://musicbrainz.org/ws/2/release-group/?fmt=json&limit=1&query='+encodeURIComponent(q));
     if(!r.ok)return{tags,year};
     const rg=((await r.json())['release-groups']||[])[0];
     if(!rg)return{tags,year};
+    /* cercato senza artista: accetto solo se il titolo e' identico */
+    if(severo&&nucleoTitolo(rg.title||'')!==nucleoTitolo(tp))return{tags,year};
     if(rg['first-release-date'])year=+rg['first-release-date'].slice(0,4)||null;
     /* Solo "genres", non "tags". MusicBrainz tiene le due cose separate: i
        generi sono un vocabolario curato e votato, i tag sono testo libero
@@ -1660,7 +1728,7 @@ async function fetchLastfm(artist,title){
    ========================================================== */
 /* Le regole dei mood stavano qui. Tolte con i mood stessi: misurate sulla
    tua libreria coprivano il 60% degli album con una parola sola. */
-const NOISE_TAGS=/^(albums i own|favorite|favourites|seen live|awesome|beautiful|great|good|best|love|music|album|albums|10s|00s|90s|80s|70s|60s|50s|20\d\d|19\d\d|\d+)$/i;
+const NOISE_TAGS=/^(albums i own|favorite|favourites|seen live|awesome|beautiful|great|good|best|love|music|album|albums|10s|00s|90s|80s|70s|60s|50s|20\d\d|19\d\d|\d+|promotional|promo|reissue|remaster|remastered|compilation|unofficial release|misc|other|unknown)$/i;
 const PURE_MOOD=/^(sad|sadness|melanchol\w*|happy|joyful|chill|chillout|chilled|relaxing|calm|calming|mellow|dark|bleak|energetic|upbeat|dreamy|ethereal|hazy|aggressive|angry|brutal|heavy|epic|cinematic|hypnotic|romantic|sensual|intimate|nostalgic|nostalgia|retro|vintage|summer|summery|sunny|atmospheric|moody|emotional|uplifting|bittersweet|somber|haunting|dreamlike|late night|night|nocturnal|peaceful|soothing|soft|gentle)$/i;
 
 /* ---- macro generi ----
@@ -1669,23 +1737,32 @@ const PURE_MOOD=/^(sad|sadness|melanchol\w*|happy|joyful|chill|chillout|chilled|
    menu diventa illeggibile gia' col primo album. I micro restano nella scheda. */
 const MACRO=[
   ['hip hop',/hip.?hop|rap|boom bap|trap|grime|drill|turntabl/i],
-  ['rock',/(^|\W)rock|punk|grunge|shoegaze|emo|hardcore|garage|indie rock|post-?rock|metal|noise/i],
+  /* prima del rock, di proposito: "post-metal" e "metalcore" devono finire
+     nel metal, non nel rock */
+  ['metal',/metal|doom|sludge|djent|thall|grind|blackgaze/i],
+  ['rock',/(^|\W)rock|punk|grunge|shoegaze|emo|hardcore|garage|indie rock|post-?rock|noise|new wave|britpop/i],
   ['elettronica',/electro|techno|house|edm|idm|ambient|drum.?(and|n).?bass|dubstep|synth|trance|breakbeat|glitch|hyperpop|dance/i],
   ['pop',/(^|\W)pop($|\W)|k-?pop|j-?pop|art pop|dream pop|bedroom pop|indie pop/i],
-  ['jazz',/jazz|bebop|swing|fusion/i],
+  ['jazz',/jazz|bebop|\bbop\b|swing|fusion/i],
   ['soul e funk',/soul|funk|r&b|rnb|motown|disco|neo.?soul/i],
   ['folk e cantautori',/folk|singer.?songwriter|cantautor|americana|country|bluegrass/i],
-  ['classica',/classic(al)?|orchestr|opera|baroque|chamber|contemporary classical/i],
+  /* "classical", non "classic": "classic rock" e "classic country" non sono
+     musica classica e finivano qui dentro */
+  ['classica',/classical|orchestr|opera|baroque|chamber/i],
   ['blues',/blues/i],
   ['reggae',/reggae|dub|ska|dancehall/i],
+  ['latina',/latin|samba|bossa|salsa|cumbia|\bmpb\b|tropicali|flamenco|tango|afro.?cuban/i],
   ['sperimentale',/experimental|avant|drone|musique|field recording/i],
-  ['colonne sonore',/soundtrack|score|ost/i],
+  /* "ost" solo da solo: senza confini si prendeva ogni "post-rock",
+     "post-punk", "post bop"... e le colonne sonore diventavano cento */
+  ['colonne sonore',/soundtrack|\bscore\b|\bost\b/i],
   /* Ultimo di proposito: "indie rock" deve restare rock e "indie folk" deve
      restare folk. L'indie non e' un genere alternativo agli altri, e' un modo
      di stare dentro un genere, quindi lo aggiungo invece di sostituirlo. */
   ['indie',/indie|indietronica/i]
 ];
 const RE_INDIE=/indie|indietronica/i;
+const RE_METAL=/metal|doom|sludge|djent|thall|grind|blackgaze/i;
 function macroDi(tag){
   for(const m of MACRO)if(m[1].test(tag))return m[0];
   return null;
@@ -1696,6 +1773,18 @@ function macroDiAlbum(a){
   /* un album con "indie folk" finisce sia in folk sia in indie: cosi' puoi
      filtrare per indie senza perderlo quando cerchi il folk */
   if((a.genres||[]).some(g=>RE_INDIE.test(g)))s.add('indie');
+  /* Discogs il metal lo tiene sotto "rock": ogni disco metal si porta dietro
+     la parola nuda "rock" e finiva in mezzo ai Beatles. Se il rock c'e' solo
+     come parola generica e il disco e' metal, lo tolgo; se invece c'e' un
+     sottogenere rock vero ("prog rock", "shoegaze", "post-punk") lo lascio in
+     tutti e due, perche' quei dischi stanno davvero in mezzo. */
+  if(s.has('metal')&&s.has('rock')){
+    const rockVero=(a.genres||[]).some(g=>{
+      const t=String(g||'').trim().toLowerCase();
+      return t!=='rock'&&!RE_METAL.test(t)&&macroDi(t)==='rock';
+    });
+    if(!rockVero)s.delete('rock');
+  }
   return[...s];
 }
 /* I mood non ci sono piu'. Misurati sulla tua libreria: "energico" stava sul
@@ -1710,7 +1799,37 @@ function macroDiAlbum(a){
 /* le categorie larghe di Discogs: utili per l'ombrello, povere da sole */
 const GENERI_LARGHI=new Set(['rock','pop','electronic','hip hop','jazz','funk','soul',
   'folk','country','classical','reggae','blues','latin','colonne sonore','banda',
-  'alternative','indie','experimental']);
+  'alternative','indie','experimental','metal','punk']);
+/* lo stesso genere scritto in due modi occupava due pastiglie diverse e
+   spezzava in due i conti: "prog rock" e "progressive rock" erano 40 e 50
+   invece di 90. Qui tengo solo la forma per esteso. */
+/* termini che nella riga delle pastiglie sarebbero un doppione esatto di un
+   contenitore: "electronic" e' gia' "elettronica". Restano fuori solo questi:
+   "funk", "soul", "folk", "country" e "punk" invece li tengo, perche' il loro
+   contenitore li mette insieme a qualcos'altro e da soli dicono di piu'. */
+const OMBRELLO_DOPPIO=new Set(['rock','pop','electronic','hip hop','jazz','metal',
+  'indie','experimental','alternative','blues','reggae','classical','latin',
+  'colonne sonore','banda']);
+/* Il trattino era il vero doppione: "post-rock" e "post rock", "hardcore
+   hip-hop" e "hardcore hip hop" erano due pastiglie e due conteggi separati.
+   Lo tolgo sempre, tranne quando fa parte della parola ("lo-fi") o quando
+   davanti c'e' una lettera sola ("k-pop", "g-funk", "j-rock"). */
+const TRATTINO_TIENE=new Set(['lo-fi','hi-nrg','doo-wop','drum-n-bass','avant-garde']);
+function unificaTrattini(s){
+  if(TRATTINO_TIENE.has(s))return s;
+  return s.replace(/(?<=[\p{L}]{2})-(?=[\p{L}])/gu,' ').replace(/\s+/g,' ').trim();
+}
+/* e questi sono sinonimi veri, non differenze di scrittura */
+const ALIAS_GENERI={
+  'prog rock':'progressive rock','prog metal':'progressive metal',
+  'alt rock':'alternative rock','alt pop':'alternative pop',
+  'psych rock':'psychedelic rock','psych folk':'psychedelic folk',
+  'rnb':'r&b','r and b':'r&b','r&b/soul':'r&b',
+  'hiphop':'hip hop','rap/hip hop':'hip hop',
+  'avantgarde':'avant-garde','avant garde':'avant-garde',
+  'synthpop':'synth pop','triphop':'trip hop','lofi':'lo-fi','lo fi':'lo-fi',
+  'neosoul':'neo soul','singer/songwriter':'singer songwriter'
+};
 const DISCOGS_COMPOSTI={
   'folk, world, & country':['folk','country'],
   'funk / soul':['funk','soul'],
@@ -1728,6 +1847,8 @@ function normalizzaGeneri(lista){
     pezzi.forEach(x=>{
       /* i rottami di una separazione andata male: "& country", "world" nudo */
       let v=String(x).replace(/^[&,\/\s]+/,'').replace(/[&,\/\s]+$/,'').trim();
+      v=unificaTrattini(v);
+      if(ALIAS_GENERI[v])v=ALIAS_GENERI[v];
       if(!v||v.length<2||v==='world'||v==='non-music')return;
       if(visti.has(v))return;visti.add(v);out.push(v);
     });
@@ -1779,9 +1900,30 @@ function eUnGenere(t){
   if(VOCAB&&VOCAB.has(s))return true;
   /* anche senza vocabolario, un termine composto che contiene un genere noto
      e' quasi sempre un genere: "dream pop", "vocal jazz", "post-rock" */
-  return!!(VOCAB&&/\s|-/.test(s)&&s.split(/[\s-]+/).some(w=>VOCAB.has(w)));
+  /* deve essere la CODA a reggere: "hardcore hip hop" finisce con "hip hop",
+     "post-rock" con "rock". Se accettassi un genere in mezzo o in testa
+     passerebbe anche "mass vi", che e' il titolo di un disco. */
+  if(!VOCAB)return false;
+  const p=s.split(/[\s-]+/).filter(Boolean);
+  for(let i=1;i<p.length;i++){
+    if(VOCAB.has(p.slice(i).join(' '))||VOCAB.has(p.slice(i).join('-')))return true;
+  }
+  return false;
 }
-function classify(rawTags,itunesGenre){
+/* Un titolo di due o piu' parole non e' mai un genere: se ricompare fra i
+   generi e' spazzatura ("Mass VI" -> "mass vi"). Un titolo di una parola sola
+   invece puo' esserlo davvero: "Dariacore" e' un disco che ha dato il nome a
+   un genere, e "Discovery" contiene "disco". Quelli li lascio stare. */
+function titoloDaScartare(t){
+  const s=nucleoTitolo(t||'');
+  return s.indexOf(' ')>0?s:'';
+}
+function classify(rawTags,itunesGenre,titolo){
+  /* le fonti a volte restituiscono il titolo del disco come se fosse un genere
+     ("Mass VI" degli Amenra diventava il genere "mass vi"). Lo butto, a meno
+     che non sia un genere vero: "Dariacore" e' un disco che ha dato il nome
+     a un genere, e in quel caso il vocabolario lo conosce. */
+  const tit=titoloDaScartare(titolo);
   const tags=[];if(itunesGenre)tags.push(itunesGenre);
   rawTags.forEach(t=>tags.push(t));
   const clean=[],seen=new Set();
@@ -1793,7 +1935,9 @@ function classify(rawTags,itunesGenre){
     String(t).split(/[;,/|]+/).forEach(x=>pezzi.push(x));
   });
   pezzi.forEach(t=>{if(!t)return;const s=String(t).trim().toLowerCase();
-    if(!s||s.length>28||NOISE_TAGS.test(s)||seen.has(s))return;seen.add(s);clean.push(s)});
+    if(!s||s.length>28||NOISE_TAGS.test(s)||seen.has(s))return;
+    if(tit&&nucleoTitolo(s)===tit)return;
+    seen.add(s);clean.push(s)});
   /* resta il filtro degli umori puri: "melancholic" non e' un genere e da
      Discogs non arriva, ma da iTunes ogni tanto si' */
   const genres=normalizzaGeneri(clean.filter(t=>!PURE_MOOD.test(t))).slice(0,10);
@@ -1978,7 +2122,7 @@ async function enrich(id,itunesGenre,merge){
     fetchLastfm(a0.artist,a0.title)]);
   /* i tag di Last.fm passano dal setaccio: restano i generi, cadono gli umori */
   const daLfm=(lfm.tags||[]).filter(eUnGenere);
-  const cl=classify([...dis,...mb.tags,...daLfm],itunesGenre);
+  const cl=classify([...dis,...mb.tags,...daLfm],itunesGenre,a0.title);
   let generi=cl.genres;
   /* Ultime spiagge, in ordine di precisione. Meglio i generi dell'artista che
      una scheda muta: un disco live dei Royston Club non e' di genere ignoto,
@@ -4002,19 +4146,56 @@ const SEL={fGen:new Set(),fSub:new Set(),rGen:new Set(),rSub:new Set(),rLen:new 
 /* Un sottogenere entra fra i filtri solo se ha abbastanza album alle spalle:
    una pastiglia per un disco solo e' rumore. La soglia e' qui, in un posto
    solo, cosi' si cambia con una cifra quando avremo i dati nuovi. */
-const SOGLIA_SOTTO=8;
+const SOGLIA_DEF=12,TOP_PER_MACRO=5,MIN_SOTTO=3;
+function sogliaSotto(){
+  const n=+((DB.cfg||{}).sogliaSotto);
+  return n>=2&&n<=200?Math.round(n):SOGLIA_DEF;
+}
+function topMacroAttivo(){
+  /* di partenza spento: la soglia da sola da' un menu piu' corto, e i mondi
+     piccoli si raggiungono col contenitore. La spunta e' li' se cambi idea. */
+  return (DB.cfg||{}).topMacro==='si';
+}
 function sottogeneri(){
   const conta=new Map(),macro=new Set(MACRO.map(m=>m[0]));
   DB.albums.forEach(a=>{
     if(a.pending)return;
     [...new Set(a.genres||[])].forEach(g=>{
       const s=String(g||'').trim().toLowerCase();
-      if(!s||macro.has(s))return;
+      /* fuori i termini ombrello: "electronic" e "experimental" hanno gia'
+         la loro voce nella riga sopra, qui sarebbero un doppione */
+      if(!s||macro.has(s)||OMBRELLO_DOPPIO.has(s))return;
       conta.set(s,(conta.get(s)||0)+1);
     });
   });
-  return[...conta.entries()].filter(x=>x[1]>=SOGLIA_SOTTO)
+  /* Una soglia sola premia solo i mondi grossi. Il rock ha 456 dischi e i
+     suoi sottogeneri arrivano a 149; l'hip hop ne ha 62 e il suo termine piu'
+     diffuso si ferma a 9, quindi con la soglia secca sparivano tutti e The
+     Chronic non aveva nessuna pastiglia. Percio': passa chi supera la soglia,
+     e comunque i primi di ogni contenitore, cosi' ogni mondo porta le sue
+     divisioni principali. */
+  const perMacro=new Map();
+  conta.forEach((n,g)=>{
+    const m=macroDi(g);if(!m)return;
+    if(!perMacro.has(m))perMacro.set(m,[]);
+    perMacro.get(m).push([g,n]);
+  });
+  const salvati=new Set();
+  if(topMacroAttivo())perMacro.forEach(l=>l.sort((x,y)=>y[1]-x[1]).slice(0,TOP_PER_MACRO)
+    .forEach(x=>{if(x[1]>=MIN_SOTTO)salvati.add(x[0])}));
+  const soglia=sogliaSotto();
+  return[...conta.entries()].filter(x=>x[1]>=soglia||salvati.has(x[0]))
     .sort((x,y)=>y[1]-x[1]||(x[0]<y[0]?-1:1)).map(x=>x[0]);
+}
+/* quante pastiglie vengono fuori e quanti album ne prendono almeno una:
+   serve a far vedere l'effetto della soglia mentre la si cambia */
+function contoPastiglie(){
+  const l=new Set(sottogeneri());
+  let n=0;
+  DB.albums.forEach(a=>{if(a.pending)return;
+    if((a.genres||[]).some(g=>l.has(String(g||'').trim().toLowerCase())))n++});
+  const tot=DB.albums.filter(a=>!a.pending).length;
+  return{pastiglie:l.size,album:n,tot,perc:tot?Math.round(n*100/tot):0};
 }
 /* menu a tendina con le pastiglie dentro, su piu' righe: non scorre e non
    si allunga all'infinito quando i generi aumentano */
@@ -4683,7 +4864,10 @@ document.getElementById('recToggle').onclick=()=>{
 document.getElementById('recGo').onclick=renderRec;
 ['recSeed','recTodo'].forEach(i=>document.getElementById(i).addEventListener('change',renderRec));
 document.getElementById('rReset').onclick=()=>{
-  document.getElementById('rState').value='all';
+  /* "azzera" vuol dire togliere i filtri che ho messo io, non cambiare il
+     punto di partenza: lo stato torna a "solo da ascoltare", che e' quello
+     con cui la schermata si apre */
+  document.getElementById('rState').value='todo';
   ['rDec','rKind'].forEach(i=>document.getElementById(i).value='');
   SEL.rLen.clear();
   SEL.rGen.clear();SEL.rSub.clear();
@@ -4691,6 +4875,27 @@ document.getElementById('rReset').onclick=()=>{
   renderAll();
   updatePool();toast('Filtri azzerati');
 };
+
+/* --- soglia delle pastiglie --- */
+(function(){
+  const so=document.getElementById('prSoglia'),tm=document.getElementById('prTopMacro'),
+        def=document.getElementById('prSogliaDef');
+  if(!so)return;
+  /* il conto si aggiorna mentre scrivi, il salvataggio aspetta mezzo secondo
+     cosi' non mando in coda una sincronizzazione per ogni tasto */
+  const applica=(salva)=>{
+    const n=Math.max(2,Math.min(200,Math.round(+so.value||SOGLIA_DEF)));
+    DB.cfg=DB.cfg||{};DB.cfg.sogliaSotto=String(n);DB.cfg.topMacro=tm.checked?'si':'no';
+    renderSogliaOra();
+    if(salva){cfgSet('sogliaSotto',String(n));cfgSet('topMacro',tm.checked?'si':'no');
+      renderAll();}
+  };
+  so.addEventListener('input',()=>{applica(false);
+    clearTimeout(applica._t);applica._t=setTimeout(()=>applica(true),500)});
+  so.addEventListener('change',()=>{so.value=sogliaSotto();applica(true)});
+  tm.addEventListener('change',()=>applica(true));
+  def.onclick=()=>{so.value=SOGLIA_DEF;tm.checked=true;applica(true)};
+})();
 
 /* --- opzioni --- */
 document.getElementById('btnSyncSave').onclick=async()=>{
@@ -4747,6 +4952,12 @@ function spostaPiatt(k,giu){
   lista.splice(j,0,lista.splice(i,1)[0]);
   P.plat=lista;savePrefs();renderPiatt();
 }
+function renderSogliaOra(){
+  const el=document.getElementById('prSogliaOra');if(!el)return;
+  const c=contoPastiglie();
+  el.innerHTML='<b>'+c.pastiglie+'</b> pastiglie, arrivano su <b>'+c.album+'</b> album su '+
+    c.tot+' (<b>'+c.perc+'%</b>).';
+}
 function renderPrefs(){
   document.getElementById('prMode').value=P.mode;
   const min=P.mode==='min';
@@ -4761,6 +4972,11 @@ function renderPrefs(){
     .map(l=>checkRow('L:'+LINK_KEYS[l[0]],l[0],l[2],P.links[LINK_KEYS[l[0]]]!==false)).join('');
   const sa=document.getElementById('prSpotApp');
   if(sa)sa.checked=!!P.spotApp;
+  const so=document.getElementById('prSoglia');
+  if(so&&document.activeElement!==so)so.value=sogliaSotto();
+  const tm=document.getElementById('prTopMacro');
+  if(tm)tm.checked=topMacroAttivo();
+  renderSogliaOra();
   renderPiatt();renderSpotOra();
   /* il token arriva dalla sincronizzazione anche dopo l'avvio: se non
      riscrivessi il campo, sul telefono sembrerebbe vuoto pur funzionando */
@@ -5250,7 +5466,14 @@ loadLocal();
   (DB.albums||[]).forEach(a=>{
     if(!(a.genres||[]).length)return;
     const prima=a.genres.join('|');
-    const dopo=normalizzaGeneri(a.genres);
+    /* e butta le etichette da catalogo e il titolo del disco travestito da
+       genere: "Mass VI" degli Amenra si era piazzato fra i generi */
+    const tit=titoloDaScartare(a.title||'');
+    const dopo=normalizzaGeneri(a.genres.filter(g=>{
+      const s=String(g||'').trim().toLowerCase();
+      if(!s||NOISE_TAGS.test(s))return false;
+      return!(tit&&nucleoTitolo(s)===tit);
+    }));
     if(dopo.join('|')!==prima){a.genres=dopo;a.updatedAt=now();tocchi++}
   });
   if(tocchi){saveLocal();scheduleSync();}
