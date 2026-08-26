@@ -155,6 +155,15 @@ label.f{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.7p
   border-radius:99px;padding:7px 12px;font-size:13px;font-weight:600}
 .mpanel .righe button.on{background:var(--acc);border-color:var(--acc);color:#fff}
 .filtlab{font-size:11px;text-transform:uppercase;letter-spacing:.7px;color:var(--fg3);font-weight:700;margin:10px 0 4px}
+/* crocetta per svuotare un campo di ricerca: compare solo se c'e' del testo */
+.conx{position:relative;display:block}
+.conx>input{padding-right:38px!important}
+.conx>.pulx{position:absolute;right:2px;top:50%;transform:translateY(-50%);
+  width:32px;height:32px;display:none;align-items:center;justify-content:center;
+  color:var(--fg3);background:none;border:0;cursor:pointer;border-radius:8px;padding:0}
+.conx>.pulx:hover{color:var(--fg)}
+.conx.pieno>.pulx{display:flex}
+.toolbar>.conx{flex:1;min-width:118px}
 .toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:16px}
 .toolbar select,.toolbar input{width:auto;min-width:118px;padding:9px 11px;font-size:14px}
 .tg{display:flex;background:var(--bg3);border:1px solid var(--line);border-radius:9px;overflow:hidden;flex-wrap:wrap}
@@ -401,8 +410,10 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
     <div class="row">
       <button class="btn" id="spotMissing">Collega quelli che mancano</button>
       <button class="btn gh" id="spotAll">Ricontrolla tutti</button>
+      <button class="btn gh" id="spotVerifica">Verifica i link</button>
     </div>
-    <div class="hint">&ldquo;Ricontrolla tutti&rdquo; riprova anche quelli finiti altrove. I link che hai incollato tu non si toccano. Lancialo una volta e lascialo finire.</div>
+    <div class="hint">&ldquo;Ricontrolla tutti&rdquo; riprova anche quelli finiti altrove. &ldquo;Verifica i link&rdquo; non cambia niente: apre uno per uno i collegamenti gi&agrave; fatti e ti dice quali portano a un disco diverso o a una pagina che qui non si ascolta. I link che hai incollato tu non si toccano mai.</div>
+    <div id="spotEsiti" style="margin-top:12px"></div>
     <div id="spotOra" style="margin-top:14px"></div>
     <div id="spotRiprendi"></div>
     <div id="spotBox" style="display:none;margin-top:14px">
@@ -593,7 +604,7 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
 /* ==========================================================
    1. STATO
    ========================================================== */
-const APP_VER='68';
+const APP_VER='73';
 const LS='crate.v1', LSK='crate.lfmkey', LSG='crate.gh', LSS='crate.lastsync', LSP='crate.prefs';
 const LSSP='crate.spot';   /* accesso a Spotify: resta su QUESTO dispositivo */
 let DB={albums:[],deleted:[],cfg:{}};
@@ -915,7 +926,7 @@ async function syncNow(depth){
 const SPOT_AUTH='https://accounts.spotify.com/authorize';
 const SPOT_TOKEN='https://accounts.spotify.com/api/token';
 const SPOT_API='https://api.spotify.com/v1';
-let SPOT={clientId:'',token:'',refresh:'',scade:0,nome:'',dal:0,scaduto:false,attesa:0};
+let SPOT={clientId:'',token:'',refresh:'',scade:0,nome:'',dal:0,scaduto:false,attesa:0,paese:''};
 /* Spotify fa scadere il permesso 180 giorni dopo che l'hai dato, e rinnovarlo
    non sposta la scadenza: e' contata dall'autorizzazione, non dall'ultimo uso.
    Quindi una volta ogni sei mesi va ridato. Meglio dirtelo prima che dopo. */
@@ -1008,7 +1019,11 @@ async function spotRitorno(){
       redirect_uri:spotRedirect(),client_id:SPOT.clientId,code_verifier:verifier});
     /* qui, e solo qui, riparte il conteggio dei sei mesi */
     SPOT.dal=Date.now();SPOT.scaduto=false;
-    try{const me=await spotChiama('/me');if(me)SPOT.nome=me.display_name||me.id||''}catch(e){}
+    try{const me=await spotChiama('/me');
+      if(me){SPOT.nome=me.display_name||me.id||'';
+        /* il paese dell'account serve a sapere se un album e' ascoltabile
+           qui: Spotify lo dice elencando i mercati dove il disco esiste */
+        SPOT.paese=String(me.country||'').toUpperCase();}}catch(e){}
     spotSalva();toast('Spotify collegato');
     return true;
   }catch(e){toast('Accesso non riuscito: '+e.message);return false}
@@ -1148,7 +1163,8 @@ function spotVerso(al){
     .map((t,i)=>({n:+t.track_number||i+1,t:t.name,ms:+t.duration_ms||0}));
   const tipo=String(al.album_type||al.type||'').toLowerCase();
   const link='https://open.spotify.com/album/'+al.id;
-  return{title:cleanTitle(al.name||''),
+  return{id:al.id,mercati:Array.isArray(al.available_markets)?al.available_markets:null,
+    title:cleanTitle(al.name||''),
     artist:(al.artists||[]).map(x=>x&&x.name).filter(Boolean).join(', '),
     year:al.release_date?+String(al.release_date).slice(0,4)||null:null,
     cover:img?img.url:'',
@@ -1210,7 +1226,11 @@ async function spotCerca(titolo,artista,esito,soloLink){
     try{
       const d=await spotChiama('/search?type=album&q='+encodeURIComponent(q));
       if(d===null){verbale.push(q+' \u2192 nessuna risposta (token?)');return[]}
-      const items=((d&&d.albums&&d.albums.items)||[]).filter(x=>x&&x.id);
+      /* Un album dichiarato con zero tracce e' una scheda vuota: il link
+         porterebbe a una pagina senza niente da ascoltare. Meglio dire che
+         non l'ho trovato, cosi' la ricerca prosegue sulle altre piattaforme. */
+      const items=((d&&d.albums&&d.albums.items)||[])
+        .filter(x=>x&&x.id&&(x.total_tracks===undefined||+x.total_tracks>0));
       verbale.push(q+' \u2192 '+items.length+(items.length?' ('+items[0].name+')':''));
       return items;
     }catch(e){
@@ -2380,6 +2400,66 @@ async function aspettaOdesli(dillo){
   return true;
 }
 function haSpotify(a){return!!(a.linkFissato||(a.spotify&&/spotify/i.test(a.platName||'')))}
+/* ---- verifica dei collegamenti gia' fatti ----
+   Il caso di Lift Yr Skinny Fists: il link e' giusto, l'album esiste, ma qui
+   non si ascolta e la pagina sembra vuota. E quello di Vision Creation
+   Newsun: su Spotify quel disco non c'e' e il collegamento e' finito su un
+   altro album dello stesso gruppo. Da fuori sembrano la stessa cosa - un
+   tasto che non suona - ma sono due guasti diversi, e nessuno dei due si
+   vede dai dati gia' salvati: bisogna richiedere l'album e guardarlo. */
+function motivoLinkStorto(a,d){
+  if(!d)return 'Spotify non risponde su questo link';
+  if(!d.tracks)return 'la pagina non ha nessun brano';
+  /* Spotify elenca i paesi dove il disco si puo' ascoltare */
+  const paese=SPOT.paese||'IT';
+  if(Array.isArray(d.mercati)&&d.mercati.length&&d.mercati.indexOf(paese)<0)
+    return 'esiste ma non si ascolta in '+paese;
+  const titoloOk=stessoTitolo(d.title||'',a.title||'')||
+    simLettere(nucleoTitolo(d.title||''),nucleoTitolo(a.title||''))>=.8;
+  if(!titoloOk)return 'punta a “'+(d.title||'?')+'”';
+  if(a.artist&&d.artist&&txtSim(d.artist,a.artist)<.5)
+    return 'l’artista non torna: '+d.artist;
+  return '';
+}
+let verificaInCorso=false;
+async function verificaLink(){
+  if(verificaInCorso||spotRunning)return;
+  if(!spotCollegato()){toast('Collega prima l’account Spotify');return}
+  const list=DB.albums.filter(a=>!a.pending&&!a.linkFissato&&
+    idSpotify(a.spotify||a.listenUrl||''));
+  const out=document.getElementById('spotEsiti');
+  if(!list.length){out.innerHTML='<span class="tiny muted">Nessun collegamento automatico da verificare.</span>';return}
+  verificaInCorso=true;spotStop=false;
+  const box=document.getElementById('spotBox'),bar=document.getElementById('spotBar'),
+        txt=document.getElementById('spotTxt');
+  box.style.display='block';out.innerHTML='';
+  const storti=[];
+  let fatti=0;
+  for(const a of list){
+    if(spotStop)break;
+    txt.innerHTML='<b>'+(fatti+1)+' / '+list.length+'</b> &middot; '+esc(a.title);
+    bar.style.width=Math.round(fatti/list.length*100)+'%';
+    let d=null;
+    try{d=await spotAlbumPerId(idSpotify(a.spotify||a.listenUrl||''))}catch(e){}
+    const perche=motivoLinkStorto(a,d);
+    if(perche)storti.push({a:a,perche:perche});
+    fatti++;
+    if(!spotStop)await new Promise(r=>setTimeout(r,320));
+  }
+  bar.style.width='100%';
+  txt.innerHTML=(spotStop?'Fermata.':'Finita.')+' '+fatti+' collegamenti guardati, <b>'+
+    storti.length+'</b> da sistemare.';
+  out.innerHTML=storti.length
+    ? '<div class="tiny muted" style="margin-bottom:8px">Tocca un titolo per aprirlo e incollargli un link d’ascolto.</div>'+
+      storti.map(s=>'<button class="btn gh sm" data-vid="'+esc(s.a.id)+
+        '" style="display:block;width:100%;text-align:left;margin-bottom:6px">'+
+        esc(s.a.title)+' <span class="tiny muted">&middot; '+esc(s.a.artist||'')+
+        '</span><span class="tiny" style="display:block;color:var(--acc)">'+esc(s.perche)+
+        '</span></button>').join('')
+    : '<span class="tiny" style="color:var(--ok)">Tutti i collegamenti portano al disco giusto.</span>';
+  out.querySelectorAll('[data-vid]').forEach(b=>b.onclick=()=>openAlbum(b.dataset.vid));
+  verificaInCorso=false;spotStop=false;
+}
 async function bulkSpotify(mode){
   if(spotRunning)return;
   /* gli indirizzi che hai incollato tu non si toccano nemmeno con "tutti" */
@@ -2473,6 +2553,21 @@ async function bulkSpotify(mode){
 /* Le piattaforme che l'app puo' proporre per ascoltare. Quali e in che
    ordine lo decidi tu in Opzioni: un link a un servizio che non paghi non
    serve a niente, apre una pagina che ti chiede di abbonarti. */
+/* Da che parte viene un indirizzo incollato a mano. Serve solo per scriverlo
+   sul pulsante di ascolto: se non riconosco il posto, il link funziona lo
+   stesso. I link corti di YouTube e Spotify non li prende l'elenco qui sotto,
+   che e' fatto per gli indirizzi completi, quindi li tratto a parte. */
+function piattaformaDaUrl(url){
+  const u=String(url||'');
+  if(/youtu\.be\//i.test(u))return'YouTube';
+  if(/music\.youtube\.com/i.test(u))return'YouTube Music';
+  const p=PIATTAFORME.find(x=>x.re.test(u));
+  if(p)return p.n;
+  if(/youtube\.com/i.test(u))return'YouTube';
+  if(/archive\.org/i.test(u))return'Internet Archive';
+  const m=u.match(/^https?:\/\/(?:www\.)?([^\/:?#]+)/i);
+  return m?m[1]:'Link tuo';
+}
 const PIATTAFORME=[
   {k:'spotify',n:'Spotify',od:'spotify',re:/open\.spotify\.com\/album\//,
    nota:'gratuito con pubblicit\u00e0, oppure premium'},
@@ -4030,12 +4125,12 @@ function openAlbum(id,keepScroll){
       '</div><div id="covBox" style="margin-top:10px"></div>'+
       '<input type="file" id="covFile" accept="image/*" hidden></div>'+
     '<div class="sec row"><button class="btn gh sm" id="bRe">Riprova tag automatici</button>'+
-      (a.pending?'':'<button class="btn gh sm" id="bIncolla">Incolla link Spotify</button>')+
+      (a.pending?'':'<button class="btn gh sm" id="bIncolla">Incolla link d’ascolto</button>')+
       (a.pending||!MOTIVI.get(a.id)?'':'<div id="linkMotivo" style="flex-basis:100%;margin-bottom:6px">'+
         '<span class="tiny muted">'+esc(MOTIVI.get(a.id))+'</span></div>')+
       (a.pending?'':'<button class="btn gh sm" id="bLink"'+
         (!a.linkFissato&&a.spotify&&!piattAttiva(a.platName)?' style="border-color:var(--acc);color:var(--acc)"':'')+'>'+
-        (a.linkFissato?'Link incollato da te'
+        (a.linkFissato?'Ricerca il link da capo'
          :(a.spotify&&!piattAttiva(a.platName)?'Ricollega: '+esc(a.platName)+' non la usi'
          :'Ricollega a Spotify'))+'</button>')+
       (a.pending||!vis('similar')?'':'<button class="btn gh sm" id="bSim">Simili a questo</button>')+
@@ -4045,6 +4140,7 @@ function openAlbum(id,keepScroll){
   const eraAperta=mask.classList.contains('on');
   mask.classList.add('on');mask.scrollTop=sc;
   if(!eraAperta)apriTappa('scheda');
+  if(typeof segnaPosto==='function')segnaPosto();
   document.getElementById('mclose3').onclick=closeModal;
 
   const chips=(host,arr,cls,k)=>{
@@ -4117,8 +4213,10 @@ function openAlbum(id,keepScroll){
      difetto della condivisione quando il titolo non combaciava. */
   const bIncolla=document.getElementById('bIncolla');
   if(bIncolla)bIncolla.onclick=async()=>{
-    const grezzo=prompt('Incolla l\'indirizzo dell\'album su Spotify.\n\n'+
-      'Nell\'app Spotify: i tre puntini \u203a Condividi \u203a Copia link.\n'+
+    const grezzo=prompt('Incolla l\'indirizzo dove vuoi ascoltare questo album.\n\n'+
+      'Va bene qualsiasi piattaforma: Spotify, YouTube, Bandcamp, Internet\n'+
+      'Archive, SoundCloud... Se da Spotify manca o \u00e8 vuoto, incolla il video\n'+
+      'di YouTube: comanda sempre quello che metti qui.\n\n'+
       'Lascia vuoto e conferma per togliere il link che c\'e\' adesso.',
       a.linkFissato?(a.listenUrl||''):'');
     if(grezzo===null)return;
@@ -4129,8 +4227,19 @@ function openAlbum(id,keepScroll){
       if(openAlbum._id===id)openAlbum(id,true);
       return;
     }
+    /* non e' Spotify: me lo tengo com'e'. Niente da leggere, niente da
+       indovinare, e' l'indirizzo che hai scelto tu e vince su tutto. */
     if(!idSpotify(url)&&!/spotify\.link|spoti\.fi/.test(url)){
-      toast('Non sembra l\'indirizzo di un album Spotify');return;
+      if(!/^https?:\/\/\S+$/i.test(url)){
+        toast('Non sembra un indirizzo: deve cominciare con http');return;
+      }
+      const p=piattaformaDaUrl(url);
+      a.listenUrl=url;a.platform=p;a.platName=p;
+      a.linkFissato=true;a.daLink=true;
+      save(a);MOTIVI.delete(a.id);renderAll();
+      toast('Link salvato: ' + p);
+      if(openAlbum._id===id)openAlbum(id,true);
+      return;
     }
     const et=bIncolla.innerHTML;bIncolla.innerHTML='<span class="spinner"></span> leggo...';
     const esito=[];
@@ -4235,6 +4344,7 @@ function openAlbum(id,keepScroll){
 function chiudiModale(daIndietro){
   document.getElementById('mask').classList.remove('on');
   openAlbum._id=null;
+  if(typeof segnaPosto==='function')segnaPosto();
   document.body.style.overflow='';
   if(!daIndietro)chiudiTappa();
   /* Un modulo aperto dal mazzo ha sempre un seguito: se lo chiudi con il
@@ -4387,7 +4497,7 @@ function menuChip(host,etichetta,valori,insieme,alCambio){
 document.addEventListener('click',chiudiMenu);
 function openArtist(name){
   libArtist=name||'';libState='all';
-  document.getElementById('fq').value='';
+  document.getElementById('fq').value='';aggiornaCrocette();
   document.getElementById('fDec').value='';SEL.fGen.clear();SEL.fSub.clear();
   document.getElementById('fState').querySelectorAll('button')
     .forEach(x=>x.classList.toggle('on',x.dataset.s==='all'));
@@ -4854,7 +4964,68 @@ function show(v,verso){
   });
   window.scrollTo(0,0);
   if(v==='rand')updatePool();
+  if(typeof segnaPosto==='function')segnaPosto();
 }
+/* ---- riprendere da dove eri ----
+   Sul telefono il sistema chiude l'app appena passi ad altro per un po', e
+   riaprendola ripartiva sempre dall'aggiunta album. Mi segno dove sei e con
+   quale scheda aperta, e al riavvio ci torno. E' roba di questo dispositivo:
+   sul PC puoi stare nelle Opzioni mentre sul telefono guardi un disco. */
+const LSU='crate.ultimo';
+function segnaPosto(){
+  try{localStorage.setItem(LSU,JSON.stringify({
+    v:vistaCorrente,album:openAlbum._id||'',t:now()}))}catch(e){}
+}
+/* Il momento buono per segnarsi il posto e' quando l'app sparisce: sul
+   telefono da li' in poi il sistema puo' chiuderla quando gli pare. */
+window.addEventListener('pagehide',segnaPosto);
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='hidden')segnaPosto();
+});
+function riprendiDaDoveEri(){
+  let u=null;
+  try{u=JSON.parse(localStorage.getItem(LSU)||'null')}catch(e){}
+  if(!u)return;
+  /* se l'app e' stata aperta da una condivisione o dal ritorno di Spotify,
+     comanda quello: non ti riporto altrove mentre stai facendo una cosa */
+  if(/[?&](shared|code|go)=/.test(location.search))return;
+  if(u.v&&VISTE.includes(u.v)&&u.v!==vistaCorrente)show(u.v);
+  if(u.album&&DB.albums.some(a=>a.id===u.album&&!a.pending))openAlbum(u.album);
+}
+/* ---- crocetta per svuotare ----
+   La metto attorno al campo che gia' esiste invece di riscriverne il codice:
+   cosi' tutto quello che era attaccato a quel campo continua a funzionare. */
+function crocetta(id){
+  const el=document.getElementById(id);
+  const pa=el&&(el.parentElement||el.parentNode);
+  if(!pa||typeof pa.insertBefore!=='function')return;
+  if(pa.classList&&pa.classList.contains&&pa.classList.contains('conx'))return;
+  const box=document.createElement('span');
+  box.className='conx';
+  pa.insertBefore(box,el);
+  box.appendChild(el);
+  const b=document.createElement('button');
+  b.type='button';b.className='pulx';b.setAttribute('aria-label','Cancella');
+  b.innerHTML='<svg viewBox="0 0 24 24" width="17" height="17" fill="none" '+
+    'stroke="currentColor" stroke-width="2.2" stroke-linecap="round">'+
+    '<path d="M6 6l12 12M18 6L6 18"/></svg>';
+  box.appendChild(b);
+  const aggiorna=()=>box.classList.toggle('pieno',!!el.value);
+  el.addEventListener('input',aggiorna);
+  /* il testo puo' cambiare anche senza che tu scriva: quando azzeri i filtri */
+  crocetta._tutti.push(aggiorna);
+  b.onclick=()=>{
+    el.value='';aggiorna();
+    /* faccio finta che tu abbia cancellato a mano: chi ascolta il campo
+       reagisce da solo, senza che io debba sapere chi e' */
+    el.dispatchEvent(new Event('input',{bubbles:true}));
+    el.dispatchEvent(new Event('change',{bubbles:true}));
+    el.focus();
+  };
+  aggiorna();
+}
+crocetta._tutti=[];
+function aggiornaCrocette(){crocetta._tutti.forEach(f=>{try{f()}catch(e){}})}
 function vaiA(delta){
   const i=VISTE.indexOf(vistaCorrente);
   const j=Math.min(VISTE.length-1,Math.max(0,i+delta));
@@ -5052,6 +5223,7 @@ document.getElementById('rReset').onclick=()=>{
   SEL.rLen.clear();
   SEL.rGen.clear();SEL.rSub.clear();
   const rq=document.getElementById('rQ');if(rq)rq.value='';
+  aggiornaCrocette();
   renderAll();
   updatePool();toast('Filtri azzerati');
 };
@@ -5393,6 +5565,7 @@ document.getElementById('spotOut').onclick=()=>{
 });
 document.getElementById('spotMissing').onclick=()=>bulkSpotify('missing');
 document.getElementById('spotAll').onclick=()=>bulkSpotify('all');
+document.getElementById('spotVerifica').onclick=()=>verificaLink();
 document.getElementById('spotStop').onclick=()=>{spotStop=true;toast('Mi fermo dopo questo album')};
 
 /* --- diagnostica delle fonti --- */
@@ -5729,6 +5902,8 @@ document.getElementById('dcKey').value=(DB.cfg&&DB.cfg.discogsToken)||'';renderD
   document.getElementById('ghRepo').value=c.repo;document.getElementById('ghToken').value=c.token}})();
 renderAll();
 setSync(ghCfg()?(navigator.onLine?'idle':'offline'):'off');
+['fq','rQ','q'].forEach(crocetta);
+riprendiDaDoveEri();
 consumeShare().catch(()=>{});
 if(ghCfg())syncNow().catch(()=>{});
 </script>
