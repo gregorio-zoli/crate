@@ -414,8 +414,9 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
       <button class="btn" id="spotMissing">Collega quelli che mancano</button>
       <button class="btn gh" id="spotAll">Ricontrolla tutti</button>
       <button class="btn gh" id="spotVerifica">Verifica i link</button>
+      <button class="btn gh sm" id="spotVerificaTutti">Rifai la verifica da capo</button>
     </div>
-    <div class="hint">&ldquo;Ricontrolla tutti&rdquo; riprova anche quelli finiti altrove. &ldquo;Verifica i link&rdquo; non cambia niente: apre uno per uno i collegamenti gi&agrave; fatti e ti dice quali portano a un disco diverso o a una pagina che qui non si ascolta. I link che hai incollato tu non si toccano mai.</div>
+    <div class="hint">&ldquo;Ricontrolla tutti&rdquo; riprova anche quelli finiti altrove. &ldquo;Verifica i link&rdquo; non cambia niente: apre i collegamenti e ti dice quali portano a un disco diverso o a una pagina che non si ascolta. Chi passa la verifica non viene pi&ugrave; ricontrollato, a meno che il link non cambi, cos&igrave; dal secondo giro in poi guarda solo i nuovi e quelli ancora da sistemare. I link che hai incollato tu non si toccano mai.</div>
     <div id="spotEsiti" style="margin-top:12px"></div>
     <div id="spotOra" style="margin-top:14px"></div>
     <div id="spotRiprendi"></div>
@@ -583,6 +584,7 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
     Crate <b id="verApp"></b> &middot; se questo numero non cambia dopo un
     aggiornamento, stai ancora vedendo la versione vecchia<br>
     <button class="btn gh sm" id="btnAggiorna" style="margin-top:8px">Forza l&rsquo;aggiornamento</button>
+    <div id="ultimaUscita" style="margin-top:8px"></div>
   </div>
 </section>
 
@@ -611,7 +613,7 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
 /* ==========================================================
    1. STATO
    ========================================================== */
-const APP_VER='84';
+const APP_VER='91';
 const LS='crate.v1', LSK='crate.lfmkey', LSG='crate.gh', LSS='crate.lastsync', LSP='crate.prefs';
 const LSSP='crate.spot';   /* accesso a Spotify: resta su QUESTO dispositivo */
 let DB={albums:[],deleted:[],cfg:{}};
@@ -1005,6 +1007,7 @@ async function spotToken(corpo){
     throw err;
   }
   SPOT.token=d.access_token||'';
+  SPOT.rinnovoKo=0;SPOT.rinnovoPerche='';   /* rinnovo riuscito: il guasto e' passato */
   if(d.refresh_token)SPOT.refresh=d.refresh_token;
   SPOT.scade=Date.now()+((+d.expires_in||3600)-90)*1000;
   spotSalva();
@@ -1049,7 +1052,14 @@ async function spotValido(){
            Il permesso non c'entra e buttarlo via sarebbe un disastro: basta
            un buco di due secondi per scollegarti per sempre senza dirtelo. */
         if((e&&e.rete)||!navigator.onLine){
-          SPOT.token='';SPOT.scade=0;spotSalva();
+          /* Me lo segno. Prima restava un fallimento muto: il pannello
+             continuava a dire "collegato" - ed e' vero, il permesso c'e' -
+             mentre ogni richiesta tornava a mani vuote e sembrava che
+             Spotify non conoscesse i dischi. */
+          SPOT.token='';SPOT.scade=0;SPOT.rinnovoKo=Date.now();
+          SPOT.rinnovoPerche=(e&&e.message)||'non raggiungibile';
+          spotSalva();
+          if(typeof renderSpot==='function')renderSpot();
           return '';
         }
         /* qui invece Spotify ha risposto proprio "questo permesso non vale" */
@@ -1082,6 +1092,7 @@ const SPOT_TREGUA=30*60*1000;
 function spotArrenditi(){
   spotAttesaFino=Math.max(spotAttesaFino,Date.now()+SPOT_TREGUA);
   SPOT.attesa=spotAttesaFino;SPOT.rinuncia=Date.now();
+  SPOT.miaTregua=spotAttesaFino>Date.now()+SPOT_TREGUA-1000;
   SPOT.attesaApp=SPOT.clientId;   /* di CHI e' questa sospensione */
   spotSalva();
   if(typeof renderSpot==='function')renderSpot();
@@ -1101,10 +1112,37 @@ function spotInCoda(){
 }
 function spotSecondi(){return Math.max(0,Math.ceil((spotAttesaFino-Date.now())/1000))}
 function erroreCoda(sec){const e=new Error('Spotify in coda per '+sec+'s');e.coda=sec;return e}
+/* Una sonda ogni tanto, per non scontare una punizione gia' finita.
+   La pausa che vedi e' fatta di due pezzi: quello che ha chiesto Spotify e
+   quello che aggiungo io dopo sei rifiuti. Il primo va rispettato alla
+   lettera. Il secondo e' una mia precauzione, e una precauzione basata su un
+   sospetto non deve durare piu' del sospetto: appena il tempo chiesto da
+   Spotify e' scaduto provo una richiesta sola. Se passa, la pausa finisce
+   subito; se mi rifiuta di nuovo, ricomincio ad aspettare. Costa una
+   richiesta al minuto e vale ore di attesa inutile. */
+let ultimaSonda=0;
+function sondaPossibile(){
+  if(!spotInCoda())return false;
+  if(Date.now()<(+SPOT.attesaSpot||0))return false;   /* lui vuole ancora tempo */
+  return Date.now()-ultimaSonda>60000;
+}
 async function spotChiama(percorso,tentativo){
-  if(spotInCoda()&&!tentativo)throw erroreCoda(spotSecondi());
+  if(spotInCoda()&&!tentativo){
+    if(!sondaPossibile())throw erroreCoda(spotSecondi());
+    ultimaSonda=Date.now();
+  }
   const t=await spotValido();
-  if(!t)return null;
+  /* Senza token non e' che il disco non esista: e' che non ho potuto
+     chiedere. Dirlo, invece di rispondere "niente", e' la differenza fra
+     capire e brancolare. */
+  if(!t){
+    if(SPOT.rinnovoKo){
+      const e=new Error('permesso Spotify non rinnovato: '+(SPOT.rinnovoPerche||'rete'));
+      e.rete=true;throw e;
+    }
+    if(SPOT.scaduto)throw new Error('permesso Spotify scaduto: ricollega l\u2019account');
+    return null;
+  }
   const r=await fetch(SPOT_API+percorso,{headers:{Authorization:'Bearer '+t}});
   if(r.status===401&&!tentativo){SPOT.scade=0;return spotChiama(percorso,1)}
   if(r.status===429){
@@ -1114,9 +1152,18 @@ async function spotChiama(percorso,tentativo){
        l'attesa a novanta secondi e ribussavo: cosi' la peggioravo io a ogni
        giro. Ora aspetto quanto dice lui, e me lo segno anche su disco. */
     spotCode++;
-    const detto=Math.max(2,+(r.headers.get('Retry-After')||3)+2);
+    const grezzo=+(r.headers.get('Retry-After')||0);
+    const detto=Math.max(2,(grezzo||3)+2);
     spotAttesaFino=Date.now()+detto*1000;
-    SPOT.attesa=spotAttesaFino;SPOT.attesaApp=SPOT.clientId;spotSalva();
+    /* Mi segno che cosa ha chiesto davvero e quando: senza questo, una pausa
+       lunga sembra un difetto dell'app invece che una decisione di Spotify,
+       e si finisce a discutere di ipotesi. */
+    SPOT.attesa=spotAttesaFino;SPOT.attesaApp=SPOT.clientId;
+    /* quanto ha chiesto LUI, tenuto separato da quanto aggiungo io: sono due
+       cose diverse e finora le confondevo in un numero solo */
+    SPOT.attesaSpot=spotAttesaFino;
+    SPOT.dettoSec=grezzo||0;SPOT.dettoQuando=Date.now();SPOT.dettoNum=spotCode;
+    spotSalva();
     spotRallenta=true;
     /* Distinguo i due casi, che prima confondevo. Se mi chiede pochi secondi
        non mi sta bandendo: mi sta dicendo di andare piano, e allora rallento
@@ -1131,7 +1178,16 @@ async function spotChiama(percorso,tentativo){
     if(typeof renderSpot==='function')renderSpot();
     throw erroreCoda(spotSecondi());
   }
-  if(r.ok)spotCode=0;   /* ha risposto: i rifiuti di prima non contano piu' */
+  if(r.ok){
+    spotCode=0;   /* ha risposto: i rifiuti di prima non contano piu' */
+    /* e se stavo scontando una pausa, era finita davvero: la butto via */
+    if(spotAttesaFino){
+      spotAttesaFino=0;SPOT.attesa=0;SPOT.attesaSpot=0;SPOT.rinuncia=0;
+      SPOT.miaTregua=false;spotRiposa();spotSalva();
+      if(typeof renderSpot==='function')renderSpot();
+      if(typeof renderSpotOra==='function')renderSpotOra();
+    }
+  }
   if(r.status===404)return null;
   /* Se si lamenta di un parametro opzionale, riprovo senza. Mi ha gia'
      fregato due volte (market, poi limit): la terza me la risparmio. */
@@ -2229,6 +2285,37 @@ async function autoComplete(id){
 }
 /* per gli album scritti a mano: prima completa, poi arricchisce i tag,
    e in fondo assicura l'aggancio per il link di ascolto */
+/* ---- schede rimaste senza artista ----
+   Succede quando condividi un album mentre Spotify mi tiene in coda: la
+   lettura vera non passa, le fonti di ripiego il nome dell'artista spesso non
+   ce l'hanno, e di proposito non lo invento (e' la regola che ha evitato
+   "Isolation di Toto"). Il link pero' e' giusto, quindi basta rileggerlo
+   quando Spotify torna a rispondere. Lo faccio all'avvio, in sottofondo. */
+async function completaSenzaArtista(){
+  if(!spotCollegato()||spotInCoda())return 0;
+  const persi=DB.albums.filter(a=>!a.pending&&!a.artist&&
+    idSpotify(a.spotify||a.listenUrl||'')).slice(0,25);
+  let messi=0,primo=true;
+  for(const a0 of persi){
+    if(spotInCoda())break;
+    /* la pausa sta prima del lavoro, non dopo: cosi' non aspetto un secondo
+       in piu' dopo l'ultimo album, quando non c'e' piu' niente da distanziare */
+    if(!primo)await new Promise(r=>setTimeout(r,1100));
+    primo=false;
+    let d=null;
+    try{d=await spotAlbumPerId(idSpotify(a0.spotify||a0.listenUrl||''))}catch(e){break}
+    const a=DB.albums.find(x=>x.id===a0.id);
+    if(a&&d&&d.artist){
+      a.artist=d.artist;
+      ['year','tracks','tracklist','durata','cover','kind'].forEach(k=>{if(d[k]&&!a[k])a[k]=d[k]});
+      a.updatedAt=now();messi++;
+    }
+  }
+  if(messi){saveLocal();scheduleSync();renderAll();
+    toast(messi===1?'Un album senza artista è stato completato'
+      :messi+' album senza artista sono stati completati');}
+  return messi;
+}
 function queueComplete(id,genre){
   enrichQ=enrichQ.then(()=>autoComplete(id)).catch(()=>{})
     .then(()=>enrich(id,genre)).catch(()=>{})
@@ -2555,49 +2642,110 @@ function motivoLinkStorto(a,d){
   return '';
 }
 let verificaInCorso=false;
-async function verificaLink(){
+/* Quello che ho gia' guardato in questa tornata. Serve perche' Spotify puo'
+   mettermi in coda a meta' strada: rilanciando riprendo da dove ero, invece
+   di rifare da capo duecento richieste per arrivare di nuovo allo stesso
+   punto. Si azzera quando la verifica arriva in fondo. */
+let verificaFatti=new Set(),verificaStorti=[];
+/* Quali link ho gia' guardato e trovato sani, tenuti fra un giro e l'altro.
+   La chiave e' l'identificativo Spotify: se un giorno quel link cambia, il
+   ricordo non combacia piu' e l'album torna in fila da solo. Sta su questo
+   dispositivo perche' il giudizio dipende dal tuo account e dal tuo paese,
+   e perche' non ha senso gonfiare la libreria con roba di servizio. */
+const LSVER='crate.linkok';
+function linkGiaOk(){
+  try{const m=JSON.parse(localStorage.getItem(LSVER)||'null');
+    return m&&typeof m==='object'?m:{}}catch(e){return{}}
+}
+function segnaLinkOk(idAlbum,idSpot){
+  try{const m=linkGiaOk();m[idAlbum]=idSpot;localStorage.setItem(LSVER,JSON.stringify(m))}catch(e){}
+}
+function scordaLinkOk(idAlbum){
+  try{const m=linkGiaOk();
+    if(idAlbum===undefined)localStorage.removeItem(LSVER);
+    else{delete m[idAlbum];localStorage.setItem(LSVER,JSON.stringify(m))}}catch(e){}
+}
+async function verificaLink(daCapo){
   if(verificaInCorso||spotRunning)return;
-  if(!spotCollegato()){toast('Collega prima l’account Spotify');return}
-  const list=DB.albums.filter(a=>!a.pending&&!a.linkFissato&&
+  if(daCapo){scordaLinkOk();verificaFatti=new Set();verificaStorti=[];}
+  if(!spotCollegato()){toast('Collega prima l\u2019account Spotify');return}
+  const tutti=DB.albums.filter(a=>!a.pending&&!a.linkFissato&&
     idSpotify(a.spotify||a.listenUrl||''));
   const out=document.getElementById('spotEsiti');
-  if(!list.length){out.innerHTML='<span class="tiny muted">Nessun collegamento automatico da verificare.</span>';return}
+  if(!tutti.length){out.innerHTML='<span class="tiny muted">Nessun collegamento automatico da verificare.</span>';return}
+  /* Se Spotify e' gia' in castigo non ha senso partire: brucerei l'elenco
+     saltando tutto e ti direi "187 non controllati", che e' un modo elegante
+     di non aver fatto niente. */
+  if(spotInCoda()){
+    out.innerHTML='<span class="tiny">Spotify mi ha messo in coda: riprova fra '+
+      esc(spotFinePausa())+'.</span>';
+    return;
+  }
+  /* salto quelli gia' promossi in un giro precedente, purche' il link sia
+     ancora quello: e' il grosso della libreria, e ricontrollarlo ogni volta
+     vuol dire tre minuti di richieste per riscoprire che va tutto bene */
+  const noti=linkGiaOk();
+  const daControllare=tutti.filter(a=>
+    noti[a.id]!==idSpotify(a.spotify||a.listenUrl||''));
+  const list=daControllare.filter(a=>!verificaFatti.has(a.id));
+  if(!daControllare.length){
+    out.innerHTML='<span class="tiny" style="color:var(--ok)">Tutti i '+tutti.length+
+      ' collegamenti sono gi\u00e0 stati verificati. Usa &ldquo;Rifai la verifica da capo&rdquo; per ricontrollarli.</span>';
+    return;
+  }
+  const daFare=list.length?list:daControllare;
   verificaInCorso=true;spotStop=false;
   const box=document.getElementById('spotBox'),bar=document.getElementById('spotBar'),
         txt=document.getElementById('spotTxt');
   box.style.display='block';out.innerHTML='';
-  const storti=[];
-  let fatti=0,saltati=0;
-  for(const a of list){
+  const storti=verificaStorti.slice();
+  let fatti=0,restanti=0,motivoStop='';
+  for(const a of daFare){
     if(spotStop)break;
-    txt.innerHTML='<b>'+(fatti+saltati+1)+' / '+list.length+'</b> &middot; '+esc(a.title);
-    bar.style.width=Math.round((fatti+saltati)/list.length*100)+'%';
-    /* Spotify mi ha messo in coda: se andassi avanti ogni album risulterebbe
-       "non risponde" e ti darei una lista di guasti inventati. Preferisco
-       dirti quanti non sono riuscito a guardare. */
-    if(spotInCoda()){saltati++;continue}
+    txt.innerHTML='<b>'+(verificaFatti.size+1)+' / '+daControllare.length+'</b> &middot; '+esc(a.title);
+    bar.style.width=Math.round(verificaFatti.size/daControllare.length*100)+'%';
     let d=null,inCoda=false;
     try{d=await spotAlbumPerId(idSpotify(a.spotify||a.listenUrl||''))}
-    catch(e){if(e&&(e.coda||e.rete))inCoda=true}
-    if(inCoda){saltati++;continue}
+    /* "in coda" e "non ti ho raggiunto" non sono la stessa cosa: la prima e'
+       una decisione di Spotify, la seconda e' la rete che balla. Metterle
+       insieme faceva scrivere "Spotify mi ha messo in coda" anche quando non
+       era vero. */
+    catch(e){if(e&&e.coda)inCoda=true;else if(e&&e.rete)inCoda='rete'}
+    /* Finito in coda a meta' strada: mi fermo qui. Continuare vorrebbe dire
+       segnare come "non controllati" tutti quelli che restano, cioe' fingere
+       di aver lavorato. Meglio dire dove sono arrivato e da dove riprendere. */
+    if(inCoda||spotInCoda()){
+      restanti=daControllare.length-verificaFatti.size;
+      motivoStop=inCoda==='rete'?'Interrotta: non riesco a raggiungere Spotify.'
+        :'Interrotta: Spotify mi ha messo in coda.';
+      break;
+    }
     const perche=motivoLinkStorto(a,d);
     if(perche)storti.push({a:a,perche:perche});
-    fatti++;
-    if(!spotStop)await new Promise(r=>setTimeout(r,320));
+    else segnaLinkOk(a.id,idSpotify(a.spotify||a.listenUrl||''));
+    verificaFatti.add(a.id);fatti++;
+    /* un album al secondo: la verifica non ha fretta, e finire in coda a
+       meta' costa piu' tempo di quello che si risparmia andando veloci */
+    if(!spotStop)await new Promise(r=>setTimeout(r,Math.max(1000,spotPasso)));
   }
-  bar.style.width='100%';
-  txt.innerHTML=(spotStop?'Fermata.':'Finita.')+' '+fatti+' collegamenti guardati, <b>'+
-    storti.length+'</b> da sistemare'+
-    (saltati?'. <b>'+saltati+'</b> non controllati: Spotify mi ha messo in coda, rilancia più tardi.':'.');
+  verificaStorti=storti;
+  bar.style.width=restanti?Math.round(verificaFatti.size/daControllare.length*100)+'%':'100%';
+  txt.innerHTML=(restanti?motivoStop
+    :spotStop?'Fermata.':'Finita.')+' '+verificaFatti.size+' collegamenti su '+
+    daControllare.length+' guardati, <b>'+storti.length+'</b> da sistemare'+
+    (restanti?'. Ne restano <b>'+restanti+'</b>: rilancia'+
+      (spotFinePausa()?' fra '+esc(spotFinePausa()):' quando vuoi')+
+      ' e riprendo da dove mi sono fermato.':'.');
   out.innerHTML=storti.length
-    ? '<div class="tiny muted" style="margin-bottom:8px">Tocca un titolo per aprirlo e incollargli un link d’ascolto.</div>'+
+    ? '<div class="tiny muted" style="margin-bottom:8px">Tocca un titolo per aprirlo e incollargli un link d\u2019ascolto.</div>'+
       storti.map(s=>'<button class="btn gh sm" data-vid="'+esc(s.a.id)+
         '" style="display:block;width:100%;text-align:left;margin-bottom:6px">'+
         esc(s.a.title)+' <span class="tiny muted">&middot; '+esc(s.a.artist||'')+
         '</span><span class="tiny" style="display:block;color:var(--acc)">'+esc(s.perche)+
         '</span></button>').join('')
-    : '<span class="tiny" style="color:var(--ok)">Tutti i collegamenti portano al disco giusto.</span>';
+    : (restanti?'':'<span class="tiny" style="color:var(--ok)">Tutti i collegamenti portano al disco giusto.</span>');
   out.querySelectorAll('[data-vid]').forEach(b=>b.onclick=()=>openAlbum(b.dataset.vid));
+  if(!restanti&&!spotStop){verificaFatti=new Set();verificaStorti=[];}
   verificaInCorso=false;spotStop=false;
 }
 async function bulkSpotify(mode){
@@ -3964,6 +4112,14 @@ async function daLinkSpotify(url){
   mostra('<b>Album di Spotify</b><div class="tiny muted" style="margin-top:4px">'+
     '<span class="spinner"></span> leggo di che disco si tratta...</div>');
   const esito=[];
+  /* Con Spotify in castigo questa strada non passa e finisco sulle fonti di
+     ripiego, che il nome dell'artista spesso non ce l'hanno: nasce una scheda
+     con scritto "artista ?" e sembra che si sia rotto qualcosa. Meglio dirlo
+     prima, e poi rimediare da solo appena la coda si sfoga. */
+  const inCastigo=spotCollegato()&&spotInCoda();
+  if(inCastigo)mostra('<b>Album di Spotify</b><div class="tiny muted" style="margin-top:4px">'+
+    'Spotify mi ha messo in coda per '+esc(spotFinePausa())+': leggo da altre fonti, '+
+    'l’artista potrebbe restare vuoto. Lo completo da solo quando la coda finisce.</div>');
   let d=null;try{d=await albumDaSpotify(url,esito)}catch(e){}
   /* Condividendo non so l'artista, e "This Old Dog" e' anche di altri tre.
      Se quel titolo e' gia' in libreria mi faccio prestare il suo artista e
@@ -5152,12 +5308,28 @@ function segnaChiusura(){
 document.addEventListener('visibilitychange',()=>{
   if(document.visibilityState==='hidden')segnaPosto();
 });
+/* due avvisi invece di uno: sul PC "pagehide" a volte non arriva in tempo
+   quando si chiude la finestra, mentre "beforeunload" si. Ne basta uno dei
+   due per capire che la chiusura era voluta. */
 window.addEventListener('pagehide',segnaChiusura);
+window.addEventListener('beforeunload',segnaChiusura);
+/* Come e' finita la volta scorsa, scritto in chiaro. Serve a me quando il
+   ripristino si comporta in un modo che non mi aspetto: invece di ragionare
+   su come dovrebbe comportarsi il browser, guardo cosa ha registrato. */
+function mostraUltimaUscita(u){
+  const el=document.getElementById('ultimaUscita');if(!el)return;
+  if(!u){el.innerHTML='<span class="tiny muted">Prima apertura: niente da riprendere.</span>';return}
+  const min=Math.round((now()-(+u.t||0))/60000);
+  el.innerHTML='<span class="tiny muted">Ultima uscita: '+
+    (u.chiusa?'<b>chiusa da te</b>':u.sfondo?'<b>sparita mentre era in secondo piano</b>':'sconosciuta')+
+    ', '+min+' minuti fa'+(u.v?', su &ldquo;'+esc(u.v)+'&rdquo;':'')+'.</span>';
+}
 function riprendiDaDoveEri(){
   let u=null;
   try{u=JSON.parse(localStorage.getItem(LSU)||'null')}catch(e){}
+  mostraUltimaUscita(u);
   /* il ricordo vale solo se l'app se n'e' andata mentre stava in secondo
-     piano, e solo per un quarto d'ora: oltre, riparto dalla prima schermata */
+     piano, e solo per sette minuti: oltre, riparto dalla prima schermata */
   if(!u||!u.sfondo||u.chiusa)return;
   if(!(+u.t)||now()-(+u.t)>RICORDO_MIN*60000)return;
   /* se l'app e' stata aperta da una condivisione o dal ritorno di Spotify,
@@ -5630,6 +5802,23 @@ function rigaAlbum(lista){
         (a.linkFissato?' &middot; link deciso da te':'')+'</span>':'')+'</button>';
   }).join('');
 }
+/* Che cosa ha chiesto Spotify, con parole sue e con l'orologio: e' l'unico
+   modo di sapere se la pausa lunga la decide lui o e' un conto sbagliato mio. */
+function dettoDaSpotify(){
+  const q=+SPOT.dettoQuando||0;
+  if(!q)return '';
+  const ora=t=>new Date(t).toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'});
+  const quanto=+SPOT.dettoSec||0;
+  const dice=quanto?(quanto<90?quanto+' secondi'
+    :quanto<5400?Math.round(quanto/60)+' minuti'
+    :Math.round(quanto/360)/10+' ore'):'niente di preciso';
+  return '<div class="tiny" style="margin-top:6px;color:var(--fg2)">'+
+    'L\u2019ultimo rifiuto è arrivato alle <b>'+ora(q)+'</b> e Spotify ha chiesto di aspettare <b>'+
+    dice+'</b>'+(SPOT.dettoNum>1?' (rifiuto n. '+SPOT.dettoNum+' di fila)':'')+
+    (SPOT.miaTregua?'. Dopo sei rifiuti ho aggiunto io mezz\u2019ora di tregua'+
+      ', perché insistere allunga la sospensione':'')+
+    '. Riprende alle <b>'+ora(spotAttesaFino)+'</b>.</div>';
+}
 function renderSpot(){
   const st=document.getElementById('spotStato');
   const red=document.getElementById('spotRed');
@@ -5649,13 +5838,25 @@ function renderSpot(){
   };
   const g=spotGiorni();
   const mia=SPOT.rinuncia&&spotInCoda();
+  /* collegato ma inservibile: il caso peggiore, perche' non si vede */
+  const ko=+SPOT.rinnovoKo||0;
+  const guasto=ko?'<div style="margin-top:6px;color:var(--acc)"><b>Il permesso c\u2019\u00e8 ma non riesco a usarlo.</b> '+
+    'L\u2019ultimo rinnovo \u00e8 fallito alle <b>'+
+    new Date(ko).toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'})+'</b> ('+
+    esc(SPOT.rinnovoPerche||'rete')+'). Finch\u00e9 dura, gli album vengono letti dalle fonti '+
+    'di ripiego e l\u2019artista pu\u00f2 restare vuoto. Di solito basta aspettare una rete '+
+    'stabile; se insiste, scollega e ricollega l\u2019account.</div>':'';
   const pausa=spotInCoda()?'<div style="margin-top:6px;color:var(--acc)">'+
     '<b>Spotify in pausa</b> per altri '+spotFinePausa()+'.'+
+    dettoDaSpotify()+
     (mia?' Mi ha rifiutato tre richieste di fila, quindi ho smesso di insistere: '+
          'continuare a bussare allunga la sospensione e non collega niente.'
         :' Ogni richiesta mandata prima della scadenza allungherebbe l\'attesa, quindi sto fermo.')+
     ' Non devi fare niente e non si perde nulla: nel frattempo l\'app usa archivio, '+
-    'Wikidata e Odesli. Riprende da sola.'+
+    'Wikidata e Odesli. Riprende da sola, e appena il tempo chiesto da Spotify '+
+    '\u00e8 scaduto provo una richiesta al minuto per non scontare una punizione '+
+    'gi\u00e0 finita. Questa pausa vale solo su questo dispositivo: sugli altri '+
+    'Crate continua a funzionare normalmente.'+
     '<div style="margin-top:8px"><button class="btn gh sm" id="spotSblocca">Riprova adesso</button>'+
     '<span class="tiny muted" style="margin-left:8px">se pensi che il conto sia rimasto '+
     'indietro, per esempio dopo aver cambiato Client ID</span></div></div>':'';
@@ -5663,7 +5864,7 @@ function renderSpot(){
      la stringa "false", che come condizione e' VERA. Il pannello ha detto
      "collegato" per settimane, anche quando non lo era, e ci ha fatto cercare
      il guasto ovunque tranne che qui. */
-  st.innerHTML=pausa+(spotCollegato()
+  st.innerHTML=guasto+pausa+(spotCollegato()
     ? '<span style="color:var(--ok,#4ade80)">&#10003; collegato</span>'+
       (SPOT.nome?' come <b>'+esc(SPOT.nome)+'</b>':'')+
       ' &middot; <span class="muted">250 richieste ogni 30 secondi, invece di 10 al minuto</span>'+
@@ -5739,7 +5940,11 @@ document.getElementById('spotOut').onclick=()=>{
 });
 document.getElementById('spotMissing').onclick=()=>bulkSpotify('missing');
 document.getElementById('spotAll').onclick=()=>bulkSpotify('all');
-document.getElementById('spotVerifica').onclick=()=>verificaLink();
+document.getElementById('spotVerifica').onclick=()=>verificaLink(false);
+document.getElementById('spotVerificaTutti').onclick=()=>{
+  if(confirm('Ricontrollo tutti i collegamenti, anche quelli gi\u00e0 promossi.\n\n'+
+    'Ci vogliono alcuni minuti. Procedo?'))verificaLink(true);
+};
 document.getElementById('spotStop').onclick=()=>{spotStop=true;toast('Mi fermo dopo questo album')};
 
 /* --- che cosa dice davvero Spotify di un album ---
@@ -6143,6 +6348,8 @@ setSync(ghCfg()?(navigator.onLine?'idle':'offline'):'off');
 riprendiDaDoveEri();
 consumeShare().catch(()=>{});
 if(ghCfg())syncNow().catch(()=>{});
+/* le schede rimaste senza artista le ripasso in sottofondo, senza fretta */
+setTimeout(()=>{completaSenzaArtista().catch(()=>{})},4000);
 </script>
 </body>
 </html>
