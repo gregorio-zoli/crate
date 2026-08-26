@@ -613,7 +613,7 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
 /* ==========================================================
    1. STATO
    ========================================================== */
-const APP_VER='93';
+const APP_VER='94';
 const LS='crate.v1', LSK='crate.lfmkey', LSG='crate.gh', LSS='crate.lastsync', LSP='crate.prefs';
 const LSSP='crate.spot';   /* accesso a Spotify: resta su QUESTO dispositivo */
 let DB={albums:[],deleted:[],cfg:{}};
@@ -5864,17 +5864,11 @@ function dettoDaSpotify(){
   const dura=da?Math.round((Date.now()-da)/60000):0;
   const daQuanto=dura<120?dura+' minuti':Math.round(dura/60)+' ore';
   const insiste=SPOT.quotaFinita
-    ? '<div class="tiny" style="margin-top:6px;color:var(--acc)">'+
-      '<b>\u00c8 finita la quota giornaliera</b>, non \u00e8 il ritmo delle richieste: '+
-      'Spotify lo dice esplicitamente nella risposta. Dal luglio 2026 la quota \u00e8 '+
-      'contata <b>per account di sviluppatore</b>, non per applicazione, quindi creare '+
-      'un altro Client ID non serve a niente: tutte le tue app pescano dallo stesso '+
-      'budget. Si ricarica da sola, nell\u2019ordine delle ore. Nel frattempo Crate '+
-      'funziona lo stesso con archivio, Wikidata e Odesli.</div>'
-    : dura>=20?'<div class="tiny" style="margin-top:6px;color:var(--acc)">'+
-      '<b>Spotify rifiuta da '+daQuanto+'</b> senza dire che \u00e8 finita la quota. '+
-      'Se va avanti cos\u00ec, prova a scollegare e ricollegare l\u2019account: potrebbe '+
-      'essere il permesso, non il limite.</div>':'';
+    ? '<div class="tiny" style="margin-top:4px">Motivo dichiarato: <b>quota giornaliera '+
+      'esaurita</b>, contata per account di sviluppatore.</div>'
+    : dura>=20?'<div class="tiny" style="margin-top:4px">'+
+      '<b>Rifiuta da '+daQuanto+'</b> senza dichiarare la quota: se insiste, prova a '+
+      'scollegare e ricollegare l\u2019account.</div>':'';
   const ora=t=>new Date(t).toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'});
   const quanto=+SPOT.dettoSec||0;
   const dice=quanto?(quanto<90?quanto+' secondi'
@@ -5914,20 +5908,26 @@ function renderSpot(){
     esc(SPOT.rinnovoPerche||'rete')+'). Finch\u00e9 dura, gli album vengono letti dalle fonti '+
     'di ripiego e l\u2019artista pu\u00f2 restare vuoto. Di solito basta aspettare una rete '+
     'stabile; se insiste, scollega e ricollega l\u2019account.</div>':'';
+  /* Tre righe, non tre paragrafi: quanto dura, di chi e' la colpa, cosa
+     succede intanto. Il muro di testo rosso di prima diceva anche cose in
+     contraddizione fra loro, tipo "vale solo su questo dispositivo" mentre
+     il blocco era sull'account e valeva ovunque. */
   const pausa=spotInCoda()?'<div style="margin-top:6px;color:var(--acc)">'+
-    '<b>Spotify in pausa</b> per altri '+spotFinePausa()+'.'+
-    dettoDaSpotify()+
-    (mia?' Mi ha rifiutato tre richieste di fila, quindi ho smesso di insistere: '+
-         'continuare a bussare allunga la sospensione e non collega niente.'
-        :' Ogni richiesta mandata prima della scadenza allungherebbe l\'attesa, quindi sto fermo.')+
-    ' Non devi fare niente e non si perde nulla: nel frattempo l\'app usa archivio, '+
-    'Wikidata e Odesli. Riprende da sola, e appena il tempo chiesto da Spotify '+
-    '\u00e8 scaduto provo una richiesta al minuto per non scontare una punizione '+
-    'gi\u00e0 finita. Questa pausa vale solo su questo dispositivo: sugli altri '+
-    'Crate continua a funzionare normalmente.'+
+    '<b>Spotify in pausa</b> per altri '+spotFinePausa()+
+    (SPOT.dettoQuando?' \u00b7 ultimo rifiuto alle '+
+      new Date(+SPOT.dettoQuando).toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'}):'')+
+    '.<div class="tiny" style="margin-top:6px;color:var(--fg2)">'+
+    (SPOT.quotaFinita
+      ? '<b>\u00c8 finita la quota giornaliera</b> del tuo account di sviluppatore, non '+
+        '\u00e8 il ritmo delle richieste: lo dice Spotify nella risposta. Si ricarica da '+
+        'sola in qualche ora, e vale <b>su tutti i dispositivi</b>. Creare un altro '+
+        'Client ID non aiuta: dal luglio 2026 la quota \u00e8 condivisa fra tutte le tue app.'
+      : 'Troppe richieste ravvicinate. Passa in fretta, e riguarda solo questo '+
+        'dispositivo: sugli altri Crate continua a funzionare.')+
+    ' Intanto l\u2019app usa archivio, Wikidata e Odesli, e riprende da sola.</div>'+
     '<div style="margin-top:8px"><button class="btn gh sm" id="spotSblocca">Riprova adesso</button>'+
     '<span class="tiny muted" style="margin-left:8px">se pensi che il conto sia rimasto '+
-    'indietro, per esempio dopo aver cambiato Client ID</span></div></div>':'';
+    'indietro</span></div></div>':'';
   /* Le parentesi non sono un vezzo: senza, "pausa + spotCollegato()" diventa
      la stringa "false", che come condizione e' VERA. Il pannello ha detto
      "collegato" per settimane, anche quando non lo era, e ci ha fatto cercare
@@ -6272,6 +6272,9 @@ document.getElementById('btnDiag').onclick=async()=>{
         esc(e&&e.message||'non raggiungibile')+'</span>';
     }
   }
+  /* il dettaglio della pausa sta qui, non nel pannello principale: li' serve
+     sapere quanto dura e di chi e' la colpa, qui serve il verbale */
+  if(spotInCoda())box.insertAdjacentHTML('beforeend',dettoDaSpotify());
   box.insertAdjacentHTML('beforeend','<div class="tiny muted" style="margin-top:10px">'+
     'Le crocette rosse spiegano perch&eacute; qualcosa non funziona: mandami questo elenco.</div>');
 };
