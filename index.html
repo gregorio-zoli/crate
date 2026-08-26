@@ -557,7 +557,10 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
     <div class="card" style="margin-bottom:14px">
       <h2>Diagnostica</h2>
       <p class="tiny muted" style="margin-top:0">Se qualcosa non funziona, qui si vede cosa.</p>
-      <button class="btn" id="btnDiag">Prova le fonti</button>
+      <div class="row">
+        <button class="btn" id="btnDiag">Prova le fonti</button>
+        <button class="btn gh" id="btnDiagAlbum">Cosa dice Spotify di un album</button>
+      </div>
       <div id="diagBox" style="margin-top:12px"></div>
     </div>
     <div class="card" style="margin-bottom:14px">
@@ -608,7 +611,7 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
 /* ==========================================================
    1. STATO
    ========================================================== */
-const APP_VER='81';
+const APP_VER='83';
 const LS='crate.v1', LSK='crate.lfmkey', LSG='crate.gh', LSS='crate.lastsync', LSP='crate.prefs';
 const LSSP='crate.spot';   /* accesso a Spotify: resta su QUESTO dispositivo */
 let DB={albums:[],deleted:[],cfg:{}};
@@ -2461,6 +2464,18 @@ function stessiNumeri(a,d){
   if(!da||!dd)return ta===td;
   return Math.abs(da-dd)/Math.max(da,dd)<=.06;
 }
+/* Fra le parole che compaiono fra parentesi ce ne sono due famiglie molto
+   diverse. "Deluxe", "Bonus", "Remaster", "Anniversary" descrivono la
+   confezione: la musica e' quella. "Live", "Remix", "Demo", "Acoustic"
+   dicono invece che quella che senti e' un'altra esecuzione. Solo la
+   seconda famiglia rende due dischi cose diverse. */
+const RUMORE_MUSICA=/^(live|remix|remixes|remixed|demo|demos|acoustic|unplugged|karaoke|instrumental|instrumentals|cover|covers|tribute|session|sessions|rehearsal|outtake|outtakes|edit|edits|radio|reprise|commentary|backing|dub|orchestral|symphonic|piano)$/;
+function rumoreDiverso(x,y){
+  const pezzi=s=>String(s||'').toLowerCase().replace(/[^\p{L}\p{N}\s]/gu,' ')
+    .split(/\s+/).filter(Boolean);
+  const b=pezzi(y);
+  return pezzi(x).some(w=>RUMORE_MUSICA.test(w)&&b.indexOf(w)<0);
+}
 function altroAlfabeto(x,y){
   return RE_ALTRO_ALFABETO.test(String(x||''))!==RE_ALTRO_ALFABETO.test(String(y||''));
 }
@@ -2485,14 +2500,32 @@ function motivoLinkStorto(a,d){
   /* la pagina si apre, i brani sono tutti grigi: e' il caso dei Godspeed */
   if(d.braniQui===0)return 'i brani non sono ascoltabili, sono tutti grigi';
   const numeri=stessiNumeri(a,d);
-  const titoloOk=stessoTitolo(d.title||'',a.title||'')||
+  /* "Dreamland (+ Bonus Levels 2.0)" e "Dreamland" sono lo stesso disco in
+     due confezioni: quello fra parentesi dice come e' fatta l'edizione, non
+     quale musica c'e' dentro. Ma "(Tobtok Remix)" e "(Live at ...)" dicono
+     proprio che la musica e' un'altra, e quelli devono restare segnalati. */
+  const senzaParentesi=x=>nucleoTitolo(String(x||'').replace(/\[[^\]]*\]|\([^)]*\)/g,' '));
+  const soloConfezione=senzaParentesi(d.title)===senzaParentesi(a.title)&&
+    !!senzaParentesi(a.title);
+  /* se da una parte c'e' scritto "live", "remix" o "acoustic" e dall'altra
+     no, sono due incisioni diverse: qualunque somiglianza fra i titoli non
+     conta, perche' la musica che sentiresti non e' quella della scheda */
+  const musicaDiversa=rumoreDiverso(d.title||'',a.title||'')||
+                      rumoreDiverso(a.title||'',d.title||'');
+  const titoloOk=!musicaDiversa&&(
+    stessoTitolo(d.title||'',a.title||'')||
     simLettere(nucleoTitolo(d.title||''),nucleoTitolo(a.title||''))>=.8||
-    (numeri&&(altroAlfabeto(d.title,a.title)||unoDentroLaltro(d.title,a.title)));
+    soloConfezione||
+    (numeri&&(altroAlfabeto(d.title,a.title)||unoDentroLaltro(d.title,a.title))));
   if(!titoloOk)return 'punta a “'+(d.title||'?')+'”';
-  /* anche i nomi degli artisti si accorciano: "Quarters" e "Quarters of
-     Change" sono lo stesso gruppo scritto in due modi */
+  /* Anche gli artisti si scrivono in due modi: "Quarters" e "Quarters of
+     Change" sono lo stesso gruppo, e 鈴木弘 e' Hiroshi Suzuki scritto in
+     giapponese. Nel secondo caso nessun paragone fra lettere puo' funzionare,
+     quindi mi accontento della prova dei numeri, che ha gia' detto che il
+     disco e' lo stesso. */
   if(a.artist&&d.artist&&txtSim(d.artist,a.artist)<.5&&
-     !unoDentroLaltro(d.artist,a.artist))
+     !unoDentroLaltro(d.artist,a.artist)&&
+     !(numeri&&altroAlfabeto(d.artist,a.artist)))
     return 'l’artista non torna: '+d.artist;
   return '';
 }
@@ -5683,6 +5716,51 @@ document.getElementById('spotMissing').onclick=()=>bulkSpotify('missing');
 document.getElementById('spotAll').onclick=()=>bulkSpotify('all');
 document.getElementById('spotVerifica').onclick=()=>verificaLink();
 document.getElementById('spotStop').onclick=()=>{spotStop=true;toast('Mi fermo dopo questo album')};
+
+/* --- che cosa dice davvero Spotify di un album ---
+   Serve quando un disco si comporta in modo strano e io posso solo tirare a
+   indovinare: invece di ragionare su come dovrebbe rispondere l'API, guardo
+   la risposta vera, campo per campo. */
+document.getElementById('btnDiagAlbum').onclick=async()=>{
+  const box=document.getElementById('diagBox');
+  if(!spotCollegato()){box.innerHTML='<span class="tiny">Serve l’account Spotify collegato.</span>';return}
+  const url=prompt('Incolla l’indirizzo Spotify dell’album da esaminare.\n\n'+
+    'Lascia vuoto per usare quello della scheda aperta.',
+    (DB.albums.find(x=>x.id===openAlbum._id)||{}).spotify||'');
+  if(url===null)return;
+  const id=idSpotify(String(url).trim());
+  if(!id){box.innerHTML='<span class="tiny">Non è un indirizzo di album Spotify.</span>';return}
+  box.innerHTML='<span class="tiny muted">chiedo a Spotify…</span>';
+  let d=null,errore='';
+  try{d=await spotChiama('/albums/'+encodeURIComponent(id))}
+  catch(e){errore=(e&&e.message)||'errore'}
+  if(!d){box.innerHTML='<span class="tiny">Nessuna risposta: '+esc(errore)+'</span>';return}
+  const paese=SPOT.paese||'IT (supposto: l’account non me l’ha detto)';
+  const mA=Array.isArray(d.available_markets)?d.available_markets:null;
+  const tr=(d.tracks&&d.tracks.items)||[];
+  const conM=tr.filter(t=>Array.isArray(t.available_markets));
+  const qui=conM.filter(t=>t.available_markets.indexOf(SPOT.paese||'IT')>=0).length;
+  const conPlay=tr.filter(t=>typeof t.is_playable==='boolean');
+  const righe=[
+    ['titolo',d.name||'?'],
+    ['artista',(d.artists||[]).map(x=>x&&x.name).join(', ')||'?'],
+    ['tracce dichiarate',String(d.total_tracks||0)],
+    ['tracce ricevute',String(tr.length)],
+    ['paese del tuo account',paese],
+    ['paesi dell’album',mA?(mA.length+(mA.indexOf(SPOT.paese||'IT')>=0?' — il tuo c’è':' — il tuo NON c’è')):'non dichiarati'],
+    ['tracce con l’elenco dei paesi',String(conM.length)+' su '+tr.length],
+    ['tracce ascoltabili nel tuo paese',conM.length?String(qui):'non lo dice'],
+    ['tracce con “is_playable”',conPlay.length?
+      (conPlay.filter(t=>t.is_playable).length+' vere su '+conPlay.length):'campo assente'],
+    ['restrizioni sull’album',d.restrictions?JSON.stringify(d.restrictions):'nessuna']
+  ];
+  const primo=tr[0]||{};
+  righe.push(['restrizioni sulla prima traccia',
+    primo.restrictions?JSON.stringify(primo.restrictions):'nessuna']);
+  box.innerHTML='<div class="tiny" style="display:grid;gap:4px">'+
+    righe.map(r=>'<div><span class="muted">'+esc(r[0])+':</span> <b>'+esc(r[1])+'</b></div>').join('')+
+    '</div>';
+};
 
 /* --- diagnostica delle fonti --- */
 document.getElementById('btnDiag').onclick=async()=>{
