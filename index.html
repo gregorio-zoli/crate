@@ -611,7 +611,7 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
 /* ==========================================================
    1. STATO
    ========================================================== */
-const APP_VER='83';
+const APP_VER='84';
 const LS='crate.v1', LSK='crate.lfmkey', LSG='crate.gh', LSS='crate.lastsync', LSP='crate.prefs';
 const LSSP='crate.spot';   /* accesso a Spotify: resta su QUESTO dispositivo */
 let DB={albums:[],deleted:[],cfg:{}};
@@ -1163,6 +1163,35 @@ async function aspettaSpotify(dillo){
 /* ---- da Spotify all'album, per davvero ----
    Qui non si indovina niente: l'API risponde con il tipo di pubblicazione
    (album, singolo, raccolta), il numero esatto di tracce e la copertina. */
+/* Quante tracce si possono ascoltare davvero.
+   Avevo dato per scontato che Spotify elencasse i paesi di ogni traccia. Con
+   l'account collegato non lo fa: il paese lo sa gia' dal tuo profilo e
+   l'elenco non lo manda proprio. Quello che manda, sulle tracce bloccate, e'
+   un campo "restrictions" con dentro il motivo - per i Godspeed You! Black
+   Emperor e' {"reason":"market"}. Quindi il segnale sta li'.
+   Conto ascoltabile tutto cio' che non ha una prova contraria: cosi' un
+   album a cui manca l'informazione non viene mai scambiato per bloccato, e
+   uno con qualche traccia grigia e il resto buono nemmeno. Arrivo a zero
+   solo se ogni singola traccia dichiara di essere bloccata. */
+function braniAscoltabili(items,paese){
+  const tr=(items||[]).filter(Boolean);
+  if(!tr.length)return -1;
+  let ok=0;
+  tr.forEach(t=>{
+    if(t.is_playable===false)return;
+    if(t.restrictions&&t.restrictions.reason)return;
+    if(Array.isArray(t.available_markets)&&t.available_markets.indexOf(paese)<0)return;
+    ok++;
+  });
+  return ok;
+}
+function motivoBlocco(al){
+  const tr=((al&&al.tracks&&al.tracks.items)||[]).filter(Boolean);
+  const r=tr.map(t=>t.restrictions&&t.restrictions.reason).filter(Boolean)[0];
+  return r==='market'?'non è pubblicato qui'
+       :r==='product'?'serve un abbonamento diverso'
+       :r?String(r):'';
+}
 function spotVerso(al){
   if(!al||!al.id)return null;
   const img=(al.images||[]).slice().sort((x,y)=>(y.width||0)-(x.width||0))[0];
@@ -1175,13 +1204,9 @@ function spotVerso(al){
      streaming. La verita' non sta sull'album, sta su ogni singola traccia:
      ognuna ha la sua lista di paesi, e li' e' vuota. Conto quante si possono
      davvero ascoltare qui; -1 vuol dire che Spotify non me l'ha detto. */
-  const paese=SPOT.paese||'IT';
-  const conMercati=((al.tracks&&al.tracks.items)||[])
-    .filter(t=>Array.isArray(t.available_markets));
-  const braniQui=conMercati.length
-    ? conMercati.filter(t=>t.available_markets.indexOf(paese)>=0).length : -1;
+  const braniQui=braniAscoltabili((al.tracks&&al.tracks.items)||[],SPOT.paese||'IT');
   return{id:al.id,mercati:Array.isArray(al.available_markets)?al.available_markets:null,
-    braniQui:braniQui,
+    braniQui:braniQui,perche:braniQui===0?motivoBlocco(al):'',
     title:cleanTitle(al.name||''),
     artist:(al.artists||[]).map(x=>x&&x.name).filter(Boolean).join(', '),
     year:al.release_date?+String(al.release_date).slice(0,4)||null:null,
@@ -2498,7 +2523,7 @@ function motivoLinkStorto(a,d){
   if(Array.isArray(d.mercati)&&d.mercati.length&&d.mercati.indexOf(paese)<0)
     return 'esiste ma non si ascolta in '+paese;
   /* la pagina si apre, i brani sono tutti grigi: e' il caso dei Godspeed */
-  if(d.braniQui===0)return 'i brani non sono ascoltabili, sono tutti grigi';
+  if(d.braniQui===0)return 'nessun brano è ascoltabile'+(d.perche?': '+d.perche:'');
   const numeri=stessiNumeri(a,d);
   /* "Dreamland (+ Bonus Levels 2.0)" e "Dreamland" sono lo stesso disco in
      due confezioni: quello fra parentesi dice come e' fatta l'edizione, non
