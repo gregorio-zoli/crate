@@ -613,7 +613,7 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
 /* ==========================================================
    1. STATO
    ========================================================== */
-const APP_VER='94';
+const APP_VER='95';
 const LS='crate.v1', LSK='crate.lfmkey', LSG='crate.gh', LSS='crate.lastsync', LSP='crate.prefs';
 const LSSP='crate.spot';   /* accesso a Spotify: resta su QUESTO dispositivo */
 let DB={albums:[],deleted:[],cfg:{}};
@@ -5912,16 +5912,28 @@ function renderSpot(){
      succede intanto. Il muro di testo rosso di prima diceva anche cose in
      contraddizione fra loro, tipo "vale solo su questo dispositivo" mentre
      il blocco era sull'account e valeva ovunque. */
+  /* Con la quota esaurita quel numero non e' una previsione di quando
+     Spotify tornera': e' solo ogni quanto riprovo io. Scriverlo come "in
+     pausa per altri 30 minuti" faceva sembrare una stima sbagliata ogni
+     volta che scadeva e il blocco era ancora li'. */
+  const daRif=+SPOT.rifiutiDa||0;
+  const daQuando=daRif?Math.round((Date.now()-daRif)/60000):0;
   const pausa=spotInCoda()?'<div style="margin-top:6px;color:var(--acc)">'+
-    '<b>Spotify in pausa</b> per altri '+spotFinePausa()+
-    (SPOT.dettoQuando?' \u00b7 ultimo rifiuto alle '+
-      new Date(+SPOT.dettoQuando).toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'}):'')+
-    '.<div class="tiny" style="margin-top:6px;color:var(--fg2)">'+
     (SPOT.quotaFinita
-      ? '<b>\u00c8 finita la quota giornaliera</b> del tuo account di sviluppatore, non '+
-        '\u00e8 il ritmo delle richieste: lo dice Spotify nella risposta. Si ricarica da '+
-        'sola in qualche ora, e vale <b>su tutti i dispositivi</b>. Creare un altro '+
-        'Client ID non aiuta: dal luglio 2026 la quota \u00e8 condivisa fra tutte le tue app.'
+      ? '<b>Spotify: quota esaurita</b>'+
+        (daQuando?', da '+(daQuando<120?daQuando+' minuti':Math.round(daQuando/60)+' ore'):'')+
+        '. Riprovo fra '+spotFinePausa()+'.'
+      : '<b>Spotify in pausa</b> per altri '+spotFinePausa()+
+        (SPOT.dettoQuando?' \u00b7 ultimo rifiuto alle '+
+          new Date(+SPOT.dettoQuando).toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'}):'')+'.')+
+    '<div class="tiny" style="margin-top:6px;color:var(--fg2)">'+
+    (SPOT.quotaFinita
+      ? 'Il budget del tuo account di sviluppatore \u00e8 finito: lo dice Spotify nella '+
+        'risposta, non lo sto deducendo io. Quel &ldquo;riprovo fra&rdquo; \u00e8 ogni quanto '+
+        'busso, <b>non</b> quando Spotify torner\u00e0: la ricarica \u00e8 sua e va per ore. '+
+        'Vale <b>su tutti i dispositivi</b>, e ricaricare l\u2019app non la accelera. '+
+        'Creare un altro Client ID non aiuta: dal luglio 2026 la quota \u00e8 condivisa '+
+        'fra tutte le tue app.'
       : 'Troppe richieste ravvicinate. Passa in fretta, e riguarda solo questo '+
         'dispositivo: sugli altri Crate continua a funzionare.')+
     ' Intanto l\u2019app usa archivio, Wikidata e Odesli, e riprende da sola.</div>'+
