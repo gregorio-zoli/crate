@@ -608,7 +608,7 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
 /* ==========================================================
    1. STATO
    ========================================================== */
-const APP_VER='76';
+const APP_VER='78';
 const LS='crate.v1', LSK='crate.lfmkey', LSG='crate.gh', LSS='crate.lastsync', LSP='crate.prefs';
 const LSSP='crate.spot';   /* accesso a Spotify: resta su QUESTO dispositivo */
 let DB={albums:[],deleted:[],cfg:{}};
@@ -4983,20 +4983,54 @@ function show(v,verso){
    quale scheda aperta, e al riavvio ci torno. E' roba di questo dispositivo:
    sul PC puoi stare nelle Opzioni mentre sul telefono guardi un disco. */
 const LSU='crate.ultimo';
+/* Quanto vale il ricordo. Serve a distinguere due cose che dal di dentro
+   dell'app sono identiche - in tutti e due i casi la pagina riparte da zero:
+   1. sei passato a un'altra app, il telefono ha chiuso Crate per far posto,
+      e appena torni te la ritrovi da capo. Questo lo voglio rimediare.
+   2. hai chiuso Crate apposta e la riapri dopo. Qui e' giusto ricominciare
+      dalla prima schermata, come fa qualsiasi app.
+   Non c'e' un modo di sapere quale delle due e' successa: il sistema chiude
+   e basta, senza dire perche'. L'unica differenza misurabile e' il tempo.
+   Il rientro dopo un'occhiata a un'altra app e' questione di minuti; una
+   riapertura decisa da te di solito arriva molto dopo. */
+const RICORDO_MIN=7;
 function segnaPosto(){
   try{localStorage.setItem(LSU,JSON.stringify({
-    v:vistaCorrente,album:openAlbum._id||'',t:now()}))}catch(e){}
+    v:vistaCorrente,album:openAlbum._id||'',t:now(),
+    sfondo:document.visibilityState==='hidden',chiusa:false}))}catch(e){}
+}
+/* La differenza vera fra le due situazioni sta in quale avviso arriva.
+   Chiudere la finestra e' una cosa ordinata: il browser lo annuncia con
+   "pagehide" e fa in tempo a farmelo sapere. Il telefono che elimina l'app
+   per far posto invece non annuncia niente, uccide e basta: l'ultima cosa
+   che ho visto e' il passaggio in secondo piano.
+   Quindi: se l'ultimo avviso e' stato "sto chiudendo", riparto da capo.
+   Se l'ultimo avviso e' stato "sono passata in secondo piano" e poi il
+   silenzio, vuol dire che sono stata eliminata mentre non guardavi, e li'
+   il posto te lo ridò. */
+function segnaChiusura(){
+  try{
+    const u=JSON.parse(localStorage.getItem(LSU)||'null');
+    if(!u)return;
+    u.chiusa=true;
+    localStorage.setItem(LSU,JSON.stringify(u));
+  }catch(e){}
 }
 /* Il momento buono per segnarsi il posto e' quando l'app sparisce: sul
    telefono da li' in poi il sistema puo' chiuderla quando gli pare. */
-window.addEventListener('pagehide',segnaPosto);
+/* l'ordine conta: passando in secondo piano segno dove sei, e solo se poi
+   arriva anche l'avviso di chiusura marco il ricordo come "chiusa da te" */
 document.addEventListener('visibilitychange',()=>{
   if(document.visibilityState==='hidden')segnaPosto();
 });
+window.addEventListener('pagehide',segnaChiusura);
 function riprendiDaDoveEri(){
   let u=null;
   try{u=JSON.parse(localStorage.getItem(LSU)||'null')}catch(e){}
-  if(!u)return;
+  /* il ricordo vale solo se l'app se n'e' andata mentre stava in secondo
+     piano, e solo per un quarto d'ora: oltre, riparto dalla prima schermata */
+  if(!u||!u.sfondo||u.chiusa)return;
+  if(!(+u.t)||now()-(+u.t)>RICORDO_MIN*60000)return;
   /* se l'app e' stata aperta da una condivisione o dal ritorno di Spotify,
      comanda quello: non ti riporto altrove mentre stai facendo una cosa */
   if(/[?&](shared|code|go)=/.test(location.search))return;
