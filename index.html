@@ -494,7 +494,7 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
         <button class="btn" id="spotLogin">Collega account</button>
         <button class="btn gh sm" id="spotOut" style="border-color:var(--acc);color:var(--acc)">Scollega</button>
       </div>
-      <details class="hint"><summary style="cursor:pointer">Come si fa, in cinque minuti</summary><div style="margin-top:8px">1. <b>developer.spotify.com/dashboard</b>, accedi.<br>2. <b>Create app</b>, nome a piacere.<br>3. In <b>Redirect URI</b> incolla l&rsquo;indirizzo qui sopra, poi <b>Add</b>.<br>4. Spunta <b>Web API</b>, salva.<br>5. <b>Settings</b> &rsaquo; copia il <b>Client ID</b>.<br>6. Incollalo qui e premi <b>Collega account</b>.<br><br>Il <b>Client Secret</b> non serve: non incollarlo da nessuna parte.<br>Il permesso vale su questo dispositivo e <b>scade ogni 6 mesi</b>: ti avviso io.<br>Se Spotify blocca a lungo, crea una seconda app e cambia Client ID: il limite &egrave; per app.</div></details>
+      <details class="hint"><summary style="cursor:pointer">Come si fa, in cinque minuti</summary><div style="margin-top:8px">1. <b>developer.spotify.com/dashboard</b>, accedi.<br>2. <b>Create app</b>, nome a piacere.<br>3. In <b>Redirect URI</b> incolla l&rsquo;indirizzo qui sopra, poi <b>Add</b>.<br>4. Spunta <b>Web API</b>, salva.<br>5. <b>Settings</b> &rsaquo; copia il <b>Client ID</b>.<br>6. Incollalo qui e premi <b>Collega account</b>.<br><br>Il <b>Client Secret</b> non serve: non incollarlo da nessuna parte.<br>Il permesso vale su questo dispositivo e <b>scade ogni 6 mesi</b>: ti avviso io.<br>Da luglio 2026 la quota &egrave; contata <b>per account di sviluppatore</b>, non per app: creare un secondo Client ID non aggira un blocco di quota, perch&eacute; il budget &egrave; lo stesso.</div></details>
     </div>
     <div class="card" style="margin-bottom:14px">
       <h2>Chiavi facoltative</h2>
@@ -613,7 +613,7 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
 /* ==========================================================
    1. STATO
    ========================================================== */
-const APP_VER='91';
+const APP_VER='93';
 const LS='crate.v1', LSK='crate.lfmkey', LSG='crate.gh', LSS='crate.lastsync', LSP='crate.prefs';
 const LSSP='crate.spot';   /* accesso a Spotify: resta su QUESTO dispositivo */
 let DB={albums:[],deleted:[],cfg:{}};
@@ -1146,14 +1146,35 @@ async function spotChiama(percorso,tentativo){
   const r=await fetch(SPOT_API+percorso,{headers:{Authorization:'Bearer '+t}});
   if(r.status===401&&!tentativo){SPOT.scade=0;return spotChiama(percorso,1)}
   if(r.status===429){
+    /* Da luglio 2026 Spotify distingue due rifiuti diversi, e lo scrive nel
+       corpo della risposta invece che in un'intestazione: il corpo lo posso
+       leggere sempre, le intestazioni quasi mai. "QUOTA_EXCEEDED" vuol dire
+       che il budget giornaliero del tuo account e' finito, e quel budget e'
+       condiviso fra TUTTE le tue applicazioni: cambiare Client ID non serve
+       a niente, bisogna aspettare. Senza quella parola invece e' il ritmo:
+       troppe richieste in trenta secondi, e passa in fretta. */
+    let corpo=null;try{corpo=await r.clone().json()}catch(e){}
+    const quota=/QUOTA/i.test(String((corpo&&(corpo.reason||(corpo.error&&corpo.error.reason)))||''));
+    SPOT.quotaFinita=quota?Date.now():0;
     /* Il tempo che Spotify indica va rispettato PER INTERO. Le app in
        modalita' sviluppo possono restare sospese per ore, e ogni richiesta
        mandata prima della scadenza allunga la sospensione. Prima cappavo
        l'attesa a novanta secondi e ribussavo: cosi' la peggioravo io a ogni
        giro. Ora aspetto quanto dice lui, e me lo segno anche su disco. */
     spotCode++;
+    /* Retry-After non e' fra le intestazioni che il browser lascia leggere a
+       meno che il server non lo permetta esplicitamente: quasi sempre qui
+       arriva vuoto. Prima in quel caso mettevo cinque secondi, e ne veniva
+       fuori un balletto senza fine - rifiuto, cinque secondi, rifiuto - che
+       sembrava un blocco eterno di Spotify e invece era la mia impazienza.
+       Se non me lo dice, aspetto sempre di piu': mezzo minuto, poi due, poi
+       dieci, poi mezz'ora. */
     const grezzo=+(r.headers.get('Retry-After')||0);
-    const detto=Math.max(2,(grezzo||3)+2);
+    /* quota finita: e' una faccenda di ore, non di secondi. Bussare non
+       la sblocca e allunga soltanto. */
+    const scala=quota?[1800,3600,7200,14400]:[30,120,600,1800];
+    const detto=grezzo?grezzo+2:scala[Math.min(spotCode-1,scala.length-1)];
+    if(!SPOT.rifiutiDa)SPOT.rifiutiDa=Date.now();
     spotAttesaFino=Date.now()+detto*1000;
     /* Mi segno che cosa ha chiesto davvero e quando: senza questo, una pausa
        lunga sembra un difetto dell'app invece che una decisione di Spotify,
@@ -1181,9 +1202,9 @@ async function spotChiama(percorso,tentativo){
   if(r.ok){
     spotCode=0;   /* ha risposto: i rifiuti di prima non contano piu' */
     /* e se stavo scontando una pausa, era finita davvero: la butto via */
-    if(spotAttesaFino){
+    if(spotAttesaFino||SPOT.rifiutiDa){
       spotAttesaFino=0;SPOT.attesa=0;SPOT.attesaSpot=0;SPOT.rinuncia=0;
-      SPOT.miaTregua=false;spotRiposa();spotSalva();
+      SPOT.miaTregua=false;SPOT.rifiutiDa=0;SPOT.quotaFinita=0;spotRiposa();spotSalva();
       if(typeof renderSpot==='function')renderSpot();
       if(typeof renderSpotOra==='function')renderSpotOra();
     }
@@ -1766,7 +1787,17 @@ async function generiDiscogsUno(artist,title,severo){
   try{r=await fetch('https://api.discogs.com/database/search?type=master&per_page=5&q='+
     encodeURIComponent(q)+(k?'&token='+encodeURIComponent(k):''))}
   catch(e){return out}
-  if(r.status===429){discogsTs.push(Date.now(),Date.now(),Date.now());return out}
+  if(r.status===429){
+    /* Da luglio 2026 Spotify distingue due rifiuti diversi, e lo scrive nel
+       corpo della risposta invece che in un'intestazione: il corpo lo posso
+       leggere sempre, le intestazioni quasi mai. "QUOTA_EXCEEDED" vuol dire
+       che il budget giornaliero del tuo account e' finito, e quel budget e'
+       condiviso fra TUTTE le tue applicazioni: cambiare Client ID non serve
+       a niente, bisogna aspettare. Senza quella parola invece e' il ritmo:
+       troppe richieste in trenta secondi, e passa in fretta. */
+    let corpo=null;try{corpo=await r.clone().json()}catch(e){}
+    const quota=/QUOTA/i.test(String((corpo&&(corpo.reason||(corpo.error&&corpo.error.reason)))||''));
+    SPOT.quotaFinita=quota?Date.now():0;discogsTs.push(Date.now(),Date.now(),Date.now());return out}
   if(!r.ok)return out;
   let d;try{d=await r.json()}catch(e){return out}
   const buoni=((d&&d.results)||[]).filter(x=>{
@@ -2942,7 +2973,17 @@ async function odesliMappa(url,esito){
   catch(e){odesliInPausa();
     if(esito)esito.push('Odesli non raggiungibile (di solito e\' il limite di 10 richieste al minuto)');
     return null}
-  if(r.status===429){odesliInPausa();if(esito)esito.push('Odesli: troppe richieste, riprova fra un minuto');return null}
+  if(r.status===429){
+    /* Da luglio 2026 Spotify distingue due rifiuti diversi, e lo scrive nel
+       corpo della risposta invece che in un'intestazione: il corpo lo posso
+       leggere sempre, le intestazioni quasi mai. "QUOTA_EXCEEDED" vuol dire
+       che il budget giornaliero del tuo account e' finito, e quel budget e'
+       condiviso fra TUTTE le tue applicazioni: cambiare Client ID non serve
+       a niente, bisogna aspettare. Senza quella parola invece e' il ritmo:
+       troppe richieste in trenta secondi, e passa in fretta. */
+    let corpo=null;try{corpo=await r.clone().json()}catch(e){}
+    const quota=/QUOTA/i.test(String((corpo&&(corpo.reason||(corpo.error&&corpo.error.reason)))||''));
+    SPOT.quotaFinita=quota?Date.now():0;odesliInPausa();if(esito)esito.push('Odesli: troppe richieste, riprova fra un minuto');return null}
   if(!r.ok){if(esito)esito.push('Odesli: errore '+r.status);return null}
   return((await r.json())||{}).linksByPlatform||null;
 }
@@ -3000,7 +3041,17 @@ async function odesliDaUrl(url,esito){
   catch(e){odesliInPausa();
     if(esito)esito.push('Odesli non raggiungibile (di solito e\' il limite di 10 richieste al minuto)');
     return null}
-  if(r.status===429){odesliInPausa();if(esito)esito.push('Odesli: troppe richieste, riprova fra un minuto');return null}
+  if(r.status===429){
+    /* Da luglio 2026 Spotify distingue due rifiuti diversi, e lo scrive nel
+       corpo della risposta invece che in un'intestazione: il corpo lo posso
+       leggere sempre, le intestazioni quasi mai. "QUOTA_EXCEEDED" vuol dire
+       che il budget giornaliero del tuo account e' finito, e quel budget e'
+       condiviso fra TUTTE le tue applicazioni: cambiare Client ID non serve
+       a niente, bisogna aspettare. Senza quella parola invece e' il ritmo:
+       troppe richieste in trenta secondi, e passa in fretta. */
+    let corpo=null;try{corpo=await r.clone().json()}catch(e){}
+    const quota=/QUOTA/i.test(String((corpo&&(corpo.reason||(corpo.error&&corpo.error.reason)))||''));
+    SPOT.quotaFinita=quota?Date.now():0;odesliInPausa();if(esito)esito.push('Odesli: troppe richieste, riprova fra un minuto');return null}
   if(!r.ok){if(esito)esito.push('Odesli: errore '+r.status);return null}
   const L=((await r.json())||{}).linksByPlatform||{};
   for(const p of ordinePiatt())if(p.od&&L[p.od]&&L[p.od].url)return{url:L[p.od].url,name:p.n};
@@ -5807,6 +5858,23 @@ function rigaAlbum(lista){
 function dettoDaSpotify(){
   const q=+SPOT.dettoQuando||0;
   if(!q)return '';
+  /* Rifiuti che vanno avanti da un pezzo non sono un ritmo sbagliato: e' la
+     quota dell'applicazione, e quella non si sblocca aspettando in silenzio. */
+  const da=+SPOT.rifiutiDa||0;
+  const dura=da?Math.round((Date.now()-da)/60000):0;
+  const daQuanto=dura<120?dura+' minuti':Math.round(dura/60)+' ore';
+  const insiste=SPOT.quotaFinita
+    ? '<div class="tiny" style="margin-top:6px;color:var(--acc)">'+
+      '<b>\u00c8 finita la quota giornaliera</b>, non \u00e8 il ritmo delle richieste: '+
+      'Spotify lo dice esplicitamente nella risposta. Dal luglio 2026 la quota \u00e8 '+
+      'contata <b>per account di sviluppatore</b>, non per applicazione, quindi creare '+
+      'un altro Client ID non serve a niente: tutte le tue app pescano dallo stesso '+
+      'budget. Si ricarica da sola, nell\u2019ordine delle ore. Nel frattempo Crate '+
+      'funziona lo stesso con archivio, Wikidata e Odesli.</div>'
+    : dura>=20?'<div class="tiny" style="margin-top:6px;color:var(--acc)">'+
+      '<b>Spotify rifiuta da '+daQuanto+'</b> senza dire che \u00e8 finita la quota. '+
+      'Se va avanti cos\u00ec, prova a scollegare e ricollegare l\u2019account: potrebbe '+
+      'essere il permesso, non il limite.</div>':'';
   const ora=t=>new Date(t).toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'});
   const quanto=+SPOT.dettoSec||0;
   const dice=quanto?(quanto<90?quanto+' secondi'
@@ -5817,7 +5885,7 @@ function dettoDaSpotify(){
     dice+'</b>'+(SPOT.dettoNum>1?' (rifiuto n. '+SPOT.dettoNum+' di fila)':'')+
     (SPOT.miaTregua?'. Dopo sei rifiuti ho aggiunto io mezz\u2019ora di tregua'+
       ', perché insistere allunga la sospensione':'')+
-    '. Riprende alle <b>'+ora(spotAttesaFino)+'</b>.</div>';
+    '. Riprende alle <b>'+ora(spotAttesaFino)+'</b>.</div>'+insiste;
 }
 function renderSpot(){
   const st=document.getElementById('spotStato');
