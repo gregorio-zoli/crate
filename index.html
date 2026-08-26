@@ -608,7 +608,7 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
 /* ==========================================================
    1. STATO
    ========================================================== */
-const APP_VER='78';
+const APP_VER='81';
 const LS='crate.v1', LSK='crate.lfmkey', LSG='crate.gh', LSS='crate.lastsync', LSP='crate.prefs';
 const LSSP='crate.spot';   /* accesso a Spotify: resta su QUESTO dispositivo */
 let DB={albums:[],deleted:[],cfg:{}};
@@ -1167,7 +1167,18 @@ function spotVerso(al){
     .map((t,i)=>({n:+t.track_number||i+1,t:t.name,ms:+t.duration_ms||0}));
   const tipo=String(al.album_type||al.type||'').toLowerCase();
   const link='https://open.spotify.com/album/'+al.id;
+  /* Il caso dei Godspeed: la pagina dell'album c'e', il paese e' fra quelli
+     ammessi, ma i brani sono grigi perche' il gruppo li ha tolti dallo
+     streaming. La verita' non sta sull'album, sta su ogni singola traccia:
+     ognuna ha la sua lista di paesi, e li' e' vuota. Conto quante si possono
+     davvero ascoltare qui; -1 vuol dire che Spotify non me l'ha detto. */
+  const paese=SPOT.paese||'IT';
+  const conMercati=((al.tracks&&al.tracks.items)||[])
+    .filter(t=>Array.isArray(t.available_markets));
+  const braniQui=conMercati.length
+    ? conMercati.filter(t=>t.available_markets.indexOf(paese)>=0).length : -1;
   return{id:al.id,mercati:Array.isArray(al.available_markets)?al.available_markets:null,
+    braniQui:braniQui,
     title:cleanTitle(al.name||''),
     artist:(al.artists||[]).map(x=>x&&x.name).filter(Boolean).join(', '),
     year:al.release_date?+String(al.release_date).slice(0,4)||null:null,
@@ -1301,10 +1312,32 @@ async function spotCerca(titolo,artista,esito,soloLink){
      Nel collegamento in blocco non la faccio proprio: dimezzare le richieste
      e' il modo piu' semplice di non finire in coda. */
   if(soloLink)return spotLeggero(scelto.x);
-  let pieno=null;
-  try{pieno=await spotAlbumPerId(scelto.id)}
-  catch(e){if(e&&e.coda)throw e;dice('elenco tracce non recuperato: '+(e&&e.message||'errore'))}
+  /* Ci sono dischi che su Spotify esistono solo come guscio: la pagina si
+     apre, i brani sono tutti grigi e non parte niente. Succede quando un
+     gruppo ritira la musica dallo streaming, come i Godspeed You! Black
+     Emperor. Collegarcisi vuol dire mettere un tasto Riproduci che non
+     riproduce, e nel frattempo non guardare su YouTube dove il disco c'e'.
+     Quindi: se l'edizione trovata e' muta, provo le altre edizioni prima di
+     rinunciare - spesso una ristampa e' ascoltabile mentre l'originale no.
+     Se sono mute tutte, dico che non l'ho trovato e lascio proseguire la
+     ricerca sulle altre piattaforme. Rifiuto solo con la prova in mano:
+     zero brani ascoltabili accertati, mai su un dato che manca. */
+  let pieno=null,muti=0;
+  for(const c of ordinati.slice(0,3)){
+    let d=null;
+    try{d=await spotAlbumPerId(c.id)}
+    catch(e){if(e&&e.coda)throw e;
+      dice('elenco tracce non recuperato: '+(e&&e.message||'errore'));break}
+    if(!d)break;
+    if(d.braniQui===0){muti++;continue}
+    pieno=d;break;
+  }
   if(pieno)return pieno;
+  if(muti){
+    dice('su Spotify c’è solo la scheda: i brani sono tutti grigi'+
+      (muti>1?' ('+muti+' edizioni provate)':'')+', cerco altrove');
+    return null;
+  }
   dice('trovato, ma senza elenco tracce');
   return spotLeggero(scelto.x);
 }
@@ -1362,7 +1395,12 @@ function titoloPulito(t){
   return s||String(t||'');
 }
 function nucleoTitolo(t){
-  return String(t||'').toLowerCase()
+  /* NFKC mette d'accordo le scritture larghe con quelle normali: lo "0" di
+     Ichiko Aoba su Spotify e' un carattere a piena larghezza, diverso dallo
+     zero della tastiera pur essendo la stessa cifra. */
+  let s=String(t||'');
+  try{s=s.normalize('NFKC')}catch(e){}
+  return s.toLowerCase()
     .replace(/\[([^\]]*)\]|\(([^)]*)\)/g,(m,q,tondo)=>{
       const dentro=q!==undefined?q:tondo;
       return soloEdizione(dentro)?' ':' '+dentro+' ';
@@ -2411,6 +2449,32 @@ function haSpotify(a){return!!(a.linkFissato||(a.spotify&&/spotify/i.test(a.plat
    altro album dello stesso gruppo. Da fuori sembrano la stessa cosa - un
    tasto che non suona - ma sono due guasti diversi, e nessuno dei due si
    vede dai dati gia' salvati: bisogna richiedere l'album e guardarlo. */
+/* Due dischi con lo stesso numero di brani e la stessa durata sono lo stesso
+   disco, comunque sia scritto il titolo. E' la prova che serve quando i nomi
+   non si possono confrontare: "Cat" di Hiroshi Suzuki su Spotify si chiama
+   "キャット", che e' la stessa parola in un altro alfabeto, e nessun paragone
+   fra lettere potra' mai accorgersene. */
+function stessiNumeri(a,d){
+  const ta=+a.tracks||0,td=+d.tracks||0;
+  const da=+a.durata||0,dd=+d.durata||0;
+  if(!ta||!td||Math.abs(ta-td)>1)return false;
+  if(!da||!dd)return ta===td;
+  return Math.abs(da-dd)/Math.max(da,dd)<=.06;
+}
+function altroAlfabeto(x,y){
+  return RE_ALTRO_ALFABETO.test(String(x||''))!==RE_ALTRO_ALFABETO.test(String(y||''));
+}
+/* "Jazz Compositions" e "Vagif Mustafazade: Jazz Compositions" sono lo stesso
+   disco scritto per esteso; "What's Your Pleasure?" e "What's Your Pleasure?
+   (Tobtok Remix)" no. Da fuori si somigliano allo stesso modo: uno contiene
+   l'altro. A dividerli sono i numeri, non le parole. */
+function unoDentroLaltro(x,y){
+  /* senza spazi: "Mustafa-Zade" e "Mustafazade" sono lo stesso nome scritto
+     da due cataloghi diversi, e la spaziatura non deve fare la differenza */
+  const a=nucleoTitolo(x).replace(/\s+/g,''),b=nucleoTitolo(y).replace(/\s+/g,'');
+  if(!a||!b)return false;
+  return a.length>=4&&b.length>=4&&(a.indexOf(b)>=0||b.indexOf(a)>=0);
+}
 function motivoLinkStorto(a,d){
   if(!d)return 'Spotify non risponde su questo link';
   if(!d.tracks)return 'la pagina non ha nessun brano';
@@ -2418,10 +2482,17 @@ function motivoLinkStorto(a,d){
   const paese=SPOT.paese||'IT';
   if(Array.isArray(d.mercati)&&d.mercati.length&&d.mercati.indexOf(paese)<0)
     return 'esiste ma non si ascolta in '+paese;
+  /* la pagina si apre, i brani sono tutti grigi: e' il caso dei Godspeed */
+  if(d.braniQui===0)return 'i brani non sono ascoltabili, sono tutti grigi';
+  const numeri=stessiNumeri(a,d);
   const titoloOk=stessoTitolo(d.title||'',a.title||'')||
-    simLettere(nucleoTitolo(d.title||''),nucleoTitolo(a.title||''))>=.8;
+    simLettere(nucleoTitolo(d.title||''),nucleoTitolo(a.title||''))>=.8||
+    (numeri&&(altroAlfabeto(d.title,a.title)||unoDentroLaltro(d.title,a.title)));
   if(!titoloOk)return 'punta a “'+(d.title||'?')+'”';
-  if(a.artist&&d.artist&&txtSim(d.artist,a.artist)<.5)
+  /* anche i nomi degli artisti si accorciano: "Quarters" e "Quarters of
+     Change" sono lo stesso gruppo scritto in due modi */
+  if(a.artist&&d.artist&&txtSim(d.artist,a.artist)<.5&&
+     !unoDentroLaltro(d.artist,a.artist))
     return 'l’artista non torna: '+d.artist;
   return '';
 }
