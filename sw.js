@@ -3,7 +3,7 @@
    1. tiene l'app usabile offline (cache dello shell)
    2. intercetta le condivisioni da Android e passa l'immagine alla pagina  */
 
-const V = 'crate-v73';
+const V = 'crate-v76';
 const SHARE_CACHE = 'crate-share';
 const MODEL_CACHE = 'crate-modelli';
 const SHELL = [
@@ -92,9 +92,19 @@ self.addEventListener('fetch', e => {
   if (url.pathname.endsWith('.json') && !url.pathname.endsWith('manifest.json')) return;
 
   // navigazioni e shell: rete prima, cache se offline
+  //
+  // GitHub Pages dice al browser di tenersi la pagina per dieci minuti. Con la
+  // rete disponibile la richiesta finiva nella cache del browser e tornava
+  // indietro la versione vecchia: l'app restava ferma a un numero di versione
+  // superato pur essendo online. Per la pagina chiedo esplicitamente una
+  // verifica al server, che costa una richiesta condizionale e niente piu'.
+  const eShell = req.mode === 'navigate' ||
+    url.pathname.endsWith('/') || url.pathname.endsWith('index.html');
   e.respondWith((async () => {
     try {
-      const fresh = await fetch(req);
+      const fresh = await fetch(eShell
+        ? new Request(req.url, { cache: 'no-cache', credentials: 'same-origin' })
+        : req);
       if (fresh && fresh.ok && fresh.type === 'basic') {
         const c = await caches.open(V);
         c.put(req, fresh.clone());

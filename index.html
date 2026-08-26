@@ -156,14 +156,17 @@ label.f{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.7p
 .mpanel .righe button.on{background:var(--acc);border-color:var(--acc);color:#fff}
 .filtlab{font-size:11px;text-transform:uppercase;letter-spacing:.7px;color:var(--fg3);font-weight:700;margin:10px 0 4px}
 /* crocetta per svuotare un campo di ricerca: compare solo se c'e' del testo */
-.conx{position:relative;display:block}
-.conx>input{padding-right:38px!important}
+/* il contenitore deve prendere le misure del campo, non lasciarlo sbordare:
+   nella barra dei filtri l'input restava largo com'era e finiva sotto il
+   menu dei generi */
+.conx{position:relative;display:block;min-width:0;max-width:100%}
+.conx>input{width:100%!important;padding-right:38px!important}
+.toolbar>.conx{flex:1 1 150px;min-width:118px;max-width:280px}
 .conx>.pulx{position:absolute;right:2px;top:50%;transform:translateY(-50%);
   width:32px;height:32px;display:none;align-items:center;justify-content:center;
   color:var(--fg3);background:none;border:0;cursor:pointer;border-radius:8px;padding:0}
 .conx>.pulx:hover{color:var(--fg)}
 .conx.pieno>.pulx{display:flex}
-.toolbar>.conx{flex:1;min-width:118px}
 .toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:16px}
 .toolbar select,.toolbar input{width:auto;min-width:118px;padding:9px 11px;font-size:14px}
 .tg{display:flex;background:var(--bg3);border:1px solid var(--line);border-radius:9px;overflow:hidden;flex-wrap:wrap}
@@ -575,7 +578,8 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
 
   <div class="tiny muted" style="text-align:center;padding:6px 0 20px">
     Crate <b id="verApp"></b> &middot; se questo numero non cambia dopo un
-    aggiornamento, stai ancora vedendo la versione vecchia
+    aggiornamento, stai ancora vedendo la versione vecchia<br>
+    <button class="btn gh sm" id="btnAggiorna" style="margin-top:8px">Forza l&rsquo;aggiornamento</button>
   </div>
 </section>
 
@@ -604,7 +608,7 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
 /* ==========================================================
    1. STATO
    ========================================================== */
-const APP_VER='73';
+const APP_VER='76';
 const LS='crate.v1', LSK='crate.lfmkey', LSG='crate.gh', LSS='crate.lastsync', LSP='crate.prefs';
 const LSSP='crate.spot';   /* accesso a Spotify: resta su QUESTO dispositivo */
 let DB={albums:[],deleted:[],cfg:{}};
@@ -2434,13 +2438,19 @@ async function verificaLink(){
         txt=document.getElementById('spotTxt');
   box.style.display='block';out.innerHTML='';
   const storti=[];
-  let fatti=0;
+  let fatti=0,saltati=0;
   for(const a of list){
     if(spotStop)break;
-    txt.innerHTML='<b>'+(fatti+1)+' / '+list.length+'</b> &middot; '+esc(a.title);
-    bar.style.width=Math.round(fatti/list.length*100)+'%';
-    let d=null;
-    try{d=await spotAlbumPerId(idSpotify(a.spotify||a.listenUrl||''))}catch(e){}
+    txt.innerHTML='<b>'+(fatti+saltati+1)+' / '+list.length+'</b> &middot; '+esc(a.title);
+    bar.style.width=Math.round((fatti+saltati)/list.length*100)+'%';
+    /* Spotify mi ha messo in coda: se andassi avanti ogni album risulterebbe
+       "non risponde" e ti darei una lista di guasti inventati. Preferisco
+       dirti quanti non sono riuscito a guardare. */
+    if(spotInCoda()){saltati++;continue}
+    let d=null,inCoda=false;
+    try{d=await spotAlbumPerId(idSpotify(a.spotify||a.listenUrl||''))}
+    catch(e){if(e&&(e.coda||e.rete))inCoda=true}
+    if(inCoda){saltati++;continue}
     const perche=motivoLinkStorto(a,d);
     if(perche)storti.push({a:a,perche:perche});
     fatti++;
@@ -2448,7 +2458,8 @@ async function verificaLink(){
   }
   bar.style.width='100%';
   txt.innerHTML=(spotStop?'Fermata.':'Finita.')+' '+fatti+' collegamenti guardati, <b>'+
-    storti.length+'</b> da sistemare.';
+    storti.length+'</b> da sistemare'+
+    (saltati?'. <b>'+saltati+'</b> non controllati: Spotify mi ha messo in coda, rilancia più tardi.':'.');
   out.innerHTML=storti.length
     ? '<div class="tiny muted" style="margin-bottom:8px">Tocca un titolo per aprirlo e incollargli un link d’ascolto.</div>'+
       storti.map(s=>'<button class="btn gh sm" data-vid="'+esc(s.a.id)+
@@ -5846,6 +5857,24 @@ document.addEventListener('visibilitychange',()=>{
    15. AVVIO
    ========================================================== */
 document.getElementById('verApp').textContent='v'+APP_VER;
+/* Quando l'app resta indietro non e' quasi mai colpa dei tuoi dati: e' una
+   copia vecchia della pagina tenuta dal browser o dal service worker. Questo
+   tasto butta via le copie e ricarica dal server. La libreria non si tocca:
+   sta in localStorage e nel repository, non nella cache. */
+document.getElementById('btnAggiorna').onclick=async()=>{
+  toast('Cerco la versione nuova…');
+  try{
+    const chiavi=await caches.keys();
+    await Promise.all(chiavi.filter(k=>k.indexOf('crate-v')===0).map(k=>caches.delete(k)));
+  }catch(e){}
+  try{
+    const regs=await navigator.serviceWorker.getRegistrations();
+    await Promise.all(regs.map(r=>r.update().catch(()=>{})));
+  }catch(e){}
+  /* la stringa in coda serve solo a non farmi ridare la stessa pagina */
+  setTimeout(()=>{try{location.replace(location.pathname+'?fresh='+Date.now())}
+    catch(e){location.reload()}},600);
+};
 (function(){const f=document.getElementById('fFav');if(f)f.innerHTML=cuore(true,15)})();
 loadLocal();
 /* Riparazione locale, senza rete: sistema i generi gia' salvati che si erano
