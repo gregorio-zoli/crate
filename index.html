@@ -85,6 +85,20 @@ h1{font-size:26px;letter-spacing:-.6px;margin:0 0 4px}
 h2{font-size:17px;letter-spacing:-.3px;margin:0 0 12px}
 .sub{color:var(--fg2);font-size:14px;margin:0 0 20px}
 .card{background:var(--bg2);border:1px solid var(--line);border-radius:var(--r);padding:16px}
+/* gruppi richiudibili nelle Opzioni: da chiusi sono una riga sola */
+.gruppo{margin-bottom:14px}
+.grtesta{width:100%;display:flex;align-items:center;gap:10px;text-align:left;
+  background:var(--bg2);border:1px solid var(--line);border-radius:var(--r);
+  padding:14px 16px;color:var(--fg);font:inherit;font-size:16px;cursor:pointer}
+.grtesta:hover{border-color:var(--fg3)}
+.grtesta .grfrec{flex:none;color:var(--fg3);transition:transform .18s ease;font-size:12px}
+.gruppo.aperto .grtesta .grfrec{transform:rotate(90deg)}
+.gruppo.aperto .grtesta{border-bottom-left-radius:0;border-bottom-right-radius:0;border-bottom-color:transparent}
+.grtesta .grsub{margin-left:auto;color:var(--fg3);font-size:12px;text-align:right;min-width:0}
+.grbody{display:none;padding:14px 0 0}
+.gruppo.aperto .grbody{display:block}
+.grbody>.card{margin-bottom:14px}
+.grbody>.card:last-child{margin-bottom:0}
 .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 .grow{flex:1;min-width:160px}
 input[type=text],input[type=number],input[type=password],select,textarea{
@@ -346,10 +360,6 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
     <div><label class="f">Sottogeneri</label><div class="mchip" id="rSubMenu"></div></div>
     <div><label class="f">Decennio</label><select id="rDec"><option value="">Qualsiasi</option></select></div>
     <div><label class="f">Durata</label><div class="mchip" id="rLenMenu"></div></div>
-    <div><label class="f">Tipo</label><select id="rKind">
-      <option value="">Tutto</option>
-      <option value="full">Solo album interi</option>
-    </select></div>
   </div>
   <div class="slot" id="slot">
     <div class="stage" id="slotStage">
@@ -386,73 +396,20 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
   <h1>Opzioni</h1>
 
   <div class="card" style="margin-bottom:14px">
-    <h2>Sincronizzazione tra telefono e PC</h2>
-    <p class="tiny muted" style="margin-top:0">Le tre voci vanno messe su ogni dispositivo.</p>
-    <div class="row" style="margin-bottom:9px">
-      <div class="grow"><label class="f">Utente GitHub</label><input type="text" id="ghOwner" placeholder="il-tuo-username" autocapitalize="none" autocomplete="off" spellcheck="false"></div>
-      <div class="grow"><label class="f">Repository dei dati</label><input type="text" id="ghRepo" placeholder="crate-data" autocapitalize="none" autocomplete="off" spellcheck="false"></div>
-    </div>
-    <div><label class="f">Token di accesso</label><input type="password" id="ghToken" placeholder="github_pat_..." autocomplete="off" spellcheck="false"></div>
-    <div class="row" style="margin-top:11px">
-      <button class="btn" id="btnSyncSave">Salva e collega</button>
-      <button class="btn gh" id="btnSyncNow">Sincronizza adesso</button>
-      <button class="btn gh sm" id="btnSyncOff">Scollega</button>
-    </div>
-    <div class="hint" id="syncHint"></div>
-  </div>
-
-  <div class="card" style="margin-bottom:14px">
-    <h2>Chiavi facoltative</h2>
-    <p class="tiny muted" style="margin-top:0">Non servono per funzionare. La prima velocizza molto il riaggiornamento dei generi.</p>
-    <label class="f">Discogs</label>
-    <div class="row"><div class="grow"><input type="text" id="dcKey" placeholder="token personale Discogs" autocomplete="off" spellcheck="false"></div>
-      <button class="btn gh" id="dcSave">Salva</button></div>
-    <div class="tiny" id="dcStato" style="margin-top:6px"></div>
-    <div class="tiny muted" style="margin:6px 0 14px">Da 25 a 60 richieste al minuto: su 600 album &egrave; la differenza fra mezz&rsquo;ora e dieci minuti. Si sincronizza con la libreria.
-      <details class="hint" style="margin-top:6px"><summary style="cursor:pointer">Dove si prende</summary>
-      <div style="margin-top:6px">discogs.com &rsaquo; il tuo account &rsaquo; <b>Settings</b> &rsaquo; <b>Developers</b> &rsaquo; <b>Generate new token</b>. Copia la riga sotto &ldquo;personal access token&rdquo;.</div></details>
-    </div>
-    <label class="f">Last.fm</label>
+    <h2>Collegamenti a Spotify</h2>
+    <p class="tiny muted" style="margin-top:0">Trova in anticipo la pagina dell&rsquo;album, cos&igrave; il tasto <b>&#9654;</b> apre subito.</p>
     <div class="row">
-      <div class="grow"><input type="text" id="lfmKey" placeholder="API key Last.fm" autocomplete="off" spellcheck="false"></div>
-      <button class="btn gh" id="btnSaveKey">Salva</button>
+      <button class="btn" id="spotMissing">Collega quelli che mancano</button>
+      <button class="btn gh" id="spotAll">Ricontrolla tutti</button>
     </div>
-    <div class="tiny muted" style="margin-top:6px">Ormai serve solo per la descrizione dell&rsquo;album. Si sincronizza con la libreria. <a href="https://www.last.fm/api/account/create" target="_blank" rel="noopener">Prendine una</a>.</div>
-  </div>
-
-  <div class="card" style="margin-bottom:14px">
-    <h2>Come si presenta la scheda di un album</h2>
-    <p class="tiny muted" style="margin-top:0">Si sincronizza con la libreria: quello che decidi qui lo ritrovi su tutti i dispositivi collegati.</p>
-    <div style="margin-bottom:14px">
-      <label class="f">Visualizzazione</label>
-      <select id="prMode">
-        <option value="full">Completa &mdash; scegli tu cosa mostrare</option>
-        <option value="min">Minimale &mdash; solo l&rsquo;essenziale</option>
-      </select>
-      <div class="hint" id="prModeHint"></div>
+    <div class="hint">&ldquo;Ricontrolla tutti&rdquo; riprova anche quelli finiti altrove. I link che hai incollato tu non si toccano. Lancialo una volta e lascialo finire.</div>
+    <div id="spotOra" style="margin-top:14px"></div>
+    <div id="spotRiprendi"></div>
+    <div id="spotBox" style="display:none;margin-top:14px">
+      <div class="bar"><i id="spotBar"></i></div>
+      <div class="tiny muted" id="spotTxt" style="margin-top:8px"></div>
+      <button class="btn gh sm" id="spotStop" style="margin-top:10px">Ferma</button>
     </div>
-    <div id="prPanel">
-      <label class="f">Informazioni da mostrare</label>
-      <div id="prShow" style="display:grid;gap:2px;margin-bottom:16px"></div>
-      <label class="f">Link esterni da tenere</label>
-      <div id="prLinks" style="display:grid;gap:2px"></div>
-    </div>
-  </div>
-
-  <div class="card" style="margin-bottom:14px">
-    <h2>Pastiglie dei sottogeneri</h2>
-    <p class="tiny muted" style="margin-top:0">Quante ne vuoi vedere nei filtri. Le pastiglie che spariscono non tolgono generi agli album: li trovi sempre col contenitore o cercandoli a mano.</p>
-    <div class="row" style="align-items:flex-end">
-      <div style="flex:0 0 130px"><label class="f">Da quanti album</label>
-        <input type="number" id="prSoglia" min="2" max="200" step="1"></div>
-      <button class="btn gh sm" id="prSogliaDef" style="margin-bottom:2px">Riporta a 12</button>
-    </div>
-    <label style="display:flex;gap:10px;align-items:flex-start;padding:12px 0 2px;cursor:pointer">
-      <input type="checkbox" id="prTopMacro" style="width:auto;margin:3px 0 0;flex:none;accent-color:var(--acc)">
-      <span style="min-width:0"><span style="font-size:14px">Aggiungi i primi 5 di ogni contenitore</span>
-      <span class="tiny muted" style="display:block">I mondi piccoli portano comunque le loro divisioni: senza questo, hip hop, jazz e metal restano senza pastiglie perch&eacute; nessun loro sottogenere arriva alla soglia.</span></span>
-    </label>
-    <div class="hint" id="prSogliaOra"></div>
   </div>
 
   <div class="card" style="margin-bottom:14px">
@@ -473,73 +430,136 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
   </div>
 
   <div class="card" style="margin-bottom:14px">
-    <h2>Account Spotify</h2>
-    <p class="tiny muted" style="margin-top:0">Con l&rsquo;account, i dati arrivano da Spotify invece che ricostruiti da altre fonti. Registrazione gratuita, una volta sola.</p>
-    <div id="spotStato" class="tiny" style="margin:10px 0 12px"></div>
-    <label class="f">Client ID</label>
-    <input type="text" id="spotId" placeholder="le 32 lettere e numeri che ti d&agrave; Spotify" autocapitalize="none" spellcheck="false">
-    <div class="tiny muted" style="margin:6px 0 12px">Non &egrave; una password: il Client ID &egrave; pubblico per costruzione. Lo sincronizzo con la libreria, cos&igrave; lo scrivi una volta e il telefono lo trova gi&agrave;.</div>
-    <label class="f">Indirizzo di ritorno da incollare su Spotify</label>
-    <div class="row" style="align-items:center;gap:8px;margin-bottom:12px">
-      <code id="spotRed" style="flex:1;min-width:0;font-size:12px;word-break:break-all;color:var(--fg2)"></code>
-      <button class="btn gh sm" id="spotCopy">Copia</button>
+    <h2>Pastiglie dei sottogeneri</h2>
+    <p class="tiny muted" style="margin-top:0">Quante ne vuoi vedere nei filtri. Le pastiglie che spariscono non tolgono generi agli album: li trovi sempre col contenitore o cercandoli a mano.</p>
+    <div class="row" style="align-items:flex-end">
+      <div style="flex:0 0 130px"><label class="f">Da quanti album</label>
+        <input type="number" id="prSoglia" min="2" max="200" step="1"></div>
+      <button class="btn gh sm" id="prSogliaDef" style="margin-bottom:2px">Riporta a 12</button>
     </div>
-    <div class="row">
-      <button class="btn" id="spotLogin">Collega account</button>
-      <button class="btn gh sm" id="spotOut" style="border-color:var(--acc);color:var(--acc)">Scollega</button>
-    </div>
-    <details class="hint"><summary style="cursor:pointer">Come si fa, in cinque minuti</summary><div style="margin-top:8px">1. <b>developer.spotify.com/dashboard</b>, accedi.<br>2. <b>Create app</b>, nome a piacere.<br>3. In <b>Redirect URI</b> incolla l&rsquo;indirizzo qui sopra, poi <b>Add</b>.<br>4. Spunta <b>Web API</b>, salva.<br>5. <b>Settings</b> &rsaquo; copia il <b>Client ID</b>.<br>6. Incollalo qui e premi <b>Collega account</b>.<br><br>Il <b>Client Secret</b> non serve: non incollarlo da nessuna parte.<br>Il permesso vale su questo dispositivo e <b>scade ogni 6 mesi</b>: ti avviso io.<br>Se Spotify blocca a lungo, crea una seconda app e cambia Client ID: il limite &egrave; per app.</div></details>
-  </div>
-
-  <div class="card" style="margin-bottom:14px">
-    <h2>Dove ascolti</h2>
-    <p class="tiny muted" style="margin-top:0">Provate in quest&rsquo;ordine, mi fermo alla prima che ha l&rsquo;album. Togli quelle a cui non sei abbonato.</p>
-    <div id="prPlat"></div>
     <label style="display:flex;gap:10px;align-items:flex-start;padding:12px 0 2px;cursor:pointer">
-      <input type="checkbox" id="prSpotApp" style="width:auto;margin:3px 0 0;flex:none;accent-color:var(--acc)">
-      <span style="min-width:0"><span style="font-size:14px">Apri l&rsquo;app di Spotify invece del browser</span>
-      <span class="tiny muted" style="display:block">Vale solo su questo dispositivo. Utile sul PC, dove il tasto &#9654; aprirebbe il lettore web. La prima volta il browser chiede il permesso.</span></span>
+      <input type="checkbox" id="prTopMacro" style="width:auto;margin:3px 0 0;flex:none;accent-color:var(--acc)">
+      <span style="min-width:0"><span style="font-size:14px">Aggiungi i primi 5 di ogni contenitore</span>
+      <span class="tiny muted" style="display:block">I mondi piccoli portano comunque le loro divisioni: senza questo, hip hop, jazz e metal restano senza pastiglie perch&eacute; nessun loro sottogenere arriva alla soglia.</span></span>
     </label>
-    <div class="hint">Spotify resta in cima. Le altre si spostano con le frecce.</div>
+    <div class="hint" id="prSogliaOra"></div>
   </div>
 
-  <div class="card" style="margin-bottom:14px">
-    <h2>Collegamenti a Spotify</h2>
-    <p class="tiny muted" style="margin-top:0">Trova in anticipo la pagina dell&rsquo;album, cos&igrave; il tasto <b>&#9654;</b> apre subito.</p>
-    <div class="row">
-      <button class="btn" id="spotMissing">Collega quelli che mancano</button>
-      <button class="btn gh" id="spotAll">Ricontrolla tutti</button>
+  <div class="gruppo" id="grChiavi">
+    <button class="grtesta" type="button" aria-expanded="false"><span class="grfrec">&#9656;</span>Collegamenti e chiavi<span class="grsub">GitHub, Spotify, Discogs, Last.fm</span></button>
+    <div class="grbody">
+    <div class="card" style="margin-bottom:14px">
+      <h2>Sincronizzazione tra telefono e PC</h2>
+      <p class="tiny muted" style="margin-top:0">Le tre voci vanno messe su ogni dispositivo.</p>
+      <div class="row" style="margin-bottom:9px">
+        <div class="grow"><label class="f">Utente GitHub</label><input type="text" id="ghOwner" placeholder="il-tuo-username" autocapitalize="none" autocomplete="off" spellcheck="false"></div>
+        <div class="grow"><label class="f">Repository dei dati</label><input type="text" id="ghRepo" placeholder="crate-data" autocapitalize="none" autocomplete="off" spellcheck="false"></div>
+      </div>
+      <div><label class="f">Token di accesso</label><input type="password" id="ghToken" placeholder="github_pat_..." autocomplete="off" spellcheck="false"></div>
+      <div class="row" style="margin-top:11px">
+        <button class="btn" id="btnSyncSave">Salva e collega</button>
+        <button class="btn gh" id="btnSyncNow">Sincronizza adesso</button>
+        <button class="btn gh sm" id="btnSyncOff">Scollega</button>
+      </div>
+      <div class="hint" id="syncHint"></div>
     </div>
-    <div class="hint">&ldquo;Ricontrolla tutti&rdquo; riprova anche quelli finiti altrove. I link che hai incollato tu non si toccano. Lancialo una volta e lascialo finire.</div>
-    <div id="spotOra" style="margin-top:14px"></div>
-    <div id="spotRiprendi"></div>
-    <div id="spotBox" style="display:none;margin-top:14px">
-      <div class="bar"><i id="spotBar"></i></div>
-      <div class="tiny muted" id="spotTxt" style="margin-top:8px"></div>
-      <button class="btn gh sm" id="spotStop" style="margin-top:10px">Ferma</button>
+    <div class="card" style="margin-bottom:14px">
+      <h2>Account Spotify</h2>
+      <p class="tiny muted" style="margin-top:0">Con l&rsquo;account, i dati arrivano da Spotify invece che ricostruiti da altre fonti. Registrazione gratuita, una volta sola.</p>
+      <div id="spotStato" class="tiny" style="margin:10px 0 12px"></div>
+      <label class="f">Client ID</label>
+      <input type="text" id="spotId" placeholder="le 32 lettere e numeri che ti d&agrave; Spotify" autocapitalize="none" spellcheck="false">
+      <div class="tiny muted" style="margin:6px 0 12px">Non &egrave; una password: il Client ID &egrave; pubblico per costruzione. Lo sincronizzo con la libreria, cos&igrave; lo scrivi una volta e il telefono lo trova gi&agrave;.</div>
+      <label class="f">Indirizzo di ritorno da incollare su Spotify</label>
+      <div class="row" style="align-items:center;gap:8px;margin-bottom:12px">
+        <code id="spotRed" style="flex:1;min-width:0;font-size:12px;word-break:break-all;color:var(--fg2)"></code>
+        <button class="btn gh sm" id="spotCopy">Copia</button>
+      </div>
+      <div class="row">
+        <button class="btn" id="spotLogin">Collega account</button>
+        <button class="btn gh sm" id="spotOut" style="border-color:var(--acc);color:var(--acc)">Scollega</button>
+      </div>
+      <details class="hint"><summary style="cursor:pointer">Come si fa, in cinque minuti</summary><div style="margin-top:8px">1. <b>developer.spotify.com/dashboard</b>, accedi.<br>2. <b>Create app</b>, nome a piacere.<br>3. In <b>Redirect URI</b> incolla l&rsquo;indirizzo qui sopra, poi <b>Add</b>.<br>4. Spunta <b>Web API</b>, salva.<br>5. <b>Settings</b> &rsaquo; copia il <b>Client ID</b>.<br>6. Incollalo qui e premi <b>Collega account</b>.<br><br>Il <b>Client Secret</b> non serve: non incollarlo da nessuna parte.<br>Il permesso vale su questo dispositivo e <b>scade ogni 6 mesi</b>: ti avviso io.<br>Se Spotify blocca a lungo, crea una seconda app e cambia Client ID: il limite &egrave; per app.</div></details>
+    </div>
+    <div class="card" style="margin-bottom:14px">
+      <h2>Chiavi facoltative</h2>
+      <p class="tiny muted" style="margin-top:0">Non servono per funzionare. La prima velocizza molto il riaggiornamento dei generi.</p>
+      <label class="f">Discogs</label>
+      <div class="row"><div class="grow"><input type="text" id="dcKey" placeholder="token personale Discogs" autocomplete="off" spellcheck="false"></div>
+        <button class="btn gh" id="dcSave">Salva</button></div>
+      <div class="tiny" id="dcStato" style="margin-top:6px"></div>
+      <div class="tiny muted" style="margin:6px 0 14px">Da 25 a 60 richieste al minuto: su 600 album &egrave; la differenza fra mezz&rsquo;ora e dieci minuti. Si sincronizza con la libreria.
+        <details class="hint" style="margin-top:6px"><summary style="cursor:pointer">Dove si prende</summary>
+        <div style="margin-top:6px">discogs.com &rsaquo; il tuo account &rsaquo; <b>Settings</b> &rsaquo; <b>Developers</b> &rsaquo; <b>Generate new token</b>. Copia la riga sotto &ldquo;personal access token&rdquo;.</div></details>
+      </div>
+      <label class="f">Last.fm</label>
+      <div class="row">
+        <div class="grow"><input type="text" id="lfmKey" placeholder="API key Last.fm" autocomplete="off" spellcheck="false"></div>
+        <button class="btn gh" id="btnSaveKey">Salva</button>
+      </div>
+      <div class="tiny muted" style="margin-top:6px">Ormai serve solo per la descrizione dell&rsquo;album. Si sincronizza con la libreria. <a href="https://www.last.fm/api/account/create" target="_blank" rel="noopener">Prendine una</a>.</div>
+    </div>
     </div>
   </div>
 
-  <div class="card" style="margin-bottom:14px">
-    <h2>Diagnostica</h2>
-    <p class="tiny muted" style="margin-top:0">Se qualcosa non funziona, qui si vede cosa.</p>
-    <button class="btn" id="btnDiag">Prova le fonti</button>
-    <div id="diagBox" style="margin-top:12px"></div>
-  </div>
-
-  <div class="card" style="margin-bottom:14px">
-    <h2>Backup manuale</h2>
-    <div class="row">
-      <button class="btn gh" id="btnExport">Esporta JSON</button>
-      <button class="btn gh" id="btnImport">Importa JSON</button>
-      <input type="file" id="importIn" accept=".json,application/json" hidden>
+  <div class="gruppo" id="grAspetto">
+    <button class="grtesta" type="button" aria-expanded="false"><span class="grfrec">&#9656;</span>Aspetto e ascolto<span class="grsub">scheda album, link, piattaforme</span></button>
+    <div class="grbody">
+    <div class="card" style="margin-bottom:14px">
+      <h2>Come si presenta la scheda di un album</h2>
+      <p class="tiny muted" style="margin-top:0">Si sincronizza con la libreria: quello che decidi qui lo ritrovi su tutti i dispositivi collegati.</p>
+      <div style="margin-bottom:14px">
+        <label class="f">Visualizzazione</label>
+        <select id="prMode">
+          <option value="full">Completa &mdash; scegli tu cosa mostrare</option>
+          <option value="min">Minimale &mdash; solo l&rsquo;essenziale</option>
+        </select>
+        <div class="hint" id="prModeHint"></div>
+      </div>
+      <div id="prPanel">
+        <label class="f">Informazioni da mostrare</label>
+        <div id="prShow" style="display:grid;gap:2px;margin-bottom:16px"></div>
+        <label class="f">Link esterni da tenere</label>
+        <div id="prLinks" style="display:grid;gap:2px"></div>
+      </div>
     </div>
-    <div class="hint" id="sizeHint"></div>
+    <div class="card" style="margin-bottom:14px">
+      <h2>Dove ascolti</h2>
+      <p class="tiny muted" style="margin-top:0">Provate in quest&rsquo;ordine, mi fermo alla prima che ha l&rsquo;album. Togli quelle a cui non sei abbonato.</p>
+      <div id="prPlat"></div>
+      <label style="display:flex;gap:10px;align-items:flex-start;padding:12px 0 2px;cursor:pointer">
+        <input type="checkbox" id="prSpotApp" style="width:auto;margin:3px 0 0;flex:none;accent-color:var(--acc)">
+        <span style="min-width:0"><span style="font-size:14px">Apri l&rsquo;app di Spotify invece del browser</span>
+        <span class="tiny muted" style="display:block">Vale solo su questo dispositivo. Utile sul PC, dove il tasto &#9654; aprirebbe il lettore web. La prima volta il browser chiede il permesso.</span></span>
+      </label>
+      <div class="hint">Spotify resta in cima. Le altre si spostano con le frecce.</div>
+    </div>
+    </div>
   </div>
 
-  <div class="card" style="margin-bottom:14px">
-    <h2>Zona rossa</h2>
-    <button class="btn gh" id="btnWipe" style="border-color:var(--acc);color:var(--acc)">Cancella tutta la libreria</button>
+  <div class="gruppo" id="grDati">
+    <button class="grtesta" type="button" aria-expanded="false"><span class="grfrec">&#9656;</span>Dati e manutenzione<span class="grsub">diagnostica, backup, cancellazioni</span></button>
+    <div class="grbody">
+    <div class="card" style="margin-bottom:14px">
+      <h2>Diagnostica</h2>
+      <p class="tiny muted" style="margin-top:0">Se qualcosa non funziona, qui si vede cosa.</p>
+      <button class="btn" id="btnDiag">Prova le fonti</button>
+      <div id="diagBox" style="margin-top:12px"></div>
+    </div>
+    <div class="card" style="margin-bottom:14px">
+      <h2>Backup manuale</h2>
+      <div class="row">
+        <button class="btn gh" id="btnExport">Esporta JSON</button>
+        <button class="btn gh" id="btnImport">Importa JSON</button>
+        <input type="file" id="importIn" accept=".json,application/json" hidden>
+      </div>
+      <div class="hint" id="sizeHint"></div>
+    </div>
+    <div class="card" style="margin-bottom:14px">
+      <h2>Zona rossa</h2>
+      <button class="btn gh" id="btnWipe" style="border-color:var(--acc);color:var(--acc)">Cancella tutta la libreria</button>
+    </div>
+    </div>
   </div>
 
   <div class="tiny muted" style="text-align:center;padding:6px 0 20px">
@@ -573,7 +593,7 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
 /* ==========================================================
    1. STATO
    ========================================================== */
-const APP_VER='66';
+const APP_VER='68';
 const LS='crate.v1', LSK='crate.lfmkey', LSG='crate.gh', LSS='crate.lastsync', LSP='crate.prefs';
 const LSSP='crate.spot';   /* accesso a Spotify: resta su QUESTO dispositivo */
 let DB={albums:[],deleted:[],cfg:{}};
@@ -4403,7 +4423,6 @@ function matches(a,f){
   /* piu' fasce = intervallo piu' largo: 50-60 con 1h-1h15 fa 50 minuti-1h15 */
   if(f.len&&f.len.length&&!f.len.some(et=>nellaFascia(a,et)))return false;
   if(f.artist&&(a.artist||'').toLowerCase()!==f.artist.toLowerCase())return false;
-  if(f.fullOnly&&(a.kind==='singolo'||a.kind==='EP'))return false;
   if(f.state==='pending')return !!a.pending;
   if(a.pending&&f.state!=='all')return false;
   if(f.state==='todo'&&a.listened)return false;
@@ -4424,6 +4443,39 @@ function matches(a,f){
     (a.comment||'')).toLowerCase();
     if(!s.includes(f.q.toLowerCase()))return false}
   return true;
+}
+/* ---- filtri che si filtrano fra loro ----
+   Un'opzione che porterebbe a zero album non ha motivo di stare nel menu:
+   "elettronica" e "noise rock" non hanno album in comune, quindi appena
+   scegli il primo il secondo sparisce. Per calcolare le opzioni di un menu
+   guardo tutti gli altri filtri attivi ma non quello stesso, altrimenti
+   scegliendo "shoegaze" sparirebbe "dream pop" e non potresti piu' allargare
+   la ricerca. E quello che hai gia' scelto resta sempre visibile, anche se
+   porta a zero: cosi' vedi da dove viene il vuoto e puoi togliertelo. */
+function filtriDi(quale){
+  if(quale==='r')return{state:document.getElementById('rState').value,
+    generi:[...SEL.rGen],sotto:[...SEL.rSub],len:[...SEL.rLen],
+    q:(document.getElementById('rQ')||{}).value||'',
+    dec:document.getElementById('rDec').value};
+  return{state:libState,q:document.getElementById('fq').value.trim(),
+    generi:[...SEL.fGen],sotto:[...SEL.fSub],
+    dec:document.getElementById('fDec').value,artist:libArtist};
+}
+function poolSenza(quale,dim){
+  const f=filtriDi(quale);
+  if(dim==='generi')f.generi=[];
+  if(dim==='sotto')f.sotto=[];
+  if(dim==='dec')f.dec='';
+  if(dim==='len')f.len=[];
+  return DB.albums.filter(a=>!a.pending&&matches(a,f));
+}
+function vivi(quale,dim,tutte,scelte){
+  const pool=poolSenza(quale,dim),ok=new Set();
+  if(dim==='generi')pool.forEach(a=>macroDiAlbum(a).forEach(x=>ok.add(x)));
+  if(dim==='sotto')pool.forEach(a=>(a.genres||[]).forEach(x=>ok.add(String(x).trim().toLowerCase())));
+  if(dim==='dec')pool.forEach(a=>{if(a.year)ok.add(String(Math.floor(a.year/10)*10))});
+  if(dim==='len')tutte.forEach(et=>{if(pool.some(a=>nellaFascia(a,et)))ok.add(et)});
+  return tutte.filter(v=>ok.has(v)||(scelte&&scelte.has(v)));
 }
 function renderLib(){
   const f={state:libState,q:document.getElementById('fq').value.trim(),
@@ -4555,17 +4607,33 @@ function sizeHint(){
   el.textContent=DB.albums.length+' album, '+kb+' KB di dati.'+
     (kb>800?' Attenzione: molte copertine da screenshot appesantiscono la sincronizzazione.':'');
 }
+/* Ridisegna i menu di una schermata, saltando quello su cui stai cliccando:
+   riscriverlo lo chiuderebbe in mano. */
+function renderFiltri(quale,tranne){
+  const macro=[...new Set(DB.albums.filter(a=>!a.pending).flatMap(macroDiAlbum))].sort();
+  const sub=sottogeneri(),fasce=FASCE.map(f=>f.et),dec=decades().map(String);
+  const p=quale==='r'?'r':'f';
+  const gSel=quale==='r'?SEL.rGen:SEL.fGen,sSel=quale==='r'?SEL.rSub:SEL.fSub;
+  const solo=(dim,f)=>{if(tranne!==dim)f()};
+  solo('generi',()=>menuChip(p+'GenreMenu','Generi',vivi(quale,'generi',macro,gSel),gSel,
+    quale==='r'?()=>{updatePool();renderFiltri('r','generi')}
+               :()=>{renderLib();renderFiltri('f','generi')}));
+  solo('sotto',()=>menuChip(p+'SubMenu','Sottogeneri',vivi(quale,'sotto',sub,sSel),sSel,
+    quale==='r'?()=>{updatePool();renderFiltri('r','sotto')}
+               :()=>{renderLib();renderFiltri('f','sotto')}));
+  if(quale==='r')solo('len',()=>menuChip('rLenMenu','Durata',vivi('r','len',fasce,SEL.rLen),
+    SEL.rLen,()=>{updatePool();renderFiltri('r','len')}));
+  solo('dec',()=>{
+    const el=document.getElementById(p+'Dec');
+    if(el)fillSelect(el,vivi(quale,'dec',dec,new Set(el.value?[el.value]:[])));
+  });
+}
 function renderAll(){
   const macro=[...new Set(DB.albums.flatMap(macroDiAlbum))].sort();
   const sub=sottogeneri();
   [...SEL.fGen,...SEL.rGen].forEach(v=>{if(!macro.includes(v)){SEL.fGen.delete(v);SEL.rGen.delete(v)}});
   [...SEL.fSub,...SEL.rSub].forEach(v=>{if(!sub.includes(v)){SEL.fSub.delete(v);SEL.rSub.delete(v)}});
-  menuChip('fGenreMenu','Generi',macro,SEL.fGen,renderLib);
-  menuChip('fSubMenu','Sottogeneri',sub,SEL.fSub,renderLib);
-  menuChip('rGenreMenu','Generi',macro,SEL.rGen,updatePool);
-  menuChip('rSubMenu','Sottogeneri',sub,SEL.rSub,updatePool);
-  menuChip('rLenMenu','Durata',FASCE.map(f=>f.et),SEL.rLen,updatePool);
-  ['fDec','rDec'].forEach(i=>fillSelect(document.getElementById(i),decades().map(String)));
+  renderFiltri('f','');renderFiltri('r','');
   renderStats();renderLib();updatePool();sizeHint();fillSeeds();
   if(typeof renderSpotOra==='function')renderSpotOra();
   if(document.getElementById('dcKey')){
@@ -4583,8 +4651,7 @@ function randPool(){
     generi:[...SEL.rGen],sotto:[...SEL.rSub],
     q:(document.getElementById('rQ')||{}).value||'',
     dec:document.getElementById('rDec').value,
-    len:[...SEL.rLen],
-    fullOnly:document.getElementById('rKind').value==='full'};
+    len:[...SEL.rLen]};
   return DB.albums.filter(a=>!a.pending&&matches(a,f));
 }
 function updatePool(){
@@ -4597,7 +4664,6 @@ function updatePool(){
     if(st==='todo')on.push('solo da ascoltare');
     if(st==='fav')on.push('solo preferiti');
     if(st==='done')on.push('solo ascoltati');
-    if(document.getElementById('rKind').value==='full')on.push('senza singoli ed EP');
     [...SEL.rGen,...SEL.rSub].forEach(v=>on.push(v));
     const rq=document.getElementById('rQ');if(rq&&rq.value.trim())on.push('\u201c'+rq.value.trim()+'\u201d');
     const dec=document.getElementById('rDec').value;if(dec)on.push(dec);
@@ -4955,15 +5021,19 @@ document.addEventListener('paste',e=>{
   const it=[...(e.clipboardData&&e.clipboardData.items||[])].find(i=>i.type.startsWith('image/'));
   if(it)queueImages([it.getAsFile()]);
 });
+/* dopo ogni filtro cambiato ridisegno anche gli altri menu: le opzioni che
+   non porterebbero da nessuna parte spariscono */
 ['fq','fDec','fSort'].forEach(i=>document.getElementById(i)
-  .addEventListener(i==='fq'?'input':'change',renderLib));
+  .addEventListener(i==='fq'?'input':'change',()=>{renderLib();
+    renderFiltri('f',i==='fDec'?'dec':'')}));
 document.getElementById('fState').querySelectorAll('button').forEach(b=>b.onclick=()=>{
   libState=b.dataset.s;
   document.getElementById('fState').querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));
-  renderLib()});
-['rState','rDec','rKind'].forEach(i=>document.getElementById(i).addEventListener('change',updatePool));
+  renderLib();renderFiltri('f','')});
+['rState','rDec'].forEach(i=>document.getElementById(i).addEventListener('change',
+  ()=>{updatePool();renderFiltri('r',i==='rDec'?'dec':'')}));
 document.getElementById('rQ').addEventListener('input',()=>{clearTimeout(updatePool._t);
-  updatePool._t=setTimeout(updatePool,250)});
+  updatePool._t=setTimeout(()=>{updatePool();renderFiltri('r','')},250)});
 document.getElementById('btnSpin').onclick=spin;
 document.getElementById('recToggle').onclick=()=>{
   const b=document.getElementById('recBody'),open=b.style.display==='none';
@@ -4978,13 +5048,46 @@ document.getElementById('rReset').onclick=()=>{
      punto di partenza: lo stato torna a "solo da ascoltare", che e' quello
      con cui la schermata si apre */
   document.getElementById('rState').value='todo';
-  ['rDec','rKind'].forEach(i=>document.getElementById(i).value='');
+  document.getElementById('rDec').value='';
   SEL.rLen.clear();
   SEL.rGen.clear();SEL.rSub.clear();
   const rq=document.getElementById('rQ');if(rq)rq.value='';
   renderAll();
   updatePool();toast('Filtri azzerati');
 };
+
+/* --- tendine delle Opzioni ---
+   Partono sempre chiuse: la schermata si apre corta e uguale a se stessa.
+   L'unica eccezione e' il primo avvio, quando la sincronizzazione non e'
+   ancora configurata: li' la tendina delle chiavi e' proprio quello che
+   serve, e tenerla nascosta sarebbe una trappola. */
+document.querySelectorAll('.gruppo').forEach(gr=>{
+  const testa=gr.querySelector('.grtesta');
+  testa.onclick=()=>{
+    const apro=!gr.classList.contains('aperto');
+    gr.classList.toggle('aperto',apro);
+    testa.setAttribute('aria-expanded',apro?'true':'false');
+    if(apro)setTimeout(()=>{
+      const r=gr.getBoundingClientRect();
+      if(r.top<0||r.bottom>window.innerHeight)
+        gr.scrollIntoView({behavior:'smooth',block:'start'});
+    },40);
+  };
+});
+function apriChiaviSeServe(){
+  const gr=document.getElementById('grChiavi');
+  if(!gr||gr.classList.contains('aperto'))return;
+  /* niente sincronizzazione: e' il primo avvio, la tendina serve subito.
+     Oppure il permesso di Spotify e' scaduto e va rifatto: anche quel tasto
+     sta qui dentro, e mandarti a cercarlo a tendina chiusa e' scortese. */
+  const spotDaRifare=!!((DB.cfg||{}).spotClientId)&&
+    (typeof spotCollegato==='function'&&!spotCollegato());
+  if(!ghCfg()||spotDaRifare){
+    gr.classList.add('aperto');
+    gr.querySelector('.grtesta').setAttribute('aria-expanded','true');
+  }
+}
+apriChiaviSeServe();
 
 /* --- soglia delle pastiglie --- */
 (function(){
