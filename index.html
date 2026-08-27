@@ -613,7 +613,7 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
 /* ==========================================================
    1. STATO
    ========================================================== */
-const APP_VER='95';
+const APP_VER='96';
 const LS='crate.v1', LSK='crate.lfmkey', LSG='crate.gh', LSS='crate.lastsync', LSP='crate.prefs';
 const LSSP='crate.spot';   /* accesso a Spotify: resta su QUESTO dispositivo */
 let DB={albums:[],deleted:[],cfg:{}};
@@ -4896,9 +4896,34 @@ function matches(a,f){
     if(!f.sotto.some(x=>ag.includes(x)))return false;
   }
   if(f.dec&&(!a.year||Math.floor(a.year/10)*10!==+f.dec))return false;
-  if(f.q){const s=((a.title||'')+' '+(a.artist||'')+' '+(a.genres||[]).join(' ')+' '+
-    (a.comment||'')).toLowerCase();
-    if(!s.includes(f.q.toLowerCase()))return false}
+  /* La ricerca guarda parola per parola, non la stringa intera appiccicata.
+     Prima univo titolo, artista, generi e commento in un unico testo e ci
+     cercavo dentro quello che scrivevi: cosi' "k pop" trovava Elvis Presley,
+     perche' i suoi generi appiccicati facevano "roc-k pop-ular"... cioe'
+     "rock pop", e la ricerca passava allegramente sopra lo spazio fra due
+     generi diversi. Ora ogni parola che scrivi deve stare dentro UNA parola
+     dell'album, e le parole corte (una o due lettere, come la "k" di k-pop)
+     devono stare all'inizio: altrimenti la "k" si nasconde in "rock". */
+  if(f.q){
+    /* Spezzo solo sugli spazi e butto la punteggiatura DENTRO le parole, non
+       intorno: cosi' "k-pop" e "r&b" restano una parola sola ("kpop", "rb")
+       invece di diventare "k"+"pop" e "r"+"b", che pescherebbero mezza
+       libreria. Poi provo anche la ricerca tutta attaccata, ed e' quella che
+       fa funzionare "k pop" scritto staccato: "kpop" sta dentro "kpop". */
+    const pulisci=x=>String(x||'').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,'');
+    const parole=String((a.title||'')+' '+(a.artist||'')+' '+
+      (a.genres||[]).join(' ')+' '+(a.comment||'')).split(/\s+/).map(pulisci).filter(Boolean);
+    const cerca=String(f.q).split(/\s+/).map(pulisci).filter(Boolean);
+    if(cerca.length){
+      const tutte=cerca.every(t=>parole.some(w=>
+        t.length<2?w===t:w.indexOf(t)>=0));
+      /* la prova "tutto attaccato" serve solo quando hai scritto piu' pezzi:
+         con una parola sola sarebbe la stessa prova di sopra, ma senza la
+         regola della lettera singola, e "s" ti ripescherebbe mezza libreria */
+      const attaccato=cerca.length>1?cerca.join(''):'';
+      if(!tutte&&!(attaccato&&parole.some(w=>w.indexOf(attaccato)>=0)))return false;
+    }
+  }
   return true;
 }
 /* ---- filtri che si filtrano fra loro ----
