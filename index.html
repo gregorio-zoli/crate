@@ -278,24 +278,21 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
 <section class="view on" id="v-add">
   <div id="installBanner"></div>
   <h1>Aggiungi un album</h1>
-  <p class="sub">Cerca per nome, oppure manda qui uno screenshot.</p>
 
   <div id="sharedBox"></div>
 
   <div class="card" style="margin-bottom:14px">
     <label class="f">Cerca album o artista</label>
     <div class="row">
-      <div class="grow"><input type="text" id="q" placeholder="es. Slowdive Souvlaki" autocomplete="off" enterkeyhint="search"></div>
+      <div class="grow"><input type="text" id="q" placeholder="Album e artista" autocomplete="off" enterkeyhint="search"></div>
       <button class="btn" id="btnSearch">Cerca</button>
     </div>
-    <div class="hint">Copertina, anno, generi e mood arrivano automaticamente.</div>
     <div class="res" id="results"></div>
   </div>
 
   <div class="dz" id="dz">
     <div class="big">&#128247;</div>
     <div style="font-weight:700">Screenshot</div>
-    <div class="tiny muted" style="margin-top:4px">tocca per scegliere dalla galleria, anche pi&ugrave; di uno &middot; su PC trascina o incolla con Ctrl+V</div>
     <input type="file" id="fileIn" accept="image/*" multiple hidden>
   </div>
   <div class="hint" id="shareHint" style="text-align:center"></div>
@@ -312,7 +309,7 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
     <button class="btn gh sm" id="btnLista">Incolla un elenco</button>
   </div>
   <div id="listaBox" style="display:none;margin-top:14px">
-    <label class="f">Un album per riga, come &ldquo;Artista - Titolo&rdquo;</label>
+    <label class="f">Un album per riga</label>
     <textarea id="listaTxt" rows="7" placeholder="Loathe - I Let It in and It Took Everything&#10;Jesu - Jesu&#10;Holy Fawn - Death Spells" style="width:100%;resize:vertical"></textarea>
     <div class="row" style="margin-top:8px">
       <button class="btn" id="listaGo">Cerca questi album</button>
@@ -357,12 +354,11 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
 <!-- ============ RANDOM ============ -->
 <section class="view" id="v-rand">
   <h1>Cosa ascolto?</h1>
-  <p class="sub">I filtri sono tutti opzionali: puoi premere e basta.</p>
   <div class="row" style="margin-bottom:12px">
     <button class="btn gh sm" id="rReset">&#127922; Tutto casuale &mdash; azzera i filtri</button>
     <span class="tiny muted" id="rActive"></span>
   </div>
-  <input type="text" id="rQ" placeholder="Contiene&hellip; (titolo, artista, genere)" style="margin-bottom:12px">
+  <input type="text" id="rQ" placeholder="Cerca fra i risultati" style="margin-bottom:12px">
   <div class="filtgrid">
     <div><label class="f">Stato</label><select id="rState">
       <option value="todo">Solo da ascoltare</option>
@@ -615,7 +611,7 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
 /* ==========================================================
    1. STATO
    ========================================================== */
-const APP_VER='99';
+const APP_VER='100';
 const LS='crate.v1', LSK='crate.lfmkey', LSG='crate.gh', LSS='crate.lastsync', LSP='crate.prefs';
 const LSSP='crate.spot';   /* accesso a Spotify: resta su QUESTO dispositivo */
 let DB={albums:[],deleted:[],cfg:{}};
@@ -4301,8 +4297,7 @@ function manualForm(pre){
    '<div><label class="f">Copertina da URL (opzionale)</label><input type="text" id="mnC" placeholder="https://..." value="'+esc(pre.coverUrl||'')+'"></div>'+
    '<div id="mnSug"></div>'+
    '<div class="row"><button class="btn" id="mnSave">Salva</button></div>'+
-   '<div class="hint">Salvando, cerco da solo copertina, anno, generi e mood. '+
-   'Se mentre scrivi compare l&rsquo;album giusto qui sopra, toccalo: &egrave; la strada pi&ugrave; veloce.</div></div>';
+   '</div>';
   const maskM=document.getElementById('mask');
   const eraApertaM=maskM.classList.contains('on');
   maskM.classList.add('on');
@@ -6404,8 +6399,10 @@ if(navigator.serviceWorker){
   window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
 }
 const standalone=matchMedia('(display-mode: standalone)').matches||navigator.standalone;
-document.getElementById('shareHint').innerHTML=standalone
-  ? 'Da Instagram: screenshot &rarr; Condividi &rarr; <b>Crate</b>. Arriva qui e parte l\'OCR.'
+/* A app installata non serve piu' spiegare come si condivide: lo sai. Il
+   suggerimento resta solo quando l'app NON e' installata, dove e' l'unico
+   modo di sapere che quella strada esiste. */
+document.getElementById('shareHint').innerHTML=standalone ? ''
   : 'Installa l\'app (voce &ldquo;Installa app&rdquo; nel menu del browser) per riceverla dal menu Condividi di Android.';
 
 /* --- sincronizzazione su eventi di sistema --- */
