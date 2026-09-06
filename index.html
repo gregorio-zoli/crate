@@ -611,7 +611,7 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
 /* ==========================================================
    1. STATO
    ========================================================== */
-const APP_VER='100';
+const APP_VER='101';
 const LS='crate.v1', LSK='crate.lfmkey', LSG='crate.gh', LSS='crate.lastsync', LSP='crate.prefs';
 const LSSP='crate.spot';   /* accesso a Spotify: resta su QUESTO dispositivo */
 let DB={albums:[],deleted:[],cfg:{}};
@@ -4919,9 +4919,16 @@ function matches(a,f){
          condizione in piu' e deve valere qualcosa: li' pretendo che sia una
          parola intera, altrimenti la "k" di "k pop" si nasconde in "rock" e
          ti riporta Elvis Presley. */
-      const soloUna=cerca.length===1;
-      const tutte=cerca.every(t=>parole.some(w=>
-        (t.length<2&&!soloUna)?w===t:w.indexOf(t)>=0));
+      /* L'ultimo pezzo e' quello che stai ancora scrivendo: deve valere come
+         inizio di parola, sempre, altrimenti "pierce t" non trova niente e i
+         risultati spariscono di colpo appena batti la prima lettera della
+         seconda parola. I pezzi prima invece li hai finiti di scrivere, e se
+         sono di una lettera sola devono valere per una parola intera: e' la
+         regola che tiene la "k" di "k pop" fuori da "rock". */
+      const tutte=cerca.every((t,i)=>{
+        const ultimo=i===cerca.length-1;
+        return parole.some(w=>(t.length<2&&!ultimo)?w===t:w.indexOf(t)>=0);
+      });
       /* la prova "tutto attaccato" serve solo quando hai scritto piu' pezzi:
          con una parola sola sarebbe la stessa prova di sopra, ma senza la
          regola della lettera singola, e "s" ti ripescherebbe mezza libreria */
