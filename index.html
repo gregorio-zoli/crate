@@ -365,6 +365,7 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
       <option value="all">Tutti</option>
       <option value="fav">Solo preferiti</option>
       <option value="done">Solo già ascoltati</option>
+      <option value="davotare">Ascoltati senza voto</option>
     </select></div>
     <div><label class="f">Generi</label><div class="mchip" id="rGenreMenu"></div></div>
     <div><label class="f">Sottogeneri</label><div class="mchip" id="rSubMenu"></div></div>
@@ -611,7 +612,7 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
 /* ==========================================================
    1. STATO
    ========================================================== */
-const APP_VER='101';
+const APP_VER='102';
 const LS='crate.v1', LSK='crate.lfmkey', LSG='crate.gh', LSS='crate.lastsync', LSP='crate.prefs';
 const LSSP='crate.spot';   /* accesso a Spotify: resta su QUESTO dispositivo */
 let DB={albums:[],deleted:[],cfg:{}};
@@ -4881,6 +4882,9 @@ function matches(a,f){
   if(a.pending&&f.state!=='all')return false;
   if(f.state==='todo'&&a.listened)return false;
   if(f.state==='done'&&!a.listened)return false;
+  /* ascoltati che aspettano ancora un giudizio. "Non votato" vuol dire voto
+     assente: lo zero e' un voto, e chi l'ha preso non torna in questa lista. */
+  if(f.state==='davotare'&&(!a.listened||a.rating!=null))return false;
   if(f.state==='fav'&&!a.fav)return false;
   /* piu' generi selezionati = OR: basta che l'album ne abbia uno */
   if(f.generi&&f.generi.length){
@@ -5183,6 +5187,7 @@ function updatePool(){
     if(st==='todo')on.push('solo da ascoltare');
     if(st==='fav')on.push('solo preferiti');
     if(st==='done')on.push('solo ascoltati');
+    if(st==='davotare')on.push('ascoltati senza voto');
     [...SEL.rGen,...SEL.rSub].forEach(v=>on.push(v));
     const rq=document.getElementById('rQ');if(rq&&rq.value.trim())on.push('\u201c'+rq.value.trim()+'\u201d');
     const dec=document.getElementById('rDec').value;if(dec)on.push(dec);
