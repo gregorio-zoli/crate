@@ -206,11 +206,10 @@ label.f{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.7p
 .stars{display:flex;gap:2px;align-items:center;flex-wrap:wrap}
 .stars button{color:var(--fg3);line-height:0;padding:0 1px}
 .stars button.on{color:var(--gold)}
-/* l'interruttore del mezzo voto: stessa altezza delle stelle, tondo, e si
-   accende dell'oro quando e' attivo, cosi' si legge come parte del voto */
-.stars .mezzo{font-size:13px;font-weight:700;letter-spacing:.5px;margin-left:7px;
-  padding:3px 9px;border:1px solid var(--line);border-radius:999px;color:var(--fg3)}
-.stars .mezzo.on{border-color:var(--gold);color:var(--gold)}
+/* Il mezzo voto e' una mezza stella, non un'etichetta: parla la stessa
+   lingua di quello che modifica. Spento resta il grigio del contorno, acceso
+   l'oro come le altre (ci pensa .stars button.on), spento del tutto sbiadisce. */
+.stars .mezzo{margin-left:10px}
 .stars .mezzo:disabled{opacity:.3;cursor:default}
 .links{display:flex;gap:8px;flex-wrap:wrap}
 .links a{background:var(--bg3);border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-size:13px;color:var(--fg2);font-weight:600}
@@ -391,8 +390,7 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
       <span id="recArrow">&#9656;</span> Consigli dalla tua libreria
     </button>
     <div id="recBody" style="display:none;margin-top:14px">
-      <p class="tiny muted" style="margin-top:0">Nessun suggerimento ti arriva addosso: appare solo quello che chiedi tu.</p>
-      <div class="filtgrid">
+          <div class="filtgrid">
         <div><label class="f">Partendo da</label><select id="recSeed">
           <option value="__taste">I miei voti e preferiti</option>
         </select></div>
@@ -414,14 +412,13 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
 
   <div class="card" style="margin-bottom:14px">
     <h2>Collegamenti a Spotify</h2>
-    <p class="tiny muted" style="margin-top:0">Trova in anticipo la pagina dell&rsquo;album, cos&igrave; il tasto <b>&#9654;</b> apre subito.</p>
     <div class="row">
       <button class="btn" id="spotMissing">Collega quelli che mancano</button>
       <button class="btn gh" id="spotAll">Ricontrolla tutti</button>
       <button class="btn gh" id="spotVerifica">Verifica i link</button>
       <button class="btn gh sm" id="spotVerificaTutti">Rifai la verifica da capo</button>
     </div>
-    <div class="hint">&ldquo;Ricontrolla tutti&rdquo; riprova anche quelli finiti altrove. &ldquo;Verifica i link&rdquo; non cambia niente: apre i collegamenti e ti dice quali portano a un disco diverso o a una pagina che non si ascolta. Chi passa la verifica non viene pi&ugrave; ricontrollato, a meno che il link non cambi, cos&igrave; dal secondo giro in poi guarda solo i nuovi e quelli ancora da sistemare. I link che hai incollato tu non si toccano mai.</div>
+    <div class="hint">La verifica non cambia niente e non ricontrolla chi l&rsquo;ha gi&agrave; passata. I link incollati da te non si toccano mai.</div>
     <div id="spotEsiti" style="margin-top:12px"></div>
     <div id="spotOra" style="margin-top:14px"></div>
     <div id="spotRiprendi"></div>
@@ -434,7 +431,6 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
 
   <div class="card" style="margin-bottom:14px">
     <h2>Riaggiorna i generi di tutta la libreria</h2>
-    <p class="tiny muted" style="margin-top:0">Generi e sottogeneri da <b>Discogs</b> e <b>MusicBrainz</b>. Circa due secondi e mezzo per album.</p>
     <div class="row">
       <button class="btn" id="bulkMissing">Completa quelli senza generi</button>
       <button class="btn gh" id="bulkAll">Ripassa tutti</button>
@@ -451,7 +447,6 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
 
   <div class="card" style="margin-bottom:14px">
     <h2>Pastiglie dei sottogeneri</h2>
-    <p class="tiny muted" style="margin-top:0">Quante ne vuoi vedere nei filtri. Le pastiglie che spariscono non tolgono generi agli album: li trovi sempre col contenitore o cercandoli a mano.</p>
     <div class="row" style="align-items:flex-end">
       <div style="flex:0 0 130px"><label class="f">Da quanti album</label>
         <input type="number" id="prSoglia" min="2" max="200" step="1"></div>
@@ -460,7 +455,7 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
     <label style="display:flex;gap:10px;align-items:flex-start;padding:12px 0 2px;cursor:pointer">
       <input type="checkbox" id="prTopMacro" style="width:auto;margin:3px 0 0;flex:none;accent-color:var(--acc)">
       <span style="min-width:0"><span style="font-size:14px">Aggiungi i primi 5 di ogni contenitore</span>
-      <span class="tiny muted" style="display:block">I mondi piccoli portano comunque le loro divisioni: senza questo, hip hop, jazz e metal restano senza pastiglie perch&eacute; nessun loro sottogenere arriva alla soglia.</span></span>
+      <span class="tiny muted" style="display:block">Senza, hip hop, jazz e metal restano senza pastiglie: nessun loro sottogenere arriva alla soglia.</span></span>
     </label>
     <div class="hint" id="prSogliaOra"></div>
   </div>
@@ -485,11 +480,9 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
     </div>
     <div class="card" style="margin-bottom:14px">
       <h2>Account Spotify</h2>
-      <p class="tiny muted" style="margin-top:0">Con l&rsquo;account, i dati arrivano da Spotify invece che ricostruiti da altre fonti. Registrazione gratuita, una volta sola.</p>
       <div id="spotStato" class="tiny" style="margin:10px 0 12px"></div>
       <label class="f">Client ID</label>
       <input type="text" id="spotId" placeholder="le 32 lettere e numeri che ti d&agrave; Spotify" autocapitalize="none" spellcheck="false">
-      <div class="tiny muted" style="margin:6px 0 12px">Non &egrave; una password: il Client ID &egrave; pubblico per costruzione. Lo sincronizzo con la libreria, cos&igrave; lo scrivi una volta e il telefono lo trova gi&agrave;.</div>
       <label class="f">Indirizzo di ritorno da incollare su Spotify</label>
       <div class="row" style="align-items:center;gap:8px;margin-bottom:12px">
         <code id="spotRed" style="flex:1;min-width:0;font-size:12px;word-break:break-all;color:var(--fg2)"></code>
@@ -503,12 +496,11 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
     </div>
     <div class="card" style="margin-bottom:14px">
       <h2>Chiavi facoltative</h2>
-      <p class="tiny muted" style="margin-top:0">Non servono per funzionare. La prima velocizza molto il riaggiornamento dei generi.</p>
       <label class="f">Discogs</label>
       <div class="row"><div class="grow"><input type="text" id="dcKey" placeholder="token personale Discogs" autocomplete="off" spellcheck="false"></div>
         <button class="btn gh" id="dcSave">Salva</button></div>
       <div class="tiny" id="dcStato" style="margin-top:6px"></div>
-      <div class="tiny muted" style="margin:6px 0 14px">Da 25 a 60 richieste al minuto: su 600 album &egrave; la differenza fra mezz&rsquo;ora e dieci minuti. Si sincronizza con la libreria.
+      <div class="tiny muted" style="margin:6px 0 14px">
         <details class="hint" style="margin-top:6px"><summary style="cursor:pointer">Dove si prende</summary>
         <div style="margin-top:6px">discogs.com &rsaquo; il tuo account &rsaquo; <b>Settings</b> &rsaquo; <b>Developers</b> &rsaquo; <b>Generate new token</b>. Copia la riga sotto &ldquo;personal access token&rdquo;.</div></details>
       </div>
@@ -517,7 +509,7 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
         <div class="grow"><input type="text" id="lfmKey" placeholder="API key Last.fm" autocomplete="off" spellcheck="false"></div>
         <button class="btn gh" id="btnSaveKey">Salva</button>
       </div>
-      <div class="tiny muted" style="margin-top:6px">Ormai serve solo per la descrizione dell&rsquo;album. Si sincronizza con la libreria. <a href="https://www.last.fm/api/account/create" target="_blank" rel="noopener">Prendine una</a>.</div>
+      <div class="tiny muted" style="margin-top:6px"><a href="https://www.last.fm/api/account/create" target="_blank" rel="noopener">Prendine una</a>.</div>
     </div>
     </div>
   </div>
@@ -527,7 +519,6 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
     <div class="grbody">
     <div class="card" style="margin-bottom:14px">
       <h2>Come si presenta la scheda di un album</h2>
-      <p class="tiny muted" style="margin-top:0">Si sincronizza con la libreria: quello che decidi qui lo ritrovi su tutti i dispositivi collegati.</p>
       <div style="margin-bottom:14px">
         <label class="f">Visualizzazione</label>
         <select id="prMode">
@@ -545,19 +536,18 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
       <label style="display:flex;gap:10px;align-items:flex-start;padding:14px 0 2px;cursor:pointer;border-top:1px solid var(--line);margin-top:14px">
         <input type="checkbox" id="prDopoVoto" style="width:auto;margin:3px 0 0;flex:none;accent-color:var(--acc)">
         <span style="min-width:0"><span style="font-size:14px">Mostra i link esterni solo dopo che hai votato</span>
-        <span class="tiny muted" style="display:block">Album of the Year e RateYourMusic restano nascosti finch&eacute; non metti il tuo voto, cos&igrave; non ti ancori al giudizio degli altri. Dopo compaiono come sempre.</span></span>
+        <span class="tiny muted" style="display:block">Album of the Year e RateYourMusic compaiono dopo il tuo voto.</span></span>
       </label>
     </div>
     <div class="card" style="margin-bottom:14px">
       <h2>Dove ascolti</h2>
-      <p class="tiny muted" style="margin-top:0">Provate in quest&rsquo;ordine, mi fermo alla prima che ha l&rsquo;album. Togli quelle a cui non sei abbonato.</p>
+      <p class="tiny muted" style="margin-top:0">Provate in quest&rsquo;ordine, mi fermo alla prima che ha l&rsquo;album.</p>
       <div id="prPlat"></div>
       <label style="display:flex;gap:10px;align-items:flex-start;padding:12px 0 2px;cursor:pointer">
         <input type="checkbox" id="prSpotApp" style="width:auto;margin:3px 0 0;flex:none;accent-color:var(--acc)">
         <span style="min-width:0"><span style="font-size:14px">Apri l&rsquo;app di Spotify invece del browser</span>
-        <span class="tiny muted" style="display:block">Vale solo su questo dispositivo. Utile sul PC, dove il tasto &#9654; aprirebbe il lettore web. La prima volta il browser chiede il permesso.</span></span>
+        <span class="tiny muted" style="display:block">Vale solo su questo dispositivo.</span></span>
       </label>
-      <div class="hint">Spotify resta in cima. Le altre si spostano con le frecce.</div>
     </div>
     </div>
   </div>
@@ -567,7 +557,6 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
     <div class="grbody">
     <div class="card" style="margin-bottom:14px">
       <h2>Diagnostica</h2>
-      <p class="tiny muted" style="margin-top:0">Se qualcosa non funziona, qui si vede cosa.</p>
       <div class="row">
         <button class="btn" id="btnDiag">Prova le fonti</button>
         <button class="btn gh" id="btnDiagAlbum">Cosa dice Spotify di un album</button>
@@ -591,8 +580,7 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
   </div>
 
   <div class="tiny muted" style="text-align:center;padding:6px 0 20px">
-    Crate <b id="verApp"></b> &middot; se questo numero non cambia dopo un
-    aggiornamento, stai ancora vedendo la versione vecchia<br>
+    Crate <b id="verApp"></b><br>
     <button class="btn gh sm" id="btnAggiorna" style="margin-top:8px">Forza l&rsquo;aggiornamento</button>
     <div id="ultimaUscita" style="margin-top:8px"></div>
   </div>
@@ -623,7 +611,7 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
 /* ==========================================================
    1. STATO
    ========================================================== */
-const APP_VER='105';
+const APP_VER='107';
 const LS='crate.v1', LSK='crate.lfmkey', LSG='crate.gh', LSS='crate.lastsync', LSP='crate.prefs';
 const LSSP='crate.spot';   /* accesso a Spotify: resta su QUESTO dispositivo */
 let DB={albums:[],deleted:[],cfg:{}};
@@ -738,7 +726,7 @@ function loadLocal(){
 }
 function saveLocal(){
   try{localStorage.setItem(LS,JSON.stringify(DB))}
-  catch(e){toast('Memoria del browser piena: esporta un JSON')}
+  catch(e){toast('Memoria piena: esporta un JSON')}
   sizeHint();
 }
 /* ogni modifica passa da qui: aggiorna il timestamp e programma la sincronizzazione */
@@ -1028,7 +1016,7 @@ async function spotEntra(){
   /* localStorage e non sessionStorage: su Android l'app installata apre il
      permesso in una finestra separata, e la sessione non la seguirebbe */
   try{localStorage.setItem('crate.pkce',verifier);localStorage.setItem('crate.stato',stato)}
-  catch(e){toast('Il browser non mi lascia salvare nulla: accesso impossibile');return}
+  catch(e){toast('Il browser non mi lascia salvare niente');return}
   location.href=SPOT_AUTH+'?client_id='+encodeURIComponent(SPOT.clientId)+
     '&response_type=code&redirect_uri='+encodeURIComponent(spotRedirect())+
     '&code_challenge_method=S256&code_challenge='+sfida+'&state='+stato;
@@ -3753,7 +3741,7 @@ function righeDaTesto(txt){
 }
 async function importaElenco(txt){
   const righe=righeDaTesto(txt);
-  if(!righe.length){toast('Non ho riconosciuto nessuna riga "Artista - Titolo"');return}
+  if(!righe.length){toast('Nessuna riga riconosciuta');return}
   deck=[];deckIdx=0;deckTotal=1;deckDone=false;deckAdded=0;deckSkipped=0;
   show('add');openDeck();
   const work=righe.slice(0,LIST_MAX*2);
@@ -4356,8 +4344,7 @@ function manualForm(pre){
      '<label style="display:flex;gap:9px;align-items:center;cursor:pointer">'+
      '<input type="checkbox" id="mnUseShot" style="width:auto;margin:0;accent-color:var(--acc)">'+
      '<img src="'+esc(pre.cover)+'" style="width:70px;border-radius:8px">'+
-     '<span class="tiny muted">usa lo screenshot come copertina<br>'+
-     '(spesso conviene lasciarlo vuoto: la trovi meglio dopo dalla scheda)</span></label></div>':'')+
+     '<span class="tiny muted">usa lo screenshot come copertina</span></label></div>':'')+
    '<div><label class="f">Copertina da URL (opzionale)</label><input type="text" id="mnC" placeholder="https://..." value="'+esc(pre.coverUrl||'')+'"></div>'+
    '<div id="mnSug"></div>'+
    '<div class="row"><button class="btn" id="mnSave">Salva</button></div>'+
@@ -4500,8 +4487,8 @@ function openAlbum(id,keepScroll){
       '</div></div></div>'+
   '<div class="mbody">'+
     '<div class="sec"><label class="f">Voto</label><div class="stars" id="stars">'+stars+
-      '<button class="mezzo'+(mezzo?' on':'')+'" id="bMezzo"'+
-        (!voto||voto>=VOTO_MAX?' disabled':'')+'>.5</button>'+
+      '<button class="mezzo'+(mezzo?' on':'')+'" id="bMezzo" aria-label="mezzo voto"'+
+        (!voto||voto>=VOTO_MAX?' disabled':'')+'>'+stella('mezza')+'</button>'+
       '<span class="muted tiny" style="margin-left:9px">'+(voto?voto+'/10':'non votato')+'</span>'+
       (voto?' <button class="btn gh sm" id="bClr" style="margin-left:6px">azzera</button>':'')+'</div></div>'+
     (vis('quick')?'<div class="sec"><label class="f">In due parole</label>'+
@@ -4647,7 +4634,7 @@ function openAlbum(id,keepScroll){
     try{L=await resolveListen(a,true)}catch(e){}
     bLink.innerHTML=et;
     if(L&&/spotify/i.test(L.name||''))toast('Collegato a Spotify');
-    else if(L)toast('Su Spotify non risulta: collegato a '+L.name);
+    else if(L)toast('Collegato a '+L.name);
     else{
       toast('Non l\'ho trovato');
       const box=document.getElementById('linkMotivo');
@@ -4679,7 +4666,7 @@ function openAlbum(id,keepScroll){
        indovinare, e' l'indirizzo che hai scelto tu e vince su tutto. */
     if(!idSpotify(url)&&!/spotify\.link|spoti\.fi/.test(url)){
       if(!/^https?:\/\/\S+$/i.test(url)){
-        toast('Non sembra un indirizzo: deve cominciare con http');return;
+        toast('Serve un indirizzo che cominci con http');return;
       }
       const p=piattaformaDaUrl(url);
       a.listenUrl=url;a.platform=p;a.platName=p;
@@ -5180,17 +5167,22 @@ let medieMin=2;
 function apriMedie(){
   const votati=DB.albums.filter(a=>a.rating&&!a.pending);
   const media=votati.length?votati.reduce((s,a)=>s+a.rating,0)/votati.length:0;
+  /* La colonna di destra ha una larghezza fissa. Prima era "auto", quindi
+     ogni riga se la calcolava da sola: "7 album" stringeva la colonna e
+     allargava la barra, "16 album" faceva il contrario. Risultato, numeri
+     storti e barre di lunghezza diversa a parita' di media. */
   const riga=x=>{
     const largo=Math.max(2,Math.round(x.media*10));
     const sopra=x.media>=media;
-    return '<div style="display:grid;grid-template-columns:1fr auto;gap:2px 10px;padding:9px 0;'+
-      'border-bottom:1px solid var(--line)">'+
+    const oro=sopra?'var(--gold,#e8c56a)':'var(--fg2)';
+    return '<div style="display:grid;grid-template-columns:minmax(0,1fr) 62px;'+
+      'gap:3px 10px;padding:9px 0;border-bottom:1px solid var(--line)">'+
       '<span style="font-size:14px">'+esc(x.k)+'</span>'+
-      '<span style="font-size:14px;font-weight:700;color:'+(sopra?'var(--gold,#e8c56a)':'var(--fg2)')+'">'+
+      '<span style="font-size:14px;font-weight:700;text-align:right;color:'+oro+'">'+
         x.media.toFixed(1)+'</span>'+
-      '<div class="bar" style="height:5px"><i style="width:'+largo+'%;background:'+
+      '<div class="bar" style="height:5px;align-self:center"><i style="width:'+largo+'%;background:'+
         (sopra?'var(--gold,#e8c56a)':'var(--fg3)')+'"></i></div>'+
-      '<span class="tiny muted" style="white-space:nowrap">'+x.n+(x.n===1?' album':' album')+'</span>'+
+      '<span class="tiny muted" style="white-space:nowrap;text-align:right">'+x.n+' album</span>'+
     '</div>';
   };
   const blocco=(titolo,dati)=>{
@@ -5207,8 +5199,7 @@ function apriMedie(){
     '<div class="mbody"><h2>Cosa ti piace davvero</h2>'+
     (votati.length
       ? '<div class="tiny muted" style="margin:-8px 0 4px">Media su <b>'+votati.length+
-          '</b> album votati: <b>'+media.toFixed(1)+'</b>. In oro quelli sopra la tua media. '+
-          'Il numero di album conta: una media su due dischi dice poco.</div>'+
+          '</b> album votati: <b>'+media.toFixed(1)+'</b>. In oro quelli sopra la tua media.</div>'+
         '<div class="row" style="gap:8px;margin-bottom:4px">'+
           [1,2,3,5].map(v=>'<button class="btn '+(v===medieMin?'':'gh ')+'sm" data-min="'+v+'">'+
             (v===1?'tutti':'da '+v+'+')+'</button>').join('')+'</div>'+
@@ -5967,7 +5958,7 @@ function renderPrefs(){
   document.getElementById('prPanel').style.pointerEvents=min?'none':'auto';
   document.getElementById('prModeHint').textContent=min
     ? 'Copertina, titolo, artista, anno, voto, preferito, commento e pulsante di ascolto. Nient\'altro.'
-    : 'Spunta quello che vuoi vedere. Quello che togli non viene cancellato, solo nascosto.';
+    : '';
   document.getElementById('prShow').innerHTML=Object.keys(PREF_LABELS)
     .map(k=>checkRow(k,PREF_LABELS[k][0],PREF_LABELS[k][1],P.show[k]!==false)).join('');
   document.getElementById('prLinks').innerHTML=linkSet({artist:'',title:''},true)
@@ -6122,7 +6113,7 @@ function renderSpot(){
        Se Spotify sta ancora rifiutando se ne accorge da solo in un attimo. */
     spotAttesaFino=0;SPOT.attesa=0;SPOT.rinuncia=0;SPOT.attesaApp='';
     spotRiposa();spotSalva();renderSpot();renderSpotOra();
-    toast('Riprovo: se Spotify rifiuta ancora, lo scopro subito');
+    toast('Riprovo');
   };
   const g=spotGiorni();
   const mia=SPOT.rinuncia&&spotInCoda();
@@ -6164,8 +6155,7 @@ function renderSpot(){
         'dispositivo: sugli altri Crate continua a funzionare.')+
     ' Intanto l\u2019app usa archivio, Wikidata e Odesli, e riprende da sola.</div>'+
     '<div style="margin-top:8px"><button class="btn gh sm" id="spotSblocca">Riprova adesso</button>'+
-    '<span class="tiny muted" style="margin-left:8px">se pensi che il conto sia rimasto '+
-    'indietro</span></div></div>':'';
+    '</div></div>':'';
   /* Le parentesi non sono un vezzo: senza, "pausa + spotCollegato()" diventa
      la stringa "false", che come condizione e' VERA. Il pannello ha detto
      "collegato" per settimane, anche quando non lo era, e ci ha fatto cercare
@@ -6513,14 +6503,12 @@ document.getElementById('btnDiag').onclick=async()=>{
   /* il dettaglio della pausa sta qui, non nel pannello principale: li' serve
      sapere quanto dura e di chi e' la colpa, qui serve il verbale */
   if(spotInCoda())box.insertAdjacentHTML('beforeend',dettoDaSpotify());
-  box.insertAdjacentHTML('beforeend','<div class="tiny muted" style="margin-top:10px">'+
-    'Le crocette rosse spiegano perch&eacute; qualcosa non funziona: mandami questo elenco.</div>');
 };
 document.getElementById('btnSaveKey').onclick=()=>{
   const v=document.getElementById('lfmKey').value.trim();
   if(v)localStorage.setItem(LSK,v);else localStorage.removeItem(LSK);
   cfgSet('lfmKey',v);
-  toast(v?'Chiave salvata, vale su tutti i dispositivi':'Chiave rimossa');
+  toast(v?'Chiave salvata':'Chiave rimossa');
 };
 document.getElementById('btnExport').onclick=()=>{
   const a=document.createElement('a');
