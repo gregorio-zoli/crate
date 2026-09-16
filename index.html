@@ -204,8 +204,14 @@ label.f{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.7p
 .mbody{padding:20px;display:grid;gap:18px}
 .mclose{position:absolute;top:12px;right:12px;background:rgba(0,0,0,.55);border:1px solid var(--line);width:34px;height:34px;border-radius:50%;font-size:17px;color:var(--fg);z-index:3}
 .stars{display:flex;gap:2px;align-items:center;flex-wrap:wrap}
-.stars button{font-size:24px;color:var(--fg3);line-height:1;padding:0 1px}
+.stars button{color:var(--fg3);line-height:0;padding:0 1px}
 .stars button.on{color:var(--gold)}
+/* l'interruttore del mezzo voto: stessa altezza delle stelle, tondo, e si
+   accende dell'oro quando e' attivo, cosi' si legge come parte del voto */
+.stars .mezzo{font-size:13px;font-weight:700;letter-spacing:.5px;margin-left:7px;
+  padding:3px 9px;border:1px solid var(--line);border-radius:999px;color:var(--fg3)}
+.stars .mezzo.on{border-color:var(--gold);color:var(--gold)}
+.stars .mezzo:disabled{opacity:.3;cursor:default}
 .links{display:flex;gap:8px;flex-wrap:wrap}
 .links a{background:var(--bg3);border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-size:13px;color:var(--fg2);font-weight:600}
 .sec{border-top:1px solid var(--line);padding-top:16px}
@@ -536,6 +542,11 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
         <label class="f">Link esterni da tenere</label>
         <div id="prLinks" style="display:grid;gap:2px"></div>
       </div>
+      <label style="display:flex;gap:10px;align-items:flex-start;padding:14px 0 2px;cursor:pointer;border-top:1px solid var(--line);margin-top:14px">
+        <input type="checkbox" id="prDopoVoto" style="width:auto;margin:3px 0 0;flex:none;accent-color:var(--acc)">
+        <span style="min-width:0"><span style="font-size:14px">Mostra i link esterni solo dopo che hai votato</span>
+        <span class="tiny muted" style="display:block">Album of the Year e RateYourMusic restano nascosti finch&eacute; non metti il tuo voto, cos&igrave; non ti ancori al giudizio degli altri. Dopo compaiono come sempre.</span></span>
+      </label>
     </div>
     <div class="card" style="margin-bottom:14px">
       <h2>Dove ascolti</h2>
@@ -612,7 +623,7 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
 /* ==========================================================
    1. STATO
    ========================================================== */
-const APP_VER='102';
+const APP_VER='105';
 const LS='crate.v1', LSK='crate.lfmkey', LSG='crate.gh', LSS='crate.lastsync', LSP='crate.prefs';
 const LSSP='crate.spot';   /* accesso a Spotify: resta su QUESTO dispositivo */
 let DB={albums:[],deleted:[],cfg:{}};
@@ -634,7 +645,11 @@ const PREF_DEFAULTS={
   plat:['spotify','youtubeMusic','youtube','bandcamp','soundcloud','archive'],
   /* aprire l'app installata invece del browser: e' una scelta di questo
      dispositivo, non della libreria, quindi sta con le preferenze */
-  spotApp:false
+  spotApp:false,
+  /* nascondere i giudizi altrui finche' non hai dato il tuo: spento di
+     serie, perche' e' una scelta su come vuoi votare, non un difetto da
+     correggere a tutti */
+  dopoVoto:false
 };
 let P=JSON.parse(JSON.stringify(PREF_DEFAULTS));
 function applicaPrefs(p){
@@ -646,6 +661,7 @@ function applicaPrefs(p){
     const buone=p.plat.filter(k=>PIATTAFORME.some(x=>x.k===k));
     if(buone.length)P.plat=buone;
   }
+  if(typeof p.dopoVoto==='boolean')P.dopoVoto=p.dopoVoto;
 }
 function loadPrefs(){
   /* prima la copia locale, poi quella della libreria: se ci sono tutte e due
@@ -658,7 +674,7 @@ function loadPrefs(){
 function savePrefs(){
   try{localStorage.setItem(LSP,JSON.stringify(P))}catch(e){}
   /* nella libreria ci va tutto tranne spotApp, che e' di questo dispositivo */
-  const cond={mode:P.mode,show:P.show,links:P.links,plat:P.plat};
+  const cond={mode:P.mode,show:P.show,links:P.links,plat:P.plat,dopoVoto:P.dopoVoto};
   cfgSet('prefs',JSON.stringify(cond));
 }
 /* nella vista minimale sopravvivono solo l'essenziale e le azioni */
@@ -679,6 +695,35 @@ function cuore(pieno,lato){
   return '<svg viewBox="0 0 24 24" width="'+s+'" height="'+s+'" aria-hidden="true" '+
     'style="vertical-align:-2px;fill:'+(pieno?'currentColor':'none')+
     ';stroke:currentColor;stroke-width:'+(pieno?0:1.8)+';stroke-linejoin:round"><path d="'+d+'"/></svg>';
+}
+/* Una stella disegnata invece del carattere ★, perche' serve poterla
+   riempire a meta': con un carattere non si puo', e le mezze stelle sono il
+   motivo per cui esiste questa funzione. Il taglio e' un gradiente fermo al
+   50%, non due mezze stelle accostate, cosi' il contorno resta uno solo. */
+function stella(stato,lato){
+  const d='M12 2.6l2.9 6.1 6.6.9-4.8 4.7 1.2 6.6L12 17.7 6.1 20.9l1.2-6.6'+
+    'L2.5 9.6l6.6-.9L12 2.6Z';
+  const s=lato||24,id='mz'+(stella._n=(stella._n||0)+1);
+  const pieno=stato==='pieno',mezza=stato==='mezza';
+  return '<svg viewBox="0 0 24 24" width="'+s+'" height="'+s+'" aria-hidden="true" '+
+    'style="vertical-align:-3px;display:block">'+
+    (mezza?'<defs><linearGradient id="'+id+'"><stop offset="50%" stop-color="currentColor"/>'+
+      '<stop offset="50%" stop-color="transparent"/></linearGradient></defs>':'')+
+    '<path d="'+d+'" fill="'+(pieno?'currentColor':mezza?'url(#'+id+')':'none')+'" '+
+    'stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>';
+}
+/* Le due regole del mezzo voto, scritte una volta sola. Il mezzo si AGGIUNGE
+   al voto scelto: sette stelle piu' il mezzo fanno 7.5, che e' l'unica cosa
+   che uno si aspetta premendo ".5". L'unico limite e' in cima: il 10.5 non
+   esiste, quindi li' il mezzo non si applica e il voto resta 10. */
+const VOTO_MAX=10;
+function votoDaStella(i,mezzoAcceso){
+  return Math.min(VOTO_MAX,+i+(mezzoAcceso?.5:0));
+}
+function votoMezzo(v){
+  const x=+v;
+  if(x%1===.5)return Math.floor(x);       /* spento: 7.5 torna 7 */
+  return x>=VOTO_MAX?VOTO_MAX:x+.5;       /* acceso: 7 diventa 7.5 */
 }
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 /* Cover Art Archive risponde 404 quando la copertina non c'e': nascondo
@@ -1960,12 +2005,16 @@ async function fetchLastfm(artist,title){
     const al=d&&d.album;if(!al)return empty;
     const t=al.tags&&al.tags.tag;
     const tags=t?(Array.isArray(t)?t:[t]).map(x=>x.name):[];
-    let about='';
-    if(al.wiki&&al.wiki.summary){
-      about=String(al.wiki.summary).replace(/<[^>]*>/g,'').replace(/\s+/g,' ')
-        .replace(/Read more on Last\.fm.*/i,'').trim();
-      if(about.length>700)about=about.slice(0,700).replace(/\s+\S*$/,'')+'...';
-    }
+    /* "summary" e' l'anteprima che Last.fm taglia a meta' frase, con in coda
+       il link "Read more". Il testo intero e' in "content", e arriva nella
+       stessa risposta: chiedere il primo era un taglio che mi ero inflitto
+       da solo. Da qui esce completo, e non finisce nella libreria: chi lo
+       vuole se lo va a prendere quando apre la scheda. */
+    const grezzo=(al.wiki&&(al.wiki.content||al.wiki.summary))||'';
+    const about=String(grezzo).replace(/<[^>]*>/g,'').replace(/\r/g,'')
+      .replace(/[ \t]+/g,' ').replace(/\n{3,}/g,'\n\n')
+      .replace(/User-contributed text is available.*/is,'')
+      .replace(/Read more on Last\.fm.*/is,'').trim();
     return{tags:tags,about:about,listeners:+al.listeners||0};
   }catch(e){return empty}
 }
@@ -2413,7 +2462,8 @@ async function enrich(id,itunesGenre,merge){
     if(!(a.genres||[]).length)a.genres=generi;
   }
   if(!a.year&&mb.year)a.year=mb.year;
-  if(!a.about&&lfm.about)a.about=lfm.about;
+  /* la descrizione non viene piu' salvata: era un terzo del file, e per di
+     piu' nella versione tagliata. Si legge dalla scheda, intera, al momento */
   if(lfm.listeners)a.listeners=lfm.listeners;
   /* Durata: la voglio nell'intestazione fin da subito, senza dover aprire
      l'elenco. Una chiamata sola da' durata e numero di tracce; l'elenco
@@ -2573,6 +2623,19 @@ function annullaRipresa(){clearTimeout(spotRipresa);spotRipresa=null}
 /* perche' un album e' rimasto senza collegamento. Lo tengo solo in memoria:
    e' una spiegazione per te adesso, non un dato da portarsi dietro per sempre. */
 const MOTIVI=new Map();
+/* Le descrizioni lette da Last.fm, tenute solo per questa sessione. Non
+   finiscono nella libreria: erano un terzo del file sincronizzato, e per un
+   testo che si rilegge in una richiesta quando apri la scheda. */
+const DESCR=new Map();
+async function descrizione(id){
+  if(DESCR.has(id))return DESCR.get(id);
+  const a=DB.albums.find(x=>x.id===id);
+  if(!a||!a.title)return '';
+  let t='';
+  try{const d=await fetchLastfm(a.artist,a.title);t=(d&&d.about)||''}catch(e){}
+  DESCR.set(id,t);
+  return t;
+}
 /* Nel collegamento in blocco ha senso ASPETTARE il credito di Odesli invece
    di saltarlo: qui so di star lavorando per minuti, non per secondi, e Odesli
    e' la fonte che azzecca piu' collegamenti. */
@@ -4401,8 +4464,15 @@ function openAlbum(id,keepScroll){
   if(!keepScroll){detailOpen=false;linksOpen=false;tracceAperte=false}
   const sc=keepScroll?document.getElementById('mask').scrollTop:0;
   openAlbum._id=id;
+  /* Il mezzo voto e' sempre la meta' BASSA della stella che tocchi: la nona
+     stella a meta' vale 8.5. Cosi' ogni valore da 0.5 a 10 si raggiunge e
+     non serve nessun caso speciale in cima alla scala. */
+  const voto=+a.rating||0,mezzo=voto%1===.5;
   let stars='';
-  for(let i=1;i<=10;i++)stars+='<button data-r="'+i+'" class="'+(a.rating>=i?'on':'')+'">&#9733;</button>';
+  for(let i=1;i<=10;i++){
+    const st=voto>=i?'pieno':(mezzo&&Math.ceil(voto)===i?'mezza':'vuota');
+    stars+='<button data-r="'+i+'" class="'+(st==='vuota'?'':'on')+'">'+stella(st)+'</button>';
+  }
   /* riepilogo compatto: i primi cinque generi, il resto sotto Dettagli */
   const qg=(a.genres||[]).slice(0,5),qm=[];
   const extra=Math.max(0,(a.genres||[]).length-qg.length);
@@ -4430,8 +4500,10 @@ function openAlbum(id,keepScroll){
       '</div></div></div>'+
   '<div class="mbody">'+
     '<div class="sec"><label class="f">Voto</label><div class="stars" id="stars">'+stars+
-      '<span class="muted tiny" style="margin-left:9px">'+(a.rating?a.rating+'/10':'non votato')+'</span>'+
-      (a.rating?' <button class="btn gh sm" id="bClr" style="margin-left:6px">azzera</button>':'')+'</div></div>'+
+      '<button class="mezzo'+(mezzo?' on':'')+'" id="bMezzo"'+
+        (!voto||voto>=VOTO_MAX?' disabled':'')+'>.5</button>'+
+      '<span class="muted tiny" style="margin-left:9px">'+(voto?voto+'/10':'non votato')+'</span>'+
+      (voto?' <button class="btn gh sm" id="bClr" style="margin-left:6px">azzera</button>':'')+'</div></div>'+
     (vis('quick')?'<div class="sec"><label class="f">In due parole</label>'+
       '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">'+quick+
       (vis('details')?'<button class="btn gh sm" id="bMore" style="margin-left:4px">Dettagli'+(extra?' (+'+extra+')':'')+'</button>':'')+
@@ -4439,8 +4511,9 @@ function openAlbum(id,keepScroll){
     (vis('details')?'<div id="detail" style="border-top:1px solid var(--line);padding-top:16px;display:'+(detailOpen?'block':'none')+'">'+
       '<label class="f">Generi</label><div id="gz" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px"></div>'+
 
-      (a.about&&vis('about')?'<div style="margin-top:14px"><label class="f">Descrizione</label>'+
-        '<div class="tiny muted" style="line-height:1.6">'+esc(a.about)+'</div></div>':'')+
+      (vis('about')?'<div style="margin-top:14px" id="descBox"><label class="f">Descrizione</label>'+
+        '<div class="tiny muted" style="line-height:1.6;white-space:pre-line" id="descTxt">'+
+        (DESCR.has(id)?esc(DESCR.get(id)):'<span class="spinner"></span>')+'</div></div>':'')+
       ((vis('dates')||vis('listeners'))?'<div style="margin-top:14px"><label class="f">Dettagli</label><div class="tiny muted" style="line-height:1.7">'+
         'Tipo: '+esc(a.kind||'album')+'<br>'+
         (a.listeners&&vis('listeners')?'Ascoltatori su Last.fm: '+a.listeners.toLocaleString('it-IT')+'<br>':'')+
@@ -4449,7 +4522,11 @@ function openAlbum(id,keepScroll){
         '</div></div>':'')+
     '</div>':'')+
     '<div class="sec"><label class="f">Commento</label><textarea id="cmt" placeholder="Cosa ne pensi, dove l\'hai trovato...">'+esc(a.comment)+'</textarea></div>'+
-    (vis('links')&&linkSet(a).length?'<div class="sec"><button id="bLinks" class="f" style="padding:0;letter-spacing:.7px">'+
+    /* i giudizi altrui, se hai scelto di vederli solo dopo il tuo */
+    (vis('links')&&linkSet(a).length&&P.dopoVoto&&a.rating==null
+      ? '<div class="sec"><label class="f">Link esterni</label>'+
+        '<div class="tiny muted">Compaiono dopo che hai votato.</div></div>' : '')+
+    (vis('links')&&linkSet(a).length&&!(P.dopoVoto&&a.rating==null)?'<div class="sec"><button id="bLinks" class="f" style="padding:0;letter-spacing:.7px">'+
       (linksOpen?'&#9662;':'&#9656;')+' Link esterni ('+linkSet(a).length+')</button>'+
       '<div id="linkBox" style="display:'+(linksOpen?'block':'none')+';margin-top:10px">'+
       linkSet(a).map(l=>'<a href="'+l[1]+'" target="_blank" rel="noopener" '+
@@ -4503,11 +4580,21 @@ function openAlbum(id,keepScroll){
   };
   chips('gz',a.genres,'g','genres');
 
+  const metti=v=>{
+    a.rating=v;a.pending=false;
+    if(!a.listened){a.listened=true;a.listenedAt=now()}
+    save(a);openAlbum(id,true);renderAll();
+  };
   document.getElementById('stars').querySelectorAll('button[data-r]').forEach(b=>{
-    b.onclick=()=>{a.rating=+b.dataset.r;a.pending=false;
-      if(!a.listened){a.listened=true;a.listenedAt=now()}
-      save(a);openAlbum(id,true);renderAll()};
+    /* toccando una stella tengo il mezzo voto se era acceso: se stavi su 7.5
+       e tocchi la nona, vuoi 8.5, non 9 */
+    b.onclick=()=>metti(votoDaStella(b.dataset.r,mezzo));
   });
+  /* niente spiegazioni scritte: il tasto si spegne da solo quando non ha
+     senso - senza voto, o sul 10, dove un 10.5 non esiste - e un tasto
+     grigio si capisce senza bisogno che glielo dica io */
+  const bMz=document.getElementById('bMezzo');
+  if(bMz)bMz.onclick=()=>{if(voto&&voto<VOTO_MAX)metti(votoMezzo(voto))};
   const clr=document.getElementById('bClr');
   if(clr)clr.onclick=()=>{a.rating=null;save(a);openAlbum(id,true);renderAll()};
   const lis=document.getElementById('bLis');
@@ -4519,10 +4606,26 @@ function openAlbum(id,keepScroll){
     document.getElementById('q').focus()};
   document.getElementById('bFav').onclick=()=>{a.fav=!a.fav;save(a);openAlbum(id,true);renderAll()};
   /* espandi i dettagli (i blocchi possono essere spenti dalle preferenze) */
+  /* La descrizione si va a prendere solo quando apri i Dettagli, che e' dove
+     si vede: chiederla all'apertura di ogni scheda sarebbe una richiesta a
+     Last.fm per ogni album sfogliato, quasi sempre per niente. */
+  const mostraDescrizione=()=>{
+    const box=document.getElementById('descTxt');
+    if(!box||box.dataset.fatto)return;
+    box.dataset.fatto='1';
+    descrizione(id).then(t=>{
+      const b=document.getElementById('descTxt');
+      if(!b||openAlbum._id!==id)return;
+      b.innerHTML=t?esc(t)
+        :'<span class="muted">Nessuna descrizione'+(lfmKey()?'':': manca la chiave Last.fm nelle Opzioni')+'.</span>';
+    });
+  };
+  if(detailOpen)mostraDescrizione();
   const bMore=document.getElementById('bMore');
   if(bMore)bMore.onclick=()=>{
     detailOpen=!detailOpen;
     document.getElementById('detail').style.display=detailOpen?'block':'none';
+    if(detailOpen)mostraDescrizione();
   };
   const bLinks=document.getElementById('bLinks');
   if(bLinks)bLinks.onclick=e=>{
@@ -5195,11 +5298,55 @@ function updatePool(){
     act.textContent=on.length?'filtri attivi: '+on.join(', '):'nessun filtro: pesca da tutta la libreria';
   }
 }
+/* ---- estrazione con memoria ----
+   L'estrazione era uniforme e senza memoria: ogni giro ripartiva da zero, e
+   con un mazzo stretto dai filtri lo stesso disco tornava fuori presto. Non
+   escludo i recenti - sarebbe un mazzo di carte, e cambierebbe la natura
+   della cosa - ma gli do un quinto del peso. Restano possibili, diventano
+   improbabili.
+   Quanti sono "i recenti": il 10% del mazzo filtrato, mai piu' di 50. Sotto
+   vale la proporzione, sopra il tetto, perche' su 900 album il 10% sarebbe
+   una coda che non riempiresti mai. */
+const LSQ='crate.codarandom';
+const PESO_RECENTE=.2,QUOTA_RECENTI=.10,MAX_RECENTI=50;
+let codaRandom=[];
+try{const c=JSON.parse(localStorage.getItem(LSQ)||'[]');if(Array.isArray(c))codaRandom=c}catch(e){}
+function quantiRecenti(n){return Math.min(MAX_RECENTI,Math.round(n*QUOTA_RECENTI))}
+function pescaPesato(pool){
+  if(!pool||!pool.length)return null;
+  if(pool.length===1)return pool[0];
+  /* la coda e' una sola per tutta l'app: "l'ho appena visto" non dipende da
+     come hai filtrato. Qui pero' contano solo i recenti che stanno nel mazzo
+     di adesso, cosi' la quota si adatta da sola al filtro. */
+  const dentro=new Set(pool.map(a=>a.id));
+  const quanti=quantiRecenti(pool.length);
+  const recenti=new Set();
+  for(const id of codaRandom){
+    if(recenti.size>=quanti)break;
+    if(dentro.has(id))recenti.add(id);
+  }
+  /* nessun recente in questo mazzo: estrazione piatta, come e' sempre stata.
+     Non serve un guardiano per il caso "recenti tutti": la quota e' il 10%
+     del mazzo, quindi il grosso resta a peso pieno per costruzione, anche se
+     la coda contenesse l'intera libreria. */
+  if(!recenti.size)return pool[Math.floor(Math.random()*pool.length)];
+  let tot=0;
+  const pesi=pool.map(a=>{const p=recenti.has(a.id)?PESO_RECENTE:1;tot+=p;return p});
+  let x=Math.random()*tot;
+  for(let i=0;i<pool.length;i++){x-=pesi[i];if(x<0)return pool[i]}
+  return pool[pool.length-1];
+}
+function segnaEstratto(id){
+  if(!id)return;
+  codaRandom=[id].concat(codaRandom.filter(x=>x!==id)).slice(0,MAX_RECENTI);
+  try{localStorage.setItem(LSQ,JSON.stringify(codaRandom))}catch(e){}
+}
 function spin(){
   const pool=randPool();
   if(!pool.length){toast('Nessun album con questi filtri');return}
   const stage=document.getElementById('slotStage'),slot=document.getElementById('slot');
-  const pick=pool[Math.floor(Math.random()*pool.length)];
+  const pick=pescaPesato(pool);
+  segnaEstratto(pick.id);
   const draw=a=>{stage.innerHTML=(a.cover?'<img class="cover" src="'+esc(a.cover)+'" alt="" onerror="crateImgFail(this)">':
     '<div class="cover" style="display:flex;align-items:center;justify-content:center;font-size:52px;opacity:.3">&#127925;</div>')+
     '<div><h3>'+esc(a.title)+'</h3><p class="art">'+esc(a.artist||'')+
@@ -5827,6 +5974,8 @@ function renderPrefs(){
     .map(l=>checkRow('L:'+LINK_KEYS[l[0]],l[0],l[2],P.links[LINK_KEYS[l[0]]]!==false)).join('');
   const sa=document.getElementById('prSpotApp');
   if(sa)sa.checked=!!P.spotApp;
+  const dv=document.getElementById('prDopoVoto');
+  if(dv)dv.checked=!!P.dopoVoto;
   const so=document.getElementById('prSoglia');
   if(so&&document.activeElement!==so)so.value=sogliaSotto();
   const tm=document.getElementById('prTopMacro');
@@ -5857,6 +6006,10 @@ function renderPrefs(){
 })();
 document.getElementById('prMode').onchange=e=>{P.mode=e.target.value;savePrefs();renderPrefs()};
 document.getElementById('prSpotApp').onchange=e=>{P.spotApp=e.target.checked;savePrefs()};
+document.getElementById('prDopoVoto').onchange=e=>{
+  P.dopoVoto=e.target.checked;savePrefs();
+  if(openAlbum._id)openAlbum(openAlbum._id,true);
+};
 ['prShow','prLinks'].forEach(host=>{
   document.getElementById(host).addEventListener('change',e=>{
     const k=e.target&&e.target.dataset&&e.target.dataset.k;if(!k)return;
@@ -6453,6 +6606,12 @@ loadLocal();
    c'e' niente da riparare. */
 (function(){
   let tocchi=0;
+  /* Le descrizioni salvate non servono piu': si leggono dalla scheda, intere,
+     al momento. Toglierle alleggerisce il file sincronizzato di circa un
+     terzo. Non si perde niente che non si possa rileggere in una richiesta. */
+  (DB.albums||[]).forEach(a=>{
+    if(a.about){delete a.about;a.updatedAt=now();tocchi++}
+  });
   (DB.albums||[]).forEach(a=>{
     if(!(a.genres||[]).length)return;
     const prima=a.genres.join('|');
