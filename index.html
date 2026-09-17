@@ -641,7 +641,7 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
 /* ==========================================================
    1. STATO
    ========================================================== */
-const APP_VER='116';
+const APP_VER='117';
 const LS='crate.v1', LSK='crate.lfmkey', LSG='crate.gh', LSS='crate.lastsync', LSP='crate.prefs';
 const LSSP='crate.spot';   /* accesso a Spotify: resta su QUESTO dispositivo */
 let DB={albums:[],deleted:[],cfg:{}};
@@ -5171,6 +5171,16 @@ function nellaFascia(a,etichetta){
   const min=a.durata/60000;
   return min>=f.da&&min<f.a;
 }
+/* L'anno di uscita e' cercabile dalla stessa casella, senza una tendina in
+   piu': scrivendo "2026" escono i dischi usciti nel 2026. Tre cifre bastano,
+   cosi' "197" da' i Settanta e vedi qualcosa mentre scrivi la quarta; sotto
+   le tre no, perche' "20" pescherebbe mezza libreria.
+   L'anno si AGGIUNGE a quello che trovavi prima, non lo sostituisce: un
+   "Breakfast in America (Remastered 2026)" del 1979 resta dov'era, perche'
+   quel 2026 ce l'ha scritto nel titolo. */
+function annoTocca(anno,t){
+  return !!anno&&/^[0-9]{3,4}$/.test(t)&&anno.indexOf(t)===0;
+}
 function matches(a,f){
   /* piu' fasce = intervallo piu' largo: 50-60 con 1h-1h15 fa 50 minuti-1h15 */
   if(f.len&&f.len.length&&!f.len.some(et=>nellaFascia(a,et)))return false;
@@ -5228,8 +5238,10 @@ function matches(a,f){
          seconda parola. I pezzi prima invece li hai finiti di scrivere, e se
          sono di una lettera sola devono valere per una parola intera: e' la
          regola che tiene la "k" di "k pop" fuori da "rock". */
+      const anno=String(a.year||'');
       const tutte=cerca.every((t,i)=>{
         const ultimo=i===cerca.length-1;
+        if(annoTocca(anno,t))return true;
         return parole.some(w=>(t.length<2&&!ultimo)?w===t:w.indexOf(t)>=0);
       });
       /* la prova "tutto attaccato" serve solo quando hai scritto piu' pezzi:
