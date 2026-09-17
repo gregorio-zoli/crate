@@ -145,12 +145,21 @@ label.f{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.7p
 .bar{height:5px;background:var(--bg3);border-radius:99px;overflow:hidden;margin-top:10px}
 .bar i{display:block;height:100%;background:var(--acc);width:0;transition:width .25s}
 
-.mchip{position:relative}
-.mchip>.trigger{width:100%;background:var(--bg3);border:1px solid var(--line);color:var(--fg);
-  border-radius:9px;padding:9px 11px;font-size:14px;text-align:left;display:flex;align-items:center;gap:8px}
-.mchip>.trigger .cnt{margin-left:auto;color:var(--fg3);font-size:13px}
-.mchip>.trigger .frec{color:var(--fg3);font-size:11px}
+/* Una forma sola per tutti i filtri a tendina: stessa altezza, stesso bordo,
+   stessa freccia, stessa scrittura. A sinistra la cosa che filtra, a destra e
+   piu' chiaro il valore scelto. Le tendine native del sistema sono sparite
+   apposta: disegnavano una freccia loro e spaziature loro, ed era quello a far
+   sembrare la barra un'accozzaglia. */
+.mchip{position:relative;min-width:0}
+.mchip>.trigger{width:100%;height:38px;background:var(--bg3);border:1px solid var(--line);
+  color:var(--fg);border-radius:9px;padding:0 11px;font-size:14px;text-align:left;
+  display:flex;align-items:center;gap:8px;line-height:1}
+.mchip>.trigger .lab{flex:none}
+.mchip>.trigger .cnt{margin-left:auto;min-width:0;color:var(--fg3);font-size:14px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mchip>.trigger .frec{flex:none;color:var(--fg3);font-size:12px;transition:transform .15s}
 .mchip.aperto>.trigger{border-color:var(--acc)}
+.mchip.aperto>.trigger .frec{transform:rotate(180deg)}
 .mpanel{display:none;position:absolute;z-index:70;top:calc(100% + 6px);left:0;
   min-width:min(280px,86vw);max-width:min(420px,92vw);background:var(--bg2);
   border:1px solid var(--line);border-radius:12px;padding:12px;box-shadow:var(--shadow);
@@ -173,10 +182,15 @@ label.f{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.7p
   color:var(--fg3);background:none;border:0;cursor:pointer;border-radius:8px;padding:0}
 .conx>.pulx:hover{color:var(--fg)}
 .conx.pieno>.pulx{display:flex}
-.toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:16px}
-.toolbar select,.toolbar input{width:auto;min-width:118px;padding:9px 11px;font-size:14px}
-.tg{display:flex;background:var(--bg3);border:1px solid var(--line);border-radius:9px;overflow:hidden;flex-wrap:wrap}
-.tg button{padding:9px 12px;font-size:13px;color:var(--fg2);font-weight:600}
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start;margin-bottom:16px}
+.toolbar input{width:auto;min-width:118px;height:38px;padding:0 11px;font-size:14px}
+.toolbar>.mchip{flex:1 1 150px;min-width:132px;max-width:230px}
+/* La barra dello stato non e' un menu e non ha freccia: le scelte sono tutte
+   li' e si escludono a vicenda. Stessa altezza e stesso angolo delle caselle,
+   cosi' le due forme convivono senza litigare. */
+.tg{display:flex;background:var(--bg3);border:1px solid var(--line);border-radius:9px;
+  overflow:hidden;flex-wrap:wrap;align-self:flex-start}
+.tg button{height:36px;padding:0 13px;font-size:14px;color:var(--fg2);font-weight:600}
 .tg button.on{background:var(--fg);color:#111}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:16px}
 .cardalb{cursor:pointer}
@@ -268,8 +282,9 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
   .mhead img,.mhead .ph{width:min(200px,58vw);height:min(200px,58vw)}
   .mhead .row{justify-content:center}
   .mask{padding:14px 10px calc(30px + var(--safeb))}
-  .toolbar select,.toolbar input{flex:1;min-width:calc(50% - 6px)}
-  .tg{width:100%}.tg button{flex:1}
+  .toolbar input{flex:1;min-width:calc(50% - 6px)}
+  .toolbar>.mchip{flex:1 1 calc(50% - 6px);max-width:none}
+  .tg{width:100%}.tg button{flex:1;padding:0 7px}
 }
 </style>
 </head>
@@ -342,9 +357,6 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
   <div class="stats" id="stats"></div>
   <div class="toolbar">
     <input type="text" id="fq" placeholder="Filtra...">
-    <div class="mchip" id="fGenreMenu" style="min-width:150px"></div>
-    <div class="mchip" id="fSubMenu" style="min-width:150px"></div>
-    <select id="fDec"><option value="">Tutti i decenni</option></select>
     <div class="tg" id="fState">
       <button data-s="all" class="on">Tutti</button>
       <button data-s="todo">Da ascoltare</button>
@@ -352,16 +364,10 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
       <button data-s="fav" id="fFav"></button>
       <button data-s="pending" id="bPend" style="display:none">? Da identificare</button>
     </div>
-    <select id="fSort">
-      <option value="added">Aggiunti di recente</option>
-      <option value="alpha">Titolo A-Z</option>
-      <option value="artist">Artista A-Z</option>
-      <option value="year">Anno (recenti)</option>
-      <option value="yearold">Anno (vecchi)</option>
-      <option value="rating">Voto più alto</option>
-      <option value="ascoltati">Ascoltati di recente</option>
-      <option value="davotare">Ascoltati senza voto</option>
-    </select>
+    <div class="mchip" id="fGenreMenu"></div>
+    <div class="mchip" id="fSubMenu"></div>
+    <div class="mchip" id="fDecMenu"></div>
+    <div class="mchip" id="fSortMenu"></div>
   </div>
   <div id="artistBox" style="margin-bottom:14px"></div>
   <div class="grid" id="grid"></div>
@@ -375,18 +381,18 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
     <span class="tiny muted" id="rActive"></span>
   </div>
   <input type="text" id="rQ" placeholder="Cerca fra i risultati" style="margin-bottom:12px">
+  <div class="tg" id="rState" style="margin-bottom:11px">
+    <button data-s="all">Tutti</button>
+    <button data-s="todo" class="on">Da ascoltare</button>
+    <button data-s="done">Ascoltati</button>
+    <button data-s="fav" id="rFav"></button>
+    <button data-s="davotare">Senza voto</button>
+  </div>
   <div class="filtgrid">
-    <div><label class="f">Stato</label><select id="rState">
-      <option value="todo">Solo da ascoltare</option>
-      <option value="all">Tutti</option>
-      <option value="fav">Solo preferiti</option>
-      <option value="done">Solo già ascoltati</option>
-      <option value="davotare">Ascoltati senza voto</option>
-    </select></div>
-    <div><label class="f">Generi</label><div class="mchip" id="rGenreMenu"></div></div>
-    <div><label class="f">Sottogeneri</label><div class="mchip" id="rSubMenu"></div></div>
-    <div><label class="f">Decennio</label><select id="rDec"><option value="">Qualsiasi</option></select></div>
-    <div><label class="f">Durata</label><div class="mchip" id="rLenMenu"></div></div>
+    <div class="mchip" id="rGenreMenu"></div>
+    <div class="mchip" id="rSubMenu"></div>
+    <div class="mchip" id="rDecMenu"></div>
+    <div class="mchip" id="rLenMenu"></div>
   </div>
   <div class="slot" id="slot">
     <div class="stage" id="slotStage">
@@ -622,7 +628,7 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
 /* ==========================================================
    1. STATO
    ========================================================== */
-const APP_VER='108';
+const APP_VER='109';
 const LS='crate.v1', LSK='crate.lfmkey', LSG='crate.gh', LSS='crate.lastsync', LSP='crate.prefs';
 const LSSP='crate.spot';   /* accesso a Spotify: resta su QUESTO dispositivo */
 let DB={albums:[],deleted:[],cfg:{}};
@@ -711,13 +717,13 @@ function stella(stato,lato){
     '<path d="'+d+'" fill="'+(pieno?'currentColor':mezza?'url(#'+id+')':'none')+'" '+
     'stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>';
 }
-/* Le due regole del mezzo voto, scritte una volta sola. Il mezzo si AGGIUNGE
-   al voto scelto: sette stelle piu' il mezzo fanno 7.5, che e' l'unica cosa
-   che uno si aspetta premendo ".5". L'unico limite e' in cima: il 10.5 non
-   esiste, quindi li' il mezzo non si applica e il voto resta 10. */
+/* Le due regole del mezzo voto, scritte una volta sola. Una stella vale il
+   suo intero e basta: nessun mezzo si porta dietro da un voto all'altro, se
+   stai su 8.5 e tocchi la settima ottieni 7. Il mezzo si AGGIUNGE dopo, dal
+   numero. L'unico limite e' in cima: il 10.5 non esiste, quindi li' resta 10. */
 const VOTO_MAX=10;
-function votoDaStella(i,mezzoAcceso){
-  return Math.min(VOTO_MAX,+i+(mezzoAcceso?.5:0));
+function votoDaStella(i){
+  return Math.min(VOTO_MAX,+i);
 }
 function votoMezzo(v){
   const x=+v;
@@ -4592,9 +4598,9 @@ function openAlbum(id,keepScroll){
     save(a);openAlbum(id,true);renderAll();
   };
   document.getElementById('stars').querySelectorAll('button[data-r]').forEach(b=>{
-    /* toccando una stella tengo il mezzo voto se era acceso: se stavi su 7.5
-       e tocchi la nona, vuoi 8.5, non 9 */
-    b.onclick=()=>metti(votoDaStella(b.dataset.r,mezzo));
+    /* una stella vale il suo intero: se stavi su 8.5 e tocchi la settima
+       vuoi 7, non 7.5. Il mezzo si aggiunge dopo, dal numero. */
+    b.onclick=()=>metti(votoDaStella(b.dataset.r));
   });
   /* il numero del voto e' anche il tasto del mezzo punto; prima di un voto
      non c'e' proprio, e sul 10 sta li' ma non risponde */
@@ -4819,9 +4825,18 @@ function closeModal(){chiudiModale(false)}
 /* ==========================================================
    12. LIBRERIA
    ========================================================== */
-let libState='all',libArtist='';
+let libState='all',libArtist='',libSort='added',randState='todo';
 /* filtri a selezione multipla: piu voci = ricerca piu larga, non piu stretta */
-const SEL={fGen:new Set(),fSub:new Set(),rGen:new Set(),rSub:new Set(),rLen:new Set()};
+const SEL={fGen:new Set(),fSub:new Set(),fDec:new Set(),fSort:new Set(['added']),
+  rGen:new Set(),rSub:new Set(),rLen:new Set(),rDec:new Set()};
+/* Gli ordini della libreria: valore interno e nome che leggi, in un posto
+   solo, cosi' la tendina e chi ordina non possono dire cose diverse. */
+const ORDINI=[
+  ['added','Aggiunti di recente'],['alpha','Titolo A-Z'],['artist','Artista A-Z'],
+  ['year','Anno (recenti)'],['yearold','Anno (vecchi)'],['rating','Voto pi\u00f9 alto'],
+  ['ascoltati','Ascoltati di recente'],['davotare','Ascoltati senza voto']
+];
+const nomeOrdine=v=>(ORDINI.filter(x=>x[0]===v)[0]||['','?'])[1];
 /* Un sottogenere entra fra i filtri solo se ha abbastanza album alle spalle:
    una pastiglia per un disco solo e' rumore. La soglia e' qui, in un posto
    solo, cosi' si cambia con una cifra quando avremo i dati nuovi. */
@@ -4888,30 +4903,43 @@ function chiudiMenu(){
 /* un pannello agganciato alla finestra resterebbe sospeso mentre scorri */
 window.addEventListener('scroll',()=>{if(document.querySelector('.mchip.aperto'))chiudiMenu()},{passive:true});
 window.addEventListener('resize',chiudiMenu);
-function menuChip(host,etichetta,valori,insieme,alCambio){
+/* Un solo componente per tutti i filtri a tendina. L'unica differenza e' se
+   le pastiglie si sommano (generi, decenni, durata) o si escludono a vicenda
+   (l'ordine): nel secondo caso una scelta c'e' sempre, quindi niente "Azzera"
+   e la tendina si chiude appena scegli. */
+function menuChip(host,etichetta,valori,insieme,alCambio,opz){
   const h=document.getElementById(host);if(!h)return;
-  const scelti=[...insieme].filter(v=>valori.includes(v));
-  const riepilogo=!scelti.length?'tutti':(scelti.length===1?scelti[0]:scelti.length+' scelti');
-  h.innerHTML='<button class="trigger" type="button">'+esc(etichetta)+
-    '<span class="cnt">'+esc(riepilogo)+'</span><span class="frec">&#9662;</span></button>'+
+  const o=opz||{},nome=o.nomi||(v=>v),singola=!!o.singola;
+  const riassunto=()=>{
+    const s=[...insieme].filter(v=>valori.includes(v));
+    return !s.length?(o.vuoto||'tutti'):(s.length===1?nome(s[0]):s.length+' scelti');
+  };
+  h.innerHTML='<button class="trigger" type="button"><span class="lab">'+esc(etichetta)+'</span>'+
+    '<span class="cnt">'+esc(riassunto())+'</span><span class="frec">&#9662;</span></button>'+
     '<div class="mpanel"><div class="righe"></div>'+
-    '<div class="row" style="margin-top:10px;gap:8px">'+
+    (singola?'':'<div class="row" style="margin-top:10px;gap:8px">'+
       '<button class="btn gh sm" data-az="1">Azzera</button>'+
       '<button class="btn sm" data-ok="1" style="margin-left:auto">Fatto</button>'+
-    '</div></div>';
+    '</div>')+'</div>';
   const righe=h.querySelector('.righe');
   if(!valori.length){
     righe.innerHTML='<span class="tiny muted">Nessuno ancora: comparira&#768; quando avrai qualche album.</span>';
   }else valori.forEach(v=>{
     const b=document.createElement('button');
-    b.type='button';b.textContent=v;
+    b.type='button';b.textContent=nome(v);
     if(insieme.has(v))b.classList.add('on');
     b.onclick=e=>{
       e.stopPropagation();
-      if(insieme.has(v))insieme.delete(v);else insieme.add(v);
-      b.classList.toggle('on');
-      const s2=[...insieme].filter(x=>valori.includes(x));
-      h.querySelector('.cnt').textContent=!s2.length?'tutti':(s2.length===1?s2[0]:s2.length+' scelti');
+      if(singola){
+        valori.forEach(x=>insieme.delete(x));insieme.add(v);
+        righe.querySelectorAll('button').forEach(x=>x.classList.remove('on'));
+        b.classList.add('on');
+      }else{
+        if(insieme.has(v))insieme.delete(v);else insieme.add(v);
+        b.classList.toggle('on');
+      }
+      h.querySelector('.cnt').textContent=riassunto();
+      if(singola)chiudiMenu();
       alCambio();
     };
     righe.appendChild(b);
@@ -4938,11 +4966,11 @@ function menuChip(host,etichetta,valori,insieme,alCambio){
     }
   };
   h.querySelector('.mpanel').onclick=e=>e.stopPropagation();
-  h.querySelector('[data-az]').onclick=e=>{
+  if(h.querySelector('[data-az]'))h.querySelector('[data-az]').onclick=e=>{
     e.stopPropagation();
     valori.forEach(v=>insieme.delete(v));
     righe.querySelectorAll('button').forEach(b=>b.classList.remove('on'));
-    h.querySelector('.cnt').textContent='tutti';
+    h.querySelector('.cnt').textContent=riassunto();
     alCambio();
   };
   h.querySelector('[data-ok]').onclick=e=>{e.stopPropagation();chiudiMenu()};
@@ -4951,7 +4979,7 @@ document.addEventListener('click',chiudiMenu);
 function openArtist(name){
   libArtist=name||'';libState='all';
   document.getElementById('fq').value='';aggiornaCrocette();
-  document.getElementById('fDec').value='';SEL.fGen.clear();SEL.fSub.clear();
+  SEL.fDec.clear();SEL.fGen.clear();SEL.fSub.clear();
   document.getElementById('fState').querySelectorAll('button')
     .forEach(x=>x.classList.toggle('on',x.dataset.s==='all'));
   show('lib');renderLib();
@@ -4959,11 +4987,6 @@ function openArtist(name){
 function allValues(k){const s=new Set();DB.albums.forEach(a=>(a[k]||[]).forEach(v=>s.add(v)));return[...s].sort()}
 function decades(){const s=new Set();DB.albums.forEach(a=>{if(a.year)s.add(Math.floor(a.year/10)*10)});
   return[...s].sort((x,y)=>y-x)}
-function fillSelect(el,vals){
-  const cur=el.value,first=el.querySelector('option').outerHTML;
-  el.innerHTML=first+vals.map(v=>'<option value="'+esc(v)+'">'+esc(v)+'</option>').join('');
-  if(vals.map(String).includes(String(cur)))el.value=cur;
-}
 /* Gli intervalli di durata, scelti da te sulla libreria vera. Il valore e'
    il minuto di partenza, cosi' la tendina e il filtro non possono divergere. */
 const FASCE=[
@@ -5004,7 +5027,9 @@ function matches(a,f){
     const ag=(a.genres||[]).map(x=>String(x).toLowerCase());
     if(!f.sotto.some(x=>ag.includes(x)))return false;
   }
-  if(f.dec&&(!a.year||Math.floor(a.year/10)*10!==+f.dec))return false;
+  /* piu' decenni = piu' fette di tempo, esattamente come piu' fasce di durata */
+  if(f.dec&&f.dec.length&&(!a.year||
+     f.dec.indexOf(String(Math.floor(a.year/10)*10))<0))return false;
   /* La ricerca guarda parola per parola, non la stringa intera appiccicata.
      Prima univo titolo, artista, generi e commento in un unico testo e ci
      cercavo dentro quello che scrivevi: cosi' "k pop" trovava Elvis Presley,
@@ -5059,19 +5084,19 @@ function matches(a,f){
    la ricerca. E quello che hai gia' scelto resta sempre visibile, anche se
    porta a zero: cosi' vedi da dove viene il vuoto e puoi togliertelo. */
 function filtriDi(quale){
-  if(quale==='r')return{state:document.getElementById('rState').value,
+  if(quale==='r')return{state:randState,
     generi:[...SEL.rGen],sotto:[...SEL.rSub],len:[...SEL.rLen],
     q:(document.getElementById('rQ')||{}).value||'',
-    dec:document.getElementById('rDec').value};
+    dec:[...SEL.rDec]};
   return{state:libState,q:document.getElementById('fq').value.trim(),
     generi:[...SEL.fGen],sotto:[...SEL.fSub],
-    dec:document.getElementById('fDec').value,artist:libArtist};
+    dec:[...SEL.fDec],artist:libArtist};
 }
 function poolSenza(quale,dim){
   const f=filtriDi(quale);
   if(dim==='generi')f.generi=[];
   if(dim==='sotto')f.sotto=[];
-  if(dim==='dec')f.dec='';
+  if(dim==='dec')f.dec=[];
   if(dim==='len')f.len=[];
   return DB.albums.filter(a=>!a.pending&&matches(a,f));
 }
@@ -5115,7 +5140,7 @@ function ordinatore(quale){
 function renderLib(){
   const f={state:libState,q:document.getElementById('fq').value.trim(),
     generi:[...SEL.fGen],sotto:[...SEL.fSub],
-    dec:document.getElementById('fDec').value,artist:libArtist};
+    dec:[...SEL.fDec],artist:libArtist};
   const ab=document.getElementById('artistBox');
   if(libArtist){
     ab.innerHTML='<span class="chip" style="border-color:var(--acc);color:var(--acc)">artista: '+
@@ -5123,7 +5148,7 @@ function renderLib(){
     document.getElementById('clrArt').onclick=()=>{libArtist='';renderLib()};
   }else ab.innerHTML='';
   const list=DB.albums.filter(a=>matches(a,f));
-  const cmp=ordinatore(document.getElementById('fSort').value);
+  const cmp=ordinatore(libSort);
   list.sort(cmp);
   const np=DB.albums.filter(a=>a.pending).length;
   const bp=document.getElementById('bPend');
@@ -5258,10 +5283,13 @@ function renderFiltri(quale,tranne){
                :()=>{renderLib();renderFiltri('f','sotto')}));
   if(quale==='r')solo('len',()=>menuChip('rLenMenu','Durata',vivi('r','len',fasce,SEL.rLen),
     SEL.rLen,()=>{updatePool();renderFiltri('r','len')}));
-  solo('dec',()=>{
-    const el=document.getElementById(p+'Dec');
-    if(el)fillSelect(el,vivi(quale,'dec',dec,new Set(el.value?[el.value]:[])));
-  });
+  const dSel=quale==='r'?SEL.rDec:SEL.fDec;
+  solo('dec',()=>menuChip(p+'DecMenu','Decenni',vivi(quale,'dec',dec,dSel),dSel,
+    quale==='r'?()=>{updatePool();renderFiltri('r','dec')}
+               :()=>{renderLib();renderFiltri('f','dec')}));
+  if(quale==='f')solo('ordine',()=>menuChip('fSortMenu','Ordine',ORDINI.map(x=>x[0]),
+    SEL.fSort,()=>{libSort=[...SEL.fSort][0]||'added';renderLib()},
+    {singola:true,nomi:nomeOrdine}));
 }
 function renderAll(){
   const macro=[...new Set(DB.albums.flatMap(macroDiAlbum))].sort();
@@ -5282,10 +5310,10 @@ function renderAll(){
    13. RANDOMIZER
    ========================================================== */
 function randPool(){
-  const f={state:document.getElementById('rState').value,
+  const f={state:randState,
     generi:[...SEL.rGen],sotto:[...SEL.rSub],
     q:(document.getElementById('rQ')||{}).value||'',
-    dec:document.getElementById('rDec').value,
+    dec:[...SEL.rDec],
     len:[...SEL.rLen]};
   return DB.albums.filter(a=>!a.pending&&matches(a,f));
 }
@@ -5295,14 +5323,14 @@ function updatePool(){
   const b=document.getElementById('btnSpin');if(b)b.disabled=!n;
   const act=document.getElementById('rActive');
   if(act){
-    const st=document.getElementById('rState').value,on=[];
+    const st=randState,on=[];
     if(st==='todo')on.push('solo da ascoltare');
     if(st==='fav')on.push('solo preferiti');
     if(st==='done')on.push('solo ascoltati');
     if(st==='davotare')on.push('ascoltati senza voto');
     [...SEL.rGen,...SEL.rSub].forEach(v=>on.push(v));
     const rq=document.getElementById('rQ');if(rq&&rq.value.trim())on.push('\u201c'+rq.value.trim()+'\u201d');
-    const dec=document.getElementById('rDec').value;if(dec)on.push(dec);
+    SEL.rDec.forEach(v=>on.push(v));
     SEL.rLen.forEach(v=>on.push(v));
     act.textContent=on.length?'filtri attivi: '+on.join(', '):'nessun filtro: pesca da tutta la libreria';
   }
@@ -5814,9 +5842,7 @@ document.addEventListener('paste',e=>{
 });
 /* dopo ogni filtro cambiato ridisegno anche gli altri menu: le opzioni che
    non porterebbero da nessuna parte spariscono */
-['fq','fDec','fSort'].forEach(i=>document.getElementById(i)
-  .addEventListener(i==='fq'?'input':'change',()=>{renderLib();
-    renderFiltri('f',i==='fDec'?'dec':'')}));
+document.getElementById('fq').addEventListener('input',()=>{renderLib();renderFiltri('f','')});
 document.getElementById('fState').querySelectorAll('button').forEach(b=>b.onclick=()=>{
   libState=b.dataset.s;
   document.getElementById('fState').querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));
@@ -5824,11 +5850,13 @@ document.getElementById('fState').querySelectorAll('button').forEach(b=>b.onclic
      hai sentiti, dappertutto altrove conta quando sono arrivati. Cambiare
      stato rimette l'ordine giusto; se poi ne scegli un altro a mano resta
      quello, finche' non tocchi di nuovo questi tasti. */
-  const so=document.getElementById('fSort');
-  if(so)so.value=libState==='done'?'ascoltati':'added';
+  libSort=libState==='done'?'ascoltati':'added';
+  SEL.fSort.clear();SEL.fSort.add(libSort);
   renderLib();renderFiltri('f','')});
-['rState','rDec'].forEach(i=>document.getElementById(i).addEventListener('change',
-  ()=>{updatePool();renderFiltri('r',i==='rDec'?'dec':'')}));
+document.getElementById('rState').querySelectorAll('button').forEach(b=>b.onclick=()=>{
+  randState=b.dataset.s;
+  document.getElementById('rState').querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));
+  updatePool();renderFiltri('r','')});
 document.getElementById('rQ').addEventListener('input',()=>{clearTimeout(updatePool._t);
   updatePool._t=setTimeout(()=>{updatePool();renderFiltri('r','')},250)});
 document.getElementById('btnSpin').onclick=spin;
@@ -5844,8 +5872,10 @@ document.getElementById('rReset').onclick=()=>{
   /* "azzera" vuol dire togliere i filtri che ho messo io, non cambiare il
      punto di partenza: lo stato torna a "solo da ascoltare", che e' quello
      con cui la schermata si apre */
-  document.getElementById('rState').value='todo';
-  document.getElementById('rDec').value='';
+  randState='todo';
+  document.getElementById('rState').querySelectorAll('button')
+    .forEach(x=>x.classList.toggle('on',x.dataset.s==='todo'));
+  SEL.rDec.clear();
   SEL.rLen.clear();
   SEL.rGen.clear();SEL.rSub.clear();
   const rq=document.getElementById('rQ');if(rq)rq.value='';
@@ -6605,7 +6635,9 @@ document.getElementById('btnAggiorna').onclick=async()=>{
   setTimeout(()=>{try{location.replace(location.pathname+'?fresh='+Date.now())}
     catch(e){location.reload()}},600);
 };
-(function(){const f=document.getElementById('fFav');if(f)f.innerHTML=cuore(true,15)})();
+(function(){['fFav','rFav'].forEach(id=>{
+  const f=document.getElementById(id);if(f)f.innerHTML=cuore(true,15);
+})})();
 loadLocal();
 /* Riparazione locale, senza rete: sistema i generi gia' salvati che si erano
    rotti sulle virgole. Gira all'avvio, non costa niente ed e' innocua se non
