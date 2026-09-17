@@ -638,7 +638,7 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
 /* ==========================================================
    1. STATO
    ========================================================== */
-const APP_VER='112';
+const APP_VER='113';
 const LS='crate.v1', LSK='crate.lfmkey', LSG='crate.gh', LSS='crate.lastsync', LSP='crate.prefs';
 const LSSP='crate.spot';   /* accesso a Spotify: resta su QUESTO dispositivo */
 let DB={albums:[],deleted:[],cfg:{}};
@@ -1744,16 +1744,25 @@ async function cercaCompleta(titolo,artista){
   return out.map(r=>({r:r,s:simAlbum(r,titolo,artista)}))
     .sort((x,y)=>y.s-x.s).map(x=>x.r);
 }
-async function searchAlbums(term){
+/* La chiamata cruda a iTunes, staccata: la stessa fonte serve sia a testo
+   libero sia guardando i soli titoli, e non ha senso riscriverla due volte. */
+async function cercaItunes(term,limite,soloTitolo){
   const out=[];
+  if(!term)return out;
   try{
-    const d=await jsonp('https://itunes.apple.com/search?media=music&entity=album&limit=12&term='+encodeURIComponent(term));
+    const d=await jsonp('https://itunes.apple.com/search?media=music&entity=album'+
+      (soloTitolo?'&attribute=albumTerm':'')+'&limit='+(limite||12)+
+      '&term='+encodeURIComponent(term));
     (d.results||[]).forEach(r=>out.push({title:cleanTitle(r.collectionName),artist:r.artistName,
       year:r.releaseDate?+r.releaseDate.slice(0,4):null,cover:bigCover(r.artworkUrl100),
       genre:r.primaryGenreName||'',tracks:r.trackCount||null,
       kind:detectKind(r.collectionName,r.trackCount,r.collectionType),
       itunesUrl:r.collectionViewUrl||'',src:'itunes'}));
   }catch(e){}
+  return out;
+}
+async function searchAlbums(term){
+  const out=await cercaItunes(term,12);
   /* Prima chiedevo altrove solo se la risposta era VUOTA. Non basta: per
      "Death Grips The Money Store" iTunes risponde con UN risultato, che pero'
      e' "Full Moon (Death Classic)". Una risposta che non c'entra vale zero,
@@ -1766,6 +1775,121 @@ async function searchAlbums(term){
   return out.filter(a=>{const k=(a.artist+'|'+a.title).toLowerCase();
     if(seen.has(k))return false;seen.add(k);return true});
 }
+/* ==========================================================
+   RICERCA A TESTO LIBERO
+   ----------------------------------------------------------
+   Cercando "american idiot" uscivano sei rifacimenti e nessun Green Day.
+   Il motivo: la casella chiedeva a iTunes dodici risultati e li mostrava
+   nell'ordine in cui arrivavano, senza guardarli. Tre cose sbagliate insieme.
+
+   1. Una fonte sola. Spotify non veniva nemmeno interpellato, pur essendo
+      collegato: e' quello che sa chi e' famoso, ed e' anche l'unico i cui
+      risultati si portano dietro il link gia' pronto. Ecco perche' poi
+      "non riesce mai a collegare Spotify": il disco arrivava da un'altra
+      parte e il link andava indovinato dopo, per nome.
+   2. Nessun ordinamento. I risultati uscivano come capitava.
+   3. Nessuna difesa dai rifacimenti. "American Idiot (lofi)" e "Lullaby
+      Tribute to Green Day" hanno il titolo giusto: per una somiglianza di
+      testo valgono quanto l'originale, e nulla li teneva sotto.
+
+   Qui chiedo a tutte le fonti in parallelo, unisco quello che e' lo stesso
+   disco tenendo i pezzi migliori di ognuno, e ordino. */
+
+/* Le parole che dicono "questo non e' il disco, e' qualcuno che lo rifa".
+   Stanno nel titolo o nel nome di chi lo firma. */
+const RIFACIMENTO=new RegExp('\\b(tribute|tributo|lullaby|ninna\\s?nanna|karaoke|'+
+  'lofi|lo-fi|cover|covers|cover version|instrumental|strumentale|'+
+  'made famous by|in the style of|as made popular by|originally performed|'+
+  'piano version|piano tribute|string quartet|8\\s?-?\\s?bit|chiptune|'+
+  'workout|backing track|sing[\\s-]?along|rendition|renditions|'+
+  'music box|meditation|study version|jazz version|acoustic tribute)\\b','i');
+function eRifacimento(r){
+  return RIFACIMENTO.test(r.title||'')||RIFACIMENTO.test(r.artist||'');
+}
+/* Quanto vale un risultato per quello che hai scritto. Non so quale pezzo di
+   quello che hai scritto sia il titolo e quale l'artista, quindi provo tutti
+   e tre i confronti e tengo il migliore.
+   "rango" e' il posto che la fonte gli ha dato: le fonti sanno chi e' famoso
+   e quell'ordine e' un'informazione, l'unica che ho sulla notorieta'. */
+function puntoLibero(r,term,rango){
+  const pieno=((r.artist||'')+' '+(r.title||'')).trim();
+  let s=Math.max(txtSim(pieno,term),txtSim(r.title||'',term),txtSim(r.artist||'',term)*.9);
+  if(stessoTitolo(r.title,term))s+=.30;
+  if(eRifacimento(r))s-=.60;
+  if(r.kind==='singolo')s-=.35;
+  else if(r.kind==='EP')s-=.10;
+  if(+r.tracks>=5)s+=.05;
+  s+=(r.src==='spotify'?.22:r.src==='deezer'?.06:r.src==='itunes'?.05:0);
+  s+=Math.max(0,14-(rango||0))*.012;
+  return s;
+}
+/* Lo stesso disco puo' arrivare da piu' fonti, ognuna con qualcosa in piu':
+   Spotify porta il link, iTunes l'anno, Deezer a volte la copertina grande.
+   Li fondo invece di buttarne uno. */
+function chiaveDisco(r){
+  const n=x=>String(x||'').toLowerCase().replace(/[^a-z0-9]+/g,'');
+  return n(r.artist)+'|'+n(r.title);
+}
+function fondiDischi(tenuto,nuovo){
+  ['cover','year','tracks','genre','itunesUrl','deezerUrl','mbid'].forEach(k=>{
+    if(!tenuto[k]&&nuovo[k])tenuto[k]=nuovo[k];
+  });
+  /* il link di Spotify vale piu' di tutto: se ce l'ha uno dei due, se lo
+     tiene il risultato che resta, cosi' l'album nasce gia' collegato */
+  if(!tenuto.spotify&&nuovo.spotify){
+    tenuto.spotify=nuovo.spotify;
+    tenuto.platName=nuovo.platName||'Spotify';
+    tenuto.listenUrl=tenuto.listenUrl||nuovo.listenUrl;
+    tenuto.platform=tenuto.platform||nuovo.platform;
+    tenuto.linkFissato=true;
+  }
+  return tenuto;
+}
+/* Unisce e ordina quello che hanno risposto le fonti. Sta fuori dalla
+   chiamata di rete apposta, cosi' la posso mettere alla prova con le
+   risposte vere senza dipendere da internet. */
+function ordinaLibera(fonti,term){
+  const mappa=new Map();
+  fonti.forEach(lista=>(lista||[]).forEach((r,i)=>{
+    const k=chiaveDisco(r);
+    if(!k||k==='|')return;
+    const p=puntoLibero(r,term,i);
+    const gia=mappa.get(k);
+    if(!gia){mappa.set(k,{r:r,s:p});return}
+    /* tengo la scheda che vale di piu', ma le travaso addosso quello che
+       aveva l'altra: il punteggio e' del disco, non della fonte */
+    if(p>gia.s){fondiDischi(r,gia.r);mappa.set(k,{r:r,s:p})}
+    else fondiDischi(gia.r,r);
+  }));
+  const voci=[...mappa.values()];
+  /* Fra dischi che si chiamano allo stesso modo l'originale e' quasi sempre
+     il piu' vecchio: i rifacimenti vengono dopo, non prima. Vale come spinta,
+     non come verdetto, percio' pesa meno del posto che gli danno le fonti. */
+  const gruppi=new Map();
+  voci.forEach(v=>{
+    const t=nucleoTitolo(v.r.title)||'';
+    if(!t)return;
+    if(!gruppi.has(t))gruppi.set(t,[]);
+    gruppi.get(t).push(v);
+  });
+  gruppi.forEach(g=>{
+    const conAnno=g.filter(v=>+v.r.year>0);
+    if(g.length<2||conAnno.length<2)return;
+    conAnno.reduce((a,b)=>+a.r.year<=+b.r.year?a:b).s+=.15;
+  });
+  return voci.sort((x,y)=>y.s-x.s).map(x=>x.r);
+}
+async function cercaLibera(term){
+  if(!term)return[];
+  const fonti=await Promise.all([
+    spotCollegato()?spotCercaLibera(term).catch(()=>[]):Promise.resolve([]),
+    cercaItunes(term,25).catch(()=>[]),
+    cercaItunes(term,25,true).catch(()=>[]),
+    cercaDeezer(term).catch(()=>[])
+  ]);
+  return ordinaLibera(fonti,term);
+}
+
 /* ---- Discogs ----
    Un catalogo di dischi fisici, compilato e verificato dalla comunita'.
    Separa "genre" (una quindicina di categorie larghe) da "style" (centinaia
@@ -3440,7 +3564,7 @@ async function runSearch(archiveOnly){
   document.activeElement&&document.activeElement.blur();
   box.innerHTML='<div class="tiny muted" style="padding:8px"><span class="spinner"></span> '+
     (archiveOnly?'cerco nell\'archivio...':'cerco...')+'</div>';
-  const rs=archiveOnly?await searchArchive(term):await searchAlbums(term);
+  const rs=archiveOnly?await searchArchive(term):await cercaLibera(term);
   box.innerHTML='';
   if(!rs.length){
     box.innerHTML='<div class="tiny muted" style="padding:8px">'+
