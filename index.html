@@ -360,6 +360,9 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
   <h1>Libreria</h1>
   <p class="sub" id="libcount"></p>
   <div class="stats" id="stats"></div>
+  <div class="row" style="margin-bottom:9px">
+    <button class="btn gh sm" id="fReset">Tutta la libreria &mdash; azzera i filtri</button>
+  </div>
   <div class="toolbar">
     <input type="text" id="fq" placeholder="Filtra...">
     <div class="tg" id="fState">
@@ -638,7 +641,7 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
 /* ==========================================================
    1. STATO
    ========================================================== */
-const APP_VER='114';
+const APP_VER='116';
 const LS='crate.v1', LSK='crate.lfmkey', LSG='crate.gh', LSS='crate.lastsync', LSP='crate.prefs';
 const LSSP='crate.spot';   /* accesso a Spotify: resta su QUESTO dispositivo */
 let DB={albums:[],deleted:[],cfg:{}};
@@ -1848,7 +1851,7 @@ function fondiDischi(tenuto,nuovo){
 /* Unisce e ordina quello che hanno risposto le fonti. Sta fuori dalla
    chiamata di rete apposta, cosi' la posso mettere alla prova con le
    risposte vere senza dipendere da internet. */
-function ordinaLibera(fonti,term){
+function pesaLibera(fonti,term){
   const mappa=new Map();
   fonti.forEach(lista=>(lista||[]).forEach((r,i)=>{
     const k=chiaveDisco(r);
@@ -1877,8 +1880,13 @@ function ordinaLibera(fonti,term){
     if(g.length<2||conAnno.length<2)return;
     conAnno.reduce((a,b)=>+a.r.year<=+b.r.year?a:b).s+=.15;
   });
-  return voci.sort((x,y)=>y.s-x.s).map(x=>x.r);
+  return voci.sort((x,y)=>y.s-x.s);
 }
+function ordinaLibera(fonti,term){return pesaLibera(fonti,term).map(x=>x.r)}
+/* Sotto questo punteggio non c'e' niente che somigli davvero a quello che hai
+   scritto: un titolo preso in pieno supera 1,5, una risposta a caso sta sotto
+   mezzo punto. */
+const CONVINCE=.9;
 async function cercaLibera(term){
   if(!term)return[];
   const fonti=await Promise.all([
@@ -1887,7 +1895,17 @@ async function cercaLibera(term){
     cercaItunes(term,25,true).catch(()=>[]),
     cercaDeezer(term).catch(()=>[])
   ]);
-  return ordinaLibera(fonti,term);
+  const voci=pesaLibera(fonti,term);
+  /* I negozi non hanno tutto: chi ha ritirato la propria musica dallo
+     streaming, le autoproduzioni, i dischi fuori catalogo. Se quello che
+     torna non convince guardo anche nell'archivio, senza aspettare che sia
+     tu a chiederlo. (C'era gia' e l'avevo perso per strada cambiando
+     ricerca: il pulsante non puo' essere l'unica via per arrivarci.) */
+  if(!voci.length||voci[0].s<CONVINCE){
+    const arc=await searchArchive(term).catch(()=>[]);
+    if(arc.length)return ordinaLibera(fonti.concat([arc]),term);
+  }
+  return voci.map(x=>x.r);
 }
 
 /* ---- Discogs ----
@@ -3583,7 +3601,7 @@ async function runSearch(archiveOnly){
   if(!archiveOnly){
     const b=document.createElement('button');
     b.className='btn gh sm';b.style.marginTop='4px';
-    b.textContent='Non è quello giusto? Cerca nell\'archivio';
+    b.textContent='Cerca fra i dischi fuori catalogo';
     b.onclick=()=>runSearch(true);
     box.appendChild(b);
   }
@@ -5113,12 +5131,23 @@ function menuChip(host,etichetta,valori,insieme,alCambio,opz){
   if(ok)ok.onclick=e=>{e.stopPropagation();chiudiMenu()};
 }
 document.addEventListener('click',chiudiMenu);
-function openArtist(name){
-  libArtist=name||'';libState='all';
-  document.getElementById('fq').value='';aggiornaCrocette();
+/* Rimettere la libreria come la trovi aprendola: tutti gli album, nessuna
+   parola cercata, nessuna pastiglia accesa. La stessa cosa serve al tasto
+   "azzera" e a quando entri dalla scheda di un artista, quindi sta qui una
+   volta sola. L'ordine lo rimette solo chi azzera davvero: entrando da un
+   artista non c'entra niente. */
+function pulisciFiltriLib(ancheOrdine){
+  libArtist='';libState='all';
+  const fq=document.getElementById('fq');if(fq)fq.value='';
   SEL.fDec.clear();SEL.fGen.clear();SEL.fSub.clear();
+  if(ancheOrdine){libSort='added';SEL.fSort.clear();SEL.fSort.add('added')}
   document.getElementById('fState').querySelectorAll('button')
     .forEach(x=>x.classList.toggle('on',x.dataset.s==='all'));
+  aggiornaCrocette();
+}
+function openArtist(name){
+  pulisciFiltriLib(false);
+  libArtist=name||'';
   show('lib');renderLib();
 }
 function allValues(k){const s=new Set();DB.albums.forEach(a=>(a[k]||[]).forEach(v=>s.add(v)));return[...s].sort()}
@@ -5997,6 +6026,11 @@ document.getElementById('fState').querySelectorAll('button').forEach(b=>b.onclic
   libSort=libState==='done'?'ascoltati':'added';
   SEL.fSort.clear();SEL.fSort.add(libSort);
   renderLib();renderFiltri('f','')});
+document.getElementById('fReset').onclick=()=>{
+  pulisciFiltriLib(true);
+  renderLib();renderFiltri('f','');
+  toast('Filtri azzerati');
+};
 document.getElementById('rState').querySelectorAll('button').forEach(b=>b.onclick=()=>{
   randState=b.dataset.s;
   document.getElementById('rState').querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));
