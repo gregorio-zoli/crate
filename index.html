@@ -638,7 +638,7 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
 /* ==========================================================
    1. STATO
    ========================================================== */
-const APP_VER='113';
+const APP_VER='114';
 const LS='crate.v1', LSK='crate.lfmkey', LSG='crate.gh', LSS='crate.lastsync', LSP='crate.prefs';
 const LSSP='crate.spot';   /* accesso a Spotify: resta su QUESTO dispositivo */
 let DB={albums:[],deleted:[],cfg:{}};
@@ -5890,6 +5890,13 @@ window.addEventListener('popstate',()=>{
 })();
 document.getElementById('btnSearch').onclick=()=>runSearch();
 document.getElementById('q').addEventListener('keydown',e=>{if(e.key==='Enter')runSearch()});
+/* Svuotata la casella, i risultati di prima non rispondono piu' a niente di
+   scritto: se ne vanno insieme al testo. Sto sull'evento del campo e non sulla
+   crocetta apposta, cosi' vale anche se cancelli a mano. */
+document.getElementById('q').addEventListener('input',()=>{
+  if(!document.getElementById('q').value.trim())
+    document.getElementById('results').innerHTML='';
+});
 document.getElementById('btnManual').onclick=()=>manualForm({});
 document.getElementById('btnLista').onclick=()=>{
   const b=document.getElementById('listaBox');
