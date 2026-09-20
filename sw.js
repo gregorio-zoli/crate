@@ -3,7 +3,7 @@
    1. tiene l'app usabile offline (cache dello shell)
    2. intercetta le condivisioni da Android e passa l'immagine alla pagina  */
 
-const V = 'crate-v119';
+const V = 'crate-v120';
 const SHARE_CACHE = 'crate-share';
 const MODEL_CACHE = 'crate-modelli';
 const SHELL = [
@@ -30,21 +30,29 @@ self.addEventListener('activate', e => {
   })());
 });
 
-/* --- ricezione di una condivisione dal sistema --- */
-async function handleShare(request) {
-  const cache = await caches.open(SHARE_CACHE);
-  // "campi" e' il verbale di quello che Android ha effettivamente mandato.
-  // Se non riconosco nessuna immagine, la pagina lo mostra invece di restare
-  // ferma senza spiegazioni: senza questo si puo' solo tirare a indovinare.
-  // Firmo il verbale con la mia versione e con l'ora. La versione serve
-  // perche' sw.js si aggiorna per conto suo e puo' restare indietro rispetto
-  // alla pagina: senza la firma non si sa chi ha gestito la condivisione.
-  // L'ora serve alla pagina per non ripescare una condivisione di ieri.
+/* --- ricezione di una condivisione dal sistema ---
+   Il corpo della richiesta e' un flusso che si legge UNA volta sola, e il
+   service worker puo' essere spento e riacceso apposta per questo evento.
+   Prima qui la prima cosa che facevo era aprire la cache: un'attesa, per
+   quanto breve, prima di toccare il corpo. Al ritorno il flusso non c'era
+   piu' e formData() rispondeva vuota senza sollevare nessun errore - che e'
+   esattamente quello che si vedeva sul telefono: content-type giusto,
+   boundary giusto, zero campi.
+   Adesso il corpo viene chiesto subito, nel gestore dell'evento, prima di
+   qualunque altra attesa; qui arriva gia' la promessa.
+   La "copia" serve solo a misurare: se non arriva niente voglio sapere se il
+   corpo era vuoto davvero o se l'ho perso io. */
+async function handleShare(corpo, copia) {
+  // "campi" e' il verbale di quello che Android ha effettivamente mandato,
+  // firmato con la mia versione e con l'ora. La versione serve perche' sw.js
+  // si aggiorna per conto suo e puo' restare indietro rispetto alla pagina;
+  // l'ora serve alla pagina per non ripescare una condivisione di ieri.
   let payload = { text: '', url: '', title: '', count: 0, campi: [],
                   sw: V, quando: Date.now(),
-                  tipo: request.headers.get('content-type') || '' };
+                  tipo: copia.headers.get('content-type') || '' };
+  let files = [];
   try {
-    const fd = await request.formData();
+    const fd = await corpo;
     payload.title = fd.get('title') || '';
     payload.text = fd.get('text') || '';
     payload.url = fd.get('url') || '';
@@ -56,20 +64,34 @@ async function handleShare(request) {
         ? ((v.type || 'tipo ignoto') + ', ' + (v.size || 0) + ' byte')
         : 'testo'));
     }
-    const files = fd.getAll('image').filter(isImg);
+    files = fd.getAll('image').filter(isImg);
     if (!files.length) {
       // alcune app usano un nome di campo diverso: passo in rassegna tutto
       for (const v of fd.values()) if (isImg(v)) files.push(v);
     }
-    for (let i = 0; i < files.length; i++) {
-      await cache.put('shared-image-' + i, new Response(files[i], {
-        headers: { 'Content-Type': files[i].type || 'image/png' }
-      }));
-    }
-    payload.count = files.length;
   } catch (err) {
     payload.errore = String((err && err.message) || err || 'errore sconosciuto');
   }
+  // Non e' arrivato niente di utilizzabile: misuro il corpo vero, cosi' si sa
+  // se Android non ha mandato nulla o se l'ho perso io per strada.
+  if (!files.length && !payload.campi.length) {
+    try {
+      const t = await copia.text();
+      payload.corpo = t.length + ' byte, ' +
+        (t.match(/Content-Disposition/gi) || []).length + ' pezzi';
+    } catch (err2) {
+      payload.corpo = 'non leggibile: ' + String((err2 && err2.message) || err2);
+    }
+  }
+  // La cache si apre SOLO adesso: il corpo e' gia' stato letto e non si
+  // perde piu' niente nell'attesa.
+  const cache = await caches.open(SHARE_CACHE);
+  for (let i = 0; i < files.length; i++) {
+    await cache.put('shared-image-' + i, new Response(files[i], {
+      headers: { 'Content-Type': files[i].type || 'image/png' }
+    }));
+  }
+  payload.count = files.length;
   await cache.put('shared-meta', new Response(JSON.stringify(payload), {
     headers: { 'Content-Type': 'application/json' }
   }));
@@ -77,8 +99,6 @@ async function handleShare(request) {
   return Response.redirect(new URL('./?shared=1', self.location).href, 303);
 }
 
-// La pagina chiede "che versione sei?": e' l'unico modo per sapere quale
-// service worker sta davvero rispondendo, e quindi se e' aggiornato.
 self.addEventListener('message', e => {
   if (e.data === 'versione' && e.source && e.source.postMessage) {
     e.source.postMessage({ crateSw: V });
@@ -90,7 +110,10 @@ self.addEventListener('fetch', e => {
   const url = new URL(req.url);
 
   if (req.method === 'POST' && url.pathname.endsWith('/share')) {
-    e.respondWith(handleShare(req));
+    // Il corpo lo chiedo QUI, come prima cosa: aspettare anche solo
+    // l'apertura di una cache basta a perderlo.
+    const copia = req.clone();
+    e.respondWith(handleShare(req.formData(), copia));
     return;
   }
   if (req.method !== 'GET') return;
