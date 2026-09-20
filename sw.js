@@ -3,7 +3,7 @@
    1. tiene l'app usabile offline (cache dello shell)
    2. intercetta le condivisioni da Android e passa l'immagine alla pagina  */
 
-const V = 'crate-v118';
+const V = 'crate-v119';
 const SHARE_CACHE = 'crate-share';
 const MODEL_CACHE = 'crate-modelli';
 const SHELL = [
@@ -36,7 +36,13 @@ async function handleShare(request) {
   // "campi" e' il verbale di quello che Android ha effettivamente mandato.
   // Se non riconosco nessuna immagine, la pagina lo mostra invece di restare
   // ferma senza spiegazioni: senza questo si puo' solo tirare a indovinare.
-  let payload = { text: '', url: '', title: '', count: 0, campi: [] };
+  // Firmo il verbale con la mia versione e con l'ora. La versione serve
+  // perche' sw.js si aggiorna per conto suo e puo' restare indietro rispetto
+  // alla pagina: senza la firma non si sa chi ha gestito la condivisione.
+  // L'ora serve alla pagina per non ripescare una condivisione di ieri.
+  let payload = { text: '', url: '', title: '', count: 0, campi: [],
+                  sw: V, quando: Date.now(),
+                  tipo: request.headers.get('content-type') || '' };
   try {
     const fd = await request.formData();
     payload.title = fd.get('title') || '';
@@ -70,6 +76,14 @@ async function handleShare(request) {
   // URL assoluto: Response.redirect e' pignolo sui relativi
   return Response.redirect(new URL('./?shared=1', self.location).href, 303);
 }
+
+// La pagina chiede "che versione sei?": e' l'unico modo per sapere quale
+// service worker sta davvero rispondendo, e quindi se e' aggiornato.
+self.addEventListener('message', e => {
+  if (e.data === 'versione' && e.source && e.source.postMessage) {
+    e.source.postMessage({ crateSw: V });
+  }
+});
 
 self.addEventListener('fetch', e => {
   const req = e.request;

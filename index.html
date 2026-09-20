@@ -641,7 +641,7 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
 /* ==========================================================
    1. STATO
    ========================================================== */
-const APP_VER='118';
+const APP_VER='119';
 const LS='crate.v1', LSK='crate.lfmkey', LSG='crate.gh', LSS='crate.lastsync', LSP='crate.prefs';
 const LSSP='crate.spot';   /* accesso a Spotify: resta su QUESTO dispositivo */
 let DB={albums:[],deleted:[],cfg:{}};
@@ -4382,6 +4382,14 @@ async function consumeShare(primaVolta){
     if(!mr)return;                    /* nessuno ha condiviso niente: normale */
     const meta=await mr.json();
     await c.delete('shared-meta');
+    /* Guardando la cassetta a ogni ritorno sull'app, una condivisione rimasta
+       li' da ieri comparirebbe dal nulla mentre stai facendo altro. Le vecchie
+       le butto e basta. Quelle senza ora sono di un service worker vecchio:
+       quelle le guardo lo stesso, servono proprio a capire. */
+    if(+meta.quando&&Date.now()-+meta.quando>3*60*1000){
+      for(let i=0;i<(+meta.count||0);i++)await c.delete('shared-image-'+i);
+      return;
+    }
     const n=+meta.count||0,files=[];
     for(let i=0;i<n;i++){
       const r=await c.match('shared-image-'+i);
@@ -4405,17 +4413,24 @@ function shareAVuoto(meta){
   show('add');
   const box=document.getElementById('sharedBox');
   if(!box){toast('Condivisione vuota');return}
-  const campi=(meta&&meta.campi||[]).map(x=>esc(String(x))).join('<br>');
+  const m=meta||{};
+  const righe=[];
+  righe.push('motore: '+(m.sw?esc(String(m.sw)):
+    '<b>nessuna firma</b> — questa condivisione è stata gestita da una '+
+    'versione vecchia di sw.js'));
+  if(m.errore)righe.push('errore: '+esc(String(m.errore)));
+  if(m.tipo)righe.push('tipo di invio: '+esc(String(m.tipo)));
+  const campi=(m.campi||[]).map(x=>esc(String(x)));
+  righe.push('campi ricevuti: '+(campi.length?'<br>'+campi.join('<br>'):'nessuno'));
+  /* Il verbale lo mostro SEMPRE, anche vuoto: e' proprio quando non c'e'
+     niente scritto che serve sapere che non c'e' niente scritto. */
   box.innerHTML='<div class="banner"><div style="min-width:0;flex:1">'+
     '<b>Non mi è arrivata nessuna immagine</b>'+
     '<div class="tiny muted" style="margin-top:6px">Riprova, oppure usa il '+
     'riquadro qui sotto per scegliere gli screenshot dal telefono.</div>'+
-    (campi||meta&&meta.errore
-      ? '<details class="hint" style="margin-top:8px"><summary style="cursor:pointer">'+
-        'Cosa mi ha passato Android</summary><div class="tiny muted" style="margin-top:6px">'+
-        (meta.errore?'Errore: '+esc(String(meta.errore))+'<br>':'')+
-        (campi||'nessun campo')+'</div></details>'
-      : '')+
+    '<details class="hint" style="margin-top:8px"><summary style="cursor:pointer">'+
+    'Cosa mi ha passato Android</summary><div class="tiny muted" style="margin-top:6px">'+
+    righe.join('<br>')+'</div></details>'+
     '</div></div>';
 }
 function cleanUrl(){try{history.replaceState({},'',location.pathname)}catch(e){}}
@@ -6843,6 +6858,31 @@ document.addEventListener('visibilitychange',()=>{
    15. AVVIO
    ========================================================== */
 document.getElementById('verApp').textContent='v'+APP_VER;
+/* Pagina e service worker sono due file che si aggiornano per conto loro e
+   possono trovarsi a versioni diverse: la pagina arriva dalla rete a ogni
+   apertura, il service worker solo quando il browser decide di ricontrollarlo.
+   Quando le due non coincidono meta' dei guai diventano inspiegabili, quindi
+   lo scrivo. Devo chiederglielo: non c'e' altro modo di sapere chi risponde. */
+function mostraVersioneSw(){
+  const el=document.getElementById('verApp');
+  /* su un indirizzo non sicuro navigator.serviceWorker non esiste proprio:
+     controllo l'oggetto, non il nome della proprieta' */
+  const sw=navigator.serviceWorker;
+  if(!el||!sw)return;
+  const c=sw.controller;
+  if(!c){el.textContent='v'+APP_VER+' \u00b7 motore non attivo';return}
+  const orecchio=e=>{
+    const v=e.data&&e.data.crateSw;
+    if(!v)return;
+    sw.removeEventListener('message',orecchio);
+    const pari=String(v)==='crate-v'+APP_VER;
+    el.innerHTML='v'+APP_VER+(pari?'':' <span style="color:var(--acc)">\u00b7 motore fermo alla '+
+      esc(String(v).replace('crate-',''))+', forza l\u2019aggiornamento</span>');
+  };
+  sw.addEventListener('message',orecchio);
+  try{c.postMessage('versione')}catch(e){}
+}
+mostraVersioneSw();
 /* Quando l'app resta indietro non e' quasi mai colpa dei tuoi dati: e' una
    copia vecchia della pagina tenuta dal browser o dal service worker. Questo
    tasto butta via le copie e ricarica dal server. La libreria non si tocca:
