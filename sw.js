@@ -3,7 +3,7 @@
    1. tiene l'app usabile offline (cache dello shell)
    2. intercetta le condivisioni da Android e passa l'immagine alla pagina  */
 
-const V = 'crate-v117';
+const V = 'crate-v118';
 const SHARE_CACHE = 'crate-share';
 const MODEL_CACHE = 'crate-modelli';
 const SHELL = [
@@ -33,7 +33,10 @@ self.addEventListener('activate', e => {
 /* --- ricezione di una condivisione dal sistema --- */
 async function handleShare(request) {
   const cache = await caches.open(SHARE_CACHE);
-  let payload = { text: '', url: '', title: '', count: 0 };
+  // "campi" e' il verbale di quello che Android ha effettivamente mandato.
+  // Se non riconosco nessuna immagine, la pagina lo mostra invece di restare
+  // ferma senza spiegazioni: senza questo si puo' solo tirare a indovinare.
+  let payload = { text: '', url: '', title: '', count: 0, campi: [] };
   try {
     const fd = await request.formData();
     payload.title = fd.get('title') || '';
@@ -42,6 +45,11 @@ async function handleShare(request) {
     // dalla galleria si possono selezionare piu screenshot: li prendo tutti
     const isImg = v => v && typeof v === 'object' && v.size &&
       (String(v.type || '').startsWith('image/') || /\.(png|jpe?g|webp|gif)$/i.test(v.name || ''));
+    for (const [k, v] of fd.entries()) {
+      payload.campi.push(k + ': ' + (v && typeof v === 'object'
+        ? ((v.type || 'tipo ignoto') + ', ' + (v.size || 0) + ' byte')
+        : 'testo'));
+    }
     const files = fd.getAll('image').filter(isImg);
     if (!files.length) {
       // alcune app usano un nome di campo diverso: passo in rassegna tutto
@@ -53,7 +61,9 @@ async function handleShare(request) {
       }));
     }
     payload.count = files.length;
-  } catch (err) { /* condivisione malformata: si apre l'app normalmente */ }
+  } catch (err) {
+    payload.errore = String((err && err.message) || err || 'errore sconosciuto');
+  }
   await cache.put('shared-meta', new Response(JSON.stringify(payload), {
     headers: { 'Content-Type': 'application/json' }
   }));
