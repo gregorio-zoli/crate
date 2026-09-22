@@ -656,7 +656,7 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
 /* ==========================================================
    1. STATO
    ========================================================== */
-const APP_VER='122';
+const APP_VER='123';
 const LS='crate.v1', LSK='crate.lfmkey', LSG='crate.gh', LSS='crate.lastsync', LSP='crate.prefs';
 const LSSP='crate.spot';   /* accesso a Spotify: resta su QUESTO dispositivo */
 let DB={albums:[],deleted:[],cfg:{}};
@@ -4076,10 +4076,36 @@ function rankResults(results,cands,hint){
     .sort((a,b)=>b.s-a.s).map(x=>x.r);
 }
 async function analyzeImage(file,onProgress){
-  const prog=onProgress||function(){};
+  /* Un avviso a video non deve poter far fallire una lettura: se qui dentro
+     si rompe qualcosa, l'errore risalirebbe fino a buttare via lo screenshot. */
+  const prog=(m,p)=>{try{(onProgress||function(){})(m,p)}catch(e){}};
+  /* Tutto quello che segue e' gia' protetto: ogni motore di lettura e ogni
+     ricerca si ingoiano i propri errori da soli. L'unico punto scoperto di
+     analyzeImage e' questo, la lettura del file dal telefono - quindi se una
+     carta risulta "rotta" e' quasi certamente qui, ed e' qui che voglio il
+     motivo vero invece di un generico "file". */
+  const descriviFile=()=>{
+    const n=(file&&file.name)||'senza nome';
+    const t=(file&&file.type)||'tipo ignoto';
+    const b=(file&&typeof file.size==='number')?file.size:'?';
+    return n+' ('+t+', '+b+' byte)';
+  };
+  if(!file||!file.size)
+    throw new Error('lo screenshot arriva vuoto: '+descriviFile());
   const dataUrl=await new Promise((res,rej)=>{
-    const f=new FileReader();f.onload=()=>res(f.result);f.onerror=()=>rej(new Error('file'));
-    f.readAsDataURL(file);
+    const f=new FileReader();
+    f.onload=()=>res(f.result);
+    f.onerror=()=>{
+      /* f.error e' una DOMException con un nome parlante (NotReadableError,
+         NotFoundError, SecurityError): quello dice davvero cos'e' successo,
+         mentre il vecchio Error('file') non diceva niente. */
+      const e=f.error;
+      rej(new Error('il telefono non mi ha lasciato leggere '+descriviFile()+
+        (e?' \u2014 '+(e.name||'errore')+(e.message?': '+e.message:''):'')));
+    };
+    try{f.readAsDataURL(file)}
+    catch(e){rej(new Error('non riesco ad aprire '+descriviFile()+
+      ' \u2014 '+((e&&e.message)||e)))}
   });
   /* Del mazzo tengo UNA copia rimpicciolita, non l'originale. Uno screenshot
      da telefono diventa 3-5 MB di testo una volta trasformato in dataUrl, e
@@ -4270,7 +4296,9 @@ function renderCardNone(it,body){
     let nuovo=null;
     try{nuovo=await analyzeImage(it.file,m=>{re.textContent=m||'ci riprovo...'})}catch(e){nuovo=null}
     if(!nuovo){re.disabled=false;re.textContent='Riprova questo screenshot';
-      toast('Non ci sono riuscito nemmeno stavolta');return}
+      /* se fallisce di nuovo il file non e' piu' leggibile da qui: rifarlo
+         scegliere dalla galleria da' un permesso nuovo */
+      toast('Niente da fare: riprendilo dalla galleria');return}
     deck[deckIdx]=nuovo;renderCard();
   };
 }
