@@ -241,6 +241,20 @@ label.f{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.7p
   transition:background .15s ease}
 .stars .votonum:hover{background:rgba(240,192,64,.13)}
 .stars .votonum.pieno,.stars .votonum.pieno:hover{cursor:default;background:transparent}
+/* La lente sugli screenshot. Lo screenshot arriva da un reel e il testo con
+   artista e titolo e' minuscolo: nella scheda si vede, ma non si legge.
+   Un tocco lo apre a tutto schermo, un altro lo porta a grandezza piena e si
+   scorre. Niente gesti da indovinare: si tocca e basta. */
+.zoomabile{cursor:zoom-in}
+.lente{position:fixed;inset:0;z-index:120;background:rgba(0,0,0,.94);display:none;
+  overflow:auto;-webkit-overflow-scrolling:touch}
+.lente.on{display:block}
+.lente img{display:block;margin:0 auto;max-width:100%;max-height:100vh;
+  object-fit:contain;cursor:zoom-in}
+.lente.dentro img{max-width:none;max-height:none;width:260%;cursor:zoom-out}
+.lente .chiudi{position:fixed;top:calc(12px + env(safe-area-inset-top,0px));right:12px;z-index:2;
+  background:rgba(0,0,0,.6);border:1px solid var(--line);width:40px;height:40px;
+  border-radius:50%;font-size:19px;color:var(--fg)}
 .links{display:flex;gap:8px;flex-wrap:wrap}
 .links a{background:var(--bg3);border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-size:13px;color:var(--fg2);font-weight:600}
 .sec{border-top:1px solid var(--line);padding-top:16px}
@@ -634,6 +648,7 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
 <div class="mask" id="mask">
   <div class="modal" id="modal"><button class="mclose" id="mclose">&times;</button></div>
 </div>
+<div class="lente" id="lente"><button class="chiudi" id="lenteX">&times;</button><img id="lenteImg" alt=""></div>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -641,7 +656,7 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
 /* ==========================================================
    1. STATO
    ========================================================== */
-const APP_VER='121';
+const APP_VER='122';
 const LS='crate.v1', LSK='crate.lfmkey', LSG='crate.gh', LSS='crate.lastsync', LSP='crate.prefs';
 const LSSP='crate.spot';   /* accesso a Spotify: resta su QUESTO dispositivo */
 let DB={albums:[],deleted:[],cfg:{}};
@@ -3931,7 +3946,7 @@ async function importaElenco(txt){
       conf:match?(txtSim(p.title,match.title)*.65+txtSim(p.artist,match.artist)*.35):0});
     await sleep(260);
   }
-  deck.push({kind:'list',dataUrl:'',small:'',rows:rows,
+  deck.push({kind:'list',shot:'',rows:rows,
     extra:Math.max(0,righe.length-work.length),hint:null,cands:[]});
   deckDone=true;renderCard();
 }
@@ -3940,15 +3955,21 @@ async function runBatch(files){
   show('add');
   openDeck();
   for(let i=0;i<files.length;i++){
-    let item=null;
+    let item=null,guaio='';
     try{
       /* se una lettura si impianta non deve bloccare tutta la coda */
       item=await Promise.race([
         analyzeImage(files[i],(msg,pct)=>setDeckProgress(i,msg,pct)),
         new Promise(r=>setTimeout(()=>r(null),90000))
       ]);
-    }catch(e){item=null}
-    deck.push(item||{kind:'none',dataUrl:'',small:'',cands:[],results:[]});
+      if(!item)guaio='la lettura ci ha messo troppo e l\u2019ho interrotta';
+    }catch(e){guaio=String((e&&e.message)||e||'errore sconosciuto')}
+    /* Quando la lettura si rompe non ho MAI letto niente: dirti "non sono
+       riuscito a capire quale album sia" sarebbe una bugia, perche' non ci
+       ho nemmeno provato. Sono due carte diverse, e questa si puo' riprovare
+       - cosa che, nei fatti, funziona. */
+    deck.push(item||{kind:'none',rotta:true,guaio:guaio,file:files[i],
+      shot:'',cands:[],results:[]});
     /* Se stavi aspettando proprio questa, disegnala: altrimenti resti fermo
        sulla schermata di attesa per sempre. */
     if(deckIdx>=deck.length-1)renderCard();
@@ -4060,7 +4081,14 @@ async function analyzeImage(file,onProgress){
     const f=new FileReader();f.onload=()=>res(f.result);f.onerror=()=>rej(new Error('file'));
     f.readAsDataURL(file);
   });
-  const small=await shrink(dataUrl,420);
+  /* Del mazzo tengo UNA copia rimpicciolita, non l'originale. Uno screenshot
+     da telefono diventa 3-5 MB di testo una volta trasformato in dataUrl, e
+     dieci alla volta erano decine di MB tenuti tutti in memoria insieme:
+     e' li' che la lettura cominciava a fallire di colpo, in fila, per poi
+     riuscire benissimo riprovando con meno immagini.
+     1400 punti bastano per rileggere il testo con lo zoom e pesano una
+     frazione. */
+  const shot=await shrink(dataUrl,1400);
   const state={dataUrl:dataUrl,cache:{},status:h=>prog(String(h).replace(/<[^>]*>/g,'').trim())};
   const texts=await ocrAll(state);
   const hint=anyYear(texts);
@@ -4080,7 +4108,7 @@ async function analyzeImage(file,onProgress){
         conf:match?(txtSim(p.title,match.title)*.65+txtSim(p.artist,match.artist)*.35):0});
       await sleep(280);
     }
-    return{kind:'list',dataUrl:dataUrl,small:small,rows:rows,
+    return{kind:'list',shot:shot,rows:rows,
            extra:Math.max(0,pairs.length-LIST_MAX),hint:hint,cands:[]};
   }
 
@@ -4098,7 +4126,7 @@ async function analyzeImage(file,onProgress){
   if(!results.length&&await rescue())results=await doSearchList(cands);
   const y=hint||anyYear(texts);
   if(results.length>1)results=rankResults(results,cands,y);
-  return{kind:results.length?'single':'none',dataUrl:dataUrl,small:small,
+  return{kind:results.length?'single':'none',shot:shot,
          cands:cands,results:results,hint:y};
 }
 
@@ -4135,8 +4163,8 @@ function nextCard(){
   renderCard();
 }
 function deckShot(it){
-  return it.dataUrl?'<img src="'+esc(it.dataUrl)+'" alt="" style="width:100%;max-height:38vh;'+
-    'object-fit:contain;border-radius:12px;background:#000">':'';
+  return it.shot?'<img src="'+esc(it.shot)+'" alt="" class="zoomabile" '+
+    'style="width:100%;max-height:38vh;object-fit:contain;border-radius:12px;background:#000">':'';
 }
 function renderCard(){
   const body=document.getElementById('deckBody');
@@ -4204,9 +4232,16 @@ function renderCardSingle(it,body){
 function renderCardNone(it,body){
   body.innerHTML=
     deckShot(it)+
-    '<div class="warn" style="margin-top:14px">Non sono riuscito a capire quale album sia.'+
-      (it.cands&&it.cands.length?'<br><span class="tiny">ho letto: '+esc(it.cands.slice(0,2).join(' · '))+'</span>':'')+
+    '<div class="warn" style="margin-top:14px">'+
+      (it.rotta
+        ? 'La lettura di questo screenshot non è riuscita.'+
+          (it.guaio?'<br><span class="tiny">'+esc(it.guaio)+'</span>':'')
+        : 'Non sono riuscito a capire quale album sia.'+
+          (it.cands&&it.cands.length?'<br><span class="tiny">ho letto: '+
+            esc(it.cands.slice(0,2).join(' · '))+'</span>':''))+
     '</div>'+
+    (it.rotta&&it.file?'<div class="row" style="margin-bottom:12px">'+
+      '<button class="btn" id="dkRetry">Riprova questo screenshot</button></div>':'')+
     '<div class="row"><div class="grow"><input type="text" id="dkQ" placeholder="cerca: artista + titolo" '+
       'value="'+esc((it.cands&&it.cands[0])||'')+'" enterkeyhint="search"></div>'+
       '<button class="btn" id="dkGo">Cerca</button></div>'+
@@ -4229,6 +4264,15 @@ function renderCardNone(it,body){
   document.getElementById('dkQ').addEventListener('keydown',e=>{if(e.key==='Enter')go()});
   document.getElementById('dkNo').onclick=()=>{deckSkipped++;nextCard()};
   document.getElementById('dkMan').onclick=()=>deckManual(it,null);
+  const re=document.getElementById('dkRetry');
+  if(re)re.onclick=async()=>{
+    re.disabled=true;re.textContent='ci riprovo...';
+    let nuovo=null;
+    try{nuovo=await analyzeImage(it.file,m=>{re.textContent=m||'ci riprovo...'})}catch(e){nuovo=null}
+    if(!nuovo){re.disabled=false;re.textContent='Riprova questo screenshot';
+      toast('Non ci sono riuscito nemmeno stavolta');return}
+    deck[deckIdx]=nuovo;renderCard();
+  };
 }
 /* --- carta con una lista di album --- */
 function renderCardList(it,body){
@@ -4345,7 +4389,7 @@ async function correggiRiga(it,i,body){
 function deckManual(it,r){
   document.getElementById('deck').classList.remove('on');
   manualForm({title:(r&&r.title)||(it.cands&&it.cands[0])||'',artist:(r&&r.artist)||'',
-    year:(r&&r.year)||it.hint||null,cover:it.small,
+    year:(r&&r.year)||it.hint||null,shot:it.shot,
     onDone:added=>{
       if(added)deckAdded++;else deckSkipped++;
       document.getElementById('deck').classList.add('on');
@@ -4444,6 +4488,45 @@ function shareAVuoto(meta){
   const b=document.getElementById('shareScegli');
   if(b)b.onclick=()=>{const f=document.getElementById('fileIn');if(f)f.click()};
 }
+/* Una lente sola per tutta l'app: qualunque immagine con class="zoomabile"
+   si apre qui, senza che chi la disegna debba saperne niente. */
+function apriLente(src){
+  const l=document.getElementById('lente'),im=document.getElementById('lenteImg');
+  if(!l||!im||!src)return;
+  im.src=src;l.classList.remove('dentro');l.classList.add('on');
+  l.scrollTop=0;l.scrollLeft=0;
+  document.body.style.overflow='hidden';
+  /* la lente e' la cosa piu' interna: il tasto indietro deve chiudere lei
+     per prima, non la scheda che ci sta sotto */
+  apriTappa('lente');
+}
+function chiudiLente(daIndietro){
+  const l=document.getElementById('lente');
+  if(!l||!l.classList.contains('on'))return false;
+  l.classList.remove('on','dentro');
+  document.getElementById('lenteImg').src='';
+  /* sotto la lente c'e' quasi sempre il mazzo o una scheda, che lo
+     scorrimento lo tengono gia' bloccato: lo restituisco solo se sotto non
+     c'e' piu' niente */
+  const sotto=document.getElementById('mask').classList.contains('on')||
+              document.getElementById('deck').classList.contains('on');
+  document.body.style.overflow=sotto?'hidden':'';
+  if(!daIndietro)chiudiTappa();
+  return true;
+}
+document.addEventListener('click',e=>{
+  const t=e.target;
+  if(!t||!t.classList)return;
+  if(t.classList.contains('zoomabile')){apriLente(t.getAttribute('src'));return}
+  if(t.id==='lenteImg'){
+    const l=document.getElementById('lente');
+    const dentro=l.classList.toggle('dentro');
+    /* entrando nello zoom resto dove stavo guardando, non torno in cima */
+    if(dentro){l.scrollLeft=(l.scrollWidth-l.clientWidth)/2}
+    return;
+  }
+  if(t.id==='lenteX'||t.id==='lente')chiudiLente();
+});
 function cleanUrl(){try{history.replaceState({},'',location.pathname)}catch(e){}}
 async function daLinkSpotify(url){
   const box=document.getElementById('sharedBox');
@@ -4578,11 +4661,10 @@ function manualForm(pre){
    '<div><label class="f">Tipo</label><select id="mnK">'+
      ['album','EP','singolo','raccolta'].map(k=>'<option value="'+k+'"'+(pre.kind===k?' selected':'')+'>'+k+'</option>').join('')+
    '</select></div>'+
-   (pre.cover?'<div><label class="f">Copertina</label>'+
-     '<label style="display:flex;gap:9px;align-items:center;cursor:pointer">'+
-     '<input type="checkbox" id="mnUseShot" style="width:auto;margin:0;accent-color:var(--acc)">'+
-     '<img src="'+esc(pre.cover)+'" style="width:70px;border-radius:8px">'+
-     '<span class="tiny muted">usa lo screenshot come copertina</span></label></div>':'')+
+   (pre.shot?'<div><label class="f">Lo screenshot</label>'+
+     '<img src="'+esc(pre.shot)+'" class="zoomabile" alt="Lo screenshot, toccalo per ingrandirlo" '+
+     'style="width:100%;max-height:30vh;object-fit:contain;border-radius:10px;background:#000">'+
+     '</div>':'')+
    '<div><label class="f">Copertina da URL (opzionale)</label><input type="text" id="mnC" placeholder="https://..." value="'+esc(pre.coverUrl||'')+'"></div>'+
    '<div id="mnSug"></div>'+
    '<div class="row"><button class="btn" id="mnSave">Salva</button></div>'+
@@ -4652,14 +4734,12 @@ function manualForm(pre){
     const t=document.getElementById('mnT').value.trim();
     if(!t){toast('Serve almeno il titolo');return}
     const p=parseMusicUrl(document.getElementById('mnL').value);
-    const useShot=document.getElementById('mnUseShot');
     closeModal();
     addAlbum({title:t,artist:document.getElementById('mnA').value.trim(),
       year:+document.getElementById('mnY').value||null,
       kind:document.getElementById('mnK').value,
       listenUrl:p.listenUrl,platform:p.platform,
-      cover:document.getElementById('mnC').value.trim()||
-        ((useShot&&useShot.checked&&pre.cover)?pre.cover:''),src:'manual'},pre.onDone?true:false);
+      cover:document.getElementById('mnC').value.trim(),src:'manual'},pre.onDone?true:false);
     if(pre.onDone)pre.onDone(true);
   };
   if(pre.onDone){
@@ -5946,6 +6026,7 @@ window.addEventListener('popstate',()=>{
   if(tappeMie>0){tappeMie--;return}
   if(tappe>0)tappe--;
   /* chiudo dal piu' interno al piu' esterno */
+  if(chiudiLente(true))return;
   if(document.getElementById('mask').classList.contains('on')){chiudiModale(true);return}
   if(document.getElementById('deck').classList.contains('on')){closeDeck(true);return}
 });
