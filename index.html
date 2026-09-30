@@ -124,6 +124,20 @@ label.f{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.7p
 .chip.m{border-color:#5a3a5a;color:#e0a0d8;background:#2a1a28}
 .chip button{color:var(--fg3);font-weight:800;line-height:1;padding:0 2px}
 .chip.add{border-style:dashed;cursor:pointer;color:var(--fg3)}
+/* Una pastiglia fa UNA cosa sola per volta: o ti porta in libreria, o si
+   lascia togliere. Le due cose insieme vorrebbero una crocetta da 16 punti
+   dentro un bersaglio da 30, cioe' due bersagli sovrapposti - proprio quello
+   che gli standard sui bersagli tattili dicono di non fare. Quindi un
+   interruttore: fuori dalla modifica si clicca, dentro si corregge. */
+.chip.cliccabile{cursor:pointer}
+.chip.cliccabile:hover{border-color:currentColor}
+.secTesta{display:flex;align-items:center;gap:8px;margin-bottom:9px}
+.secTesta .f{margin:0}
+.modifica{margin-left:auto;flex:none;width:30px;height:30px;display:inline-flex;
+  align-items:center;justify-content:center;background:transparent;
+  border:1px solid var(--line);border-radius:8px;color:var(--fg3);cursor:pointer}
+.modifica:hover{color:var(--fg)}
+.modifica.on{border-color:var(--acc);color:var(--acc)}
 .hint{font-size:12.5px;color:var(--fg3);margin-top:7px;line-height:1.55}
 .hint code{background:var(--bg3);padding:1px 5px;border-radius:4px;font-size:11.5px}
 
@@ -205,6 +219,7 @@ label.f{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.7p
 .cov .badges{position:absolute;top:7px;right:7px;display:flex;flex-direction:column;gap:5px;align-items:flex-end}
 .pill{background:rgba(0,0,0,.72);backdrop-filter:blur(6px);border-radius:99px;padding:3px 8px;font-size:11.5px;font-weight:800}
 .pill.r{color:var(--gold)}.pill.f{color:var(--acc)}.pill.q{color:var(--acc2)}
+.pill.v{color:var(--fg)}
 .cov .lis{position:absolute;bottom:0;left:0;right:0;padding:22px 9px 7px;background:linear-gradient(transparent,rgba(0,0,0,.85));font-size:11px;font-weight:700;color:var(--ok)}
 .cardalb .t{font-weight:700;font-size:13.8px;margin-top:9px;line-height:1.3;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
 .cardalb .a{color:var(--fg2);font-size:12.8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -658,7 +673,7 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
 /* ==========================================================
    1. STATO
    ========================================================== */
-const APP_VER='125';
+const APP_VER='126';
 const LS='crate.v1', LSK='crate.lfmkey', LSG='crate.gh', LSS='crate.lastsync', LSP='crate.prefs';
 const LSSP='crate.spot';   /* accesso a Spotify: resta su QUESTO dispositivo */
 let DB={albums:[],deleted:[],cfg:{}};
@@ -673,7 +688,7 @@ const LINK_KEYS={'Album of the Year':'aoty','RateYourMusic':'rym','Last.fm':'las
   'YouTube':'youtube','Bandcamp':'bandcamp','Discogs':'discogs'};
 const PREF_DEFAULTS={
   mode:'full',
-  show:{meta:true,quick:true,details:true,about:true,listeners:false,dates:true,
+  show:{meta:true,details:true,about:true,listeners:false,dates:true,
         listen:true,similar:true,links:true,tracce:true},
   links:{aoty:true,rym:true,lastfm:true,youtube:true,bandcamp:true,discogs:true},
   /* di serie solo quelle che si ascoltano senza abbonamento */
@@ -730,6 +745,13 @@ function cuore(pieno,lato){
   return '<svg viewBox="0 0 24 24" width="'+s+'" height="'+s+'" aria-hidden="true" '+
     'style="vertical-align:-2px;fill:'+(pieno?'currentColor':'none')+
     ';stroke:currentColor;stroke-width:'+(pieno?0:1.8)+';stroke-linejoin:round"><path d="'+d+'"/></svg>';
+}
+function matita(lato){
+  const s=lato||15;
+  return '<svg viewBox="0 0 24 24" width="'+s+'" height="'+s+'" aria-hidden="true" '+
+    'fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" '+
+    'stroke-linejoin="round"><path d="M4 20h4L19.5 8.5a2.1 2.1 0 0 0-3-3L5 17v3Z"/>'+
+    '<path d="M14.5 6.5l3 3"/></svg>';
 }
 /* Il disco: cerchio, solco, foro. Da pieno il foro deve restare bucato
    davvero, non tappato di un colore che poi stona sul fondo chiaro della
@@ -4817,10 +4839,13 @@ function linkSet(a,all){
   ];
   return all?set:set.filter(l=>P.links[LINK_KEYS[l[0]]]!==false);
 }
-let detailOpen=false,linksOpen=false,tracceAperte=false;
+let linksOpen=false,tracceAperte=false;
+/* "sto correggendo i generi": vale per la scheda che stai guardando e si
+   spegne appena ne apri un'altra, come le altre sezioni aperte */
+let modGeneri=false,descAperta=false;
 function openAlbum(id,keepScroll){
   const a=DB.albums.find(x=>x.id===id);if(!a)return;
-  if(!keepScroll){detailOpen=false;linksOpen=false;tracceAperte=false}
+  if(!keepScroll){linksOpen=false;tracceAperte=false;modGeneri=false;descAperta=false}
   const sc=keepScroll?document.getElementById('mask').scrollTop:0;
   openAlbum._id=id;
   /* Il mezzo punto si aggiunge al voto scelto: otto stelle piu' il mezzo
@@ -4831,12 +4856,6 @@ function openAlbum(id,keepScroll){
     const st=voto>=i?'pieno':(mezzo&&Math.ceil(voto)===i?'mezza':'vuota');
     stars+='<button data-r="'+i+'" class="'+(st==='vuota'?'':'on')+'">'+stella(st)+'</button>';
   }
-  /* riepilogo compatto: i primi cinque generi, il resto sotto Dettagli */
-  const qg=(a.genres||[]).slice(0,5),qm=[];
-  const extra=Math.max(0,(a.genres||[]).length-qg.length);
-  const quick=qg.map(t=>'<span class="chip g">'+esc(t)+'</span>').join('')+
-              qm.map(t=>'<span class="chip m">'+esc(t)+'</span>').join('')||
-              '<span class="tiny muted">nessun tag ancora</span>';
   const meta=[a.kind&&a.kind!=='album'?a.kind:'',a.year||'',
     a.tracks?a.tracks+' tracce':'',durataUmana(a.durata)]
     .filter(Boolean).join(' &middot; ');
@@ -4865,23 +4884,21 @@ function openAlbum(id,keepScroll){
           ' <button class="btn gh sm" id="bClr" style="margin-left:8px">azzera</button>'
         : '<span class="muted tiny" style="margin-left:11px">non votato</span>')+
       '</div></div>'+
-    (vis('quick')?'<div class="sec"><label class="f">In due parole</label>'+
-      '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">'+quick+
-      (vis('details')?'<button class="btn gh sm" id="bMore" style="margin-left:4px">Dettagli'+(extra?' (+'+extra+')':'')+'</button>':'')+
-      '</div></div>':'')+
-    (vis('details')?'<div id="detail" style="border-top:1px solid var(--line);padding-top:16px;display:'+(detailOpen?'block':'none')+'">'+
-      '<label class="f">Generi</label><div id="gz" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px"></div>'+
-
-      (vis('about')?'<div style="margin-top:14px" id="descBox"><label class="f">Descrizione</label>'+
-        '<div class="tiny muted" style="line-height:1.6;white-space:pre-line" id="descTxt">'+
-        (DESCR.has(id)?esc(DESCR.get(id)):'<span class="spinner"></span>')+'</div></div>':'')+
-      ((vis('dates')||vis('listeners'))?'<div style="margin-top:14px"><label class="f">Dettagli</label><div class="tiny muted" style="line-height:1.7">'+
-        'Tipo: '+esc(a.kind||'album')+'<br>'+
-        (a.listeners&&vis('listeners')?'Ascoltatori su Last.fm: '+a.listeners.toLocaleString('it-IT')+'<br>':'')+
-        (vis('dates')?'Aggiunto: '+new Date(a.addedAt||now()).toLocaleDateString('it-IT')+
-          (a.listenedAt?'<br>Ascoltato: '+new Date(a.listenedAt).toLocaleDateString('it-IT'):''):'')+
-        '</div></div>':'')+
-    '</div>':'')+
+    /* I generi non sono piu' un riepilogo di cinque piu' un pulsante che
+       apre il resto: ci sono tutti, si toccano per andare a vedere chi altro
+       li ha, e la matita li rende correggibili. */
+    (vis('details')?'<div class="sec"><div class="secTesta"><label class="f">Generi</label>'+
+      '<button class="modifica'+(modGeneri?' on':'')+'" id="bGenMod" '+
+      'aria-label="'+(modGeneri?'ho finito di correggere':'correggi i generi')+'" '+
+      'title="'+(modGeneri?'ho finito':'correggi')+'">'+matita()+'</button></div>'+
+      '<div id="gz" style="display:flex;gap:6px;flex-wrap:wrap"></div></div>':'')+
+    /* La descrizione parte chiusa: aprirla e' anche il momento in cui la
+       vado a chiedere a Last.fm, quindi chiusa non costa niente. */
+    (vis('about')?'<div class="sec"><button id="bDesc" class="f" style="padding:0;letter-spacing:.7px">'+
+      (descAperta?'&#9662;':'&#9656;')+' Descrizione</button>'+
+      '<div id="descBox" style="display:'+(descAperta?'block':'none')+';margin-top:10px">'+
+      '<div class="tiny muted" style="line-height:1.6;white-space:pre-line" id="descTxt">'+
+      (DESCR.has(id)?esc(DESCR.get(id)):'<span class="spinner"></span>')+'</div></div></div>':'')+
     '<div class="sec"><label class="f">Commento</label><textarea id="cmt" placeholder="Cosa ne pensi, dove l\'hai trovato...">'+esc(a.comment)+'</textarea></div>'+
     /* i giudizi altrui, se hai scelto di vederli solo dopo il tuo */
     (vis('links')&&linkSet(a).length&&P.dopoVoto&&a.rating==null
@@ -4918,6 +4935,14 @@ function openAlbum(id,keepScroll){
          :'Ricollega a Spotify'))+'</button>')+
       (a.pending||!vis('similar')?'':'<button class="btn gh sm" id="bSim">Simili a questo</button>')+
       '<button class="btn gh sm" id="bDel" style="border-color:var(--acc);color:var(--acc);margin-left:auto">Elimina</button></div>'+
+    /* Le date non meritano una sezione ne' un pulsante da aprire: sono una
+       riga sola in fondo, sempre li', da leggere solo se la cerchi. */
+    ((vis('dates')||vis('listeners'))?'<div class="tiny muted" style="margin-top:-4px;line-height:1.7">'+
+      (vis('dates')?'Aggiunto il '+new Date(a.addedAt||now()).toLocaleDateString('it-IT')+
+        (a.listenedAt?', ascoltato il '+new Date(a.listenedAt).toLocaleDateString('it-IT'):'')+
+        (a.toccatoAt?'. Ultima modifica il '+new Date(a.toccatoAt).toLocaleDateString('it-IT'):''):'')+
+      (a.listeners&&vis('listeners')?'<br>Ascoltatori su Last.fm: '+a.listeners.toLocaleString('it-IT'):'')+
+      '</div>':'')+
   '</div>';
   const mask=document.getElementById('mask');
   const eraAperta=mask.classList.contains('on');
@@ -4930,16 +4955,27 @@ function openAlbum(id,keepScroll){
     const h=document.getElementById(host);if(!h)return;h.innerHTML='';
     (arr||[]).forEach((t,i)=>{
       const s=document.createElement('span');s.className='chip '+cls;
-      s.innerHTML=esc(t)+' <button>&times;</button>';
-      s.querySelector('button').onclick=()=>{a[k].splice(i,1);save(a);openAlbum(id,true);renderAll()};
+      if(modGeneri){
+        s.innerHTML=esc(t)+' <button aria-label="togli questo genere">&times;</button>';
+        s.querySelector('button').onclick=()=>{a[k].splice(i,1);save(a);openAlbum(id,true);renderAll()};
+      }else{
+        s.classList.add('cliccabile');
+        s.textContent=t;
+        s.setAttribute('role','button');s.setAttribute('tabindex','0');
+        s.title='vedi gli altri album di questo genere';
+        s.onclick=()=>apriSottogenere(t);
+      }
       h.appendChild(s);
     });
+    if(!modGeneri)return;
     const add=document.createElement('span');add.className='chip add';add.textContent='+ aggiungi';
     add.onclick=()=>{const v=prompt('Nuovo '+(k==='genres'?'genere':'mood')+':');
       if(v&&v.trim()){(a[k]=a[k]||[]).push(v.trim().toLowerCase());save(a);openAlbum(id,true);renderAll()}};
     h.appendChild(add);
   };
   chips('gz',a.genres,'g','genres');
+  const bGen=document.getElementById('bGenMod');
+  if(bGen)bGen.onclick=()=>{modGeneri=!modGeneri;openAlbum(id,true)};
 
   const metti=v=>{
     a.rating=v;a.pending=false;
@@ -4982,12 +5018,13 @@ function openAlbum(id,keepScroll){
         :'<span class="muted">Nessuna descrizione'+(lfmKey()?'':': manca la chiave Last.fm nelle Opzioni')+'.</span>';
     });
   };
-  if(detailOpen)mostraDescrizione();
-  const bMore=document.getElementById('bMore');
-  if(bMore)bMore.onclick=()=>{
-    detailOpen=!detailOpen;
-    document.getElementById('detail').style.display=detailOpen?'block':'none';
-    if(detailOpen)mostraDescrizione();
+  if(descAperta)mostraDescrizione();
+  const bDesc=document.getElementById('bDesc');
+  if(bDesc)bDesc.onclick=e=>{
+    descAperta=!descAperta;
+    document.getElementById('descBox').style.display=descAperta?'block':'none';
+    e.currentTarget.innerHTML=(descAperta?'&#9662;':'&#9656;')+' Descrizione';
+    if(descAperta)mostraDescrizione();
   };
   const bLinks=document.getElementById('bLinks');
   if(bLinks)bLinks.onclick=e=>{
@@ -5345,6 +5382,18 @@ function pulisciFiltriLib(ancheOrdine){
     .forEach(x=>x.classList.toggle('on',x.dataset.s==='all'));
   aggiornaCrocette();
 }
+/* Toccare un genere sulla scheda e' la stessa cosa che toccare il nome di un
+   artista: chiudo la scheda, azzero i filtri e ne lascio uno solo acceso.
+   I generi della scheda sono i tag veri dell'album, quindi finiscono fra i
+   sottogeneri, non fra i contenitori. */
+function apriSottogenere(g){
+  const t=String(g||'').trim().toLowerCase();
+  if(!t)return;
+  closeModal();
+  pulisciFiltriLib(false);
+  SEL.fSub.add(t);
+  show('lib');renderLib();renderFiltri('f','');
+}
 function openArtist(name){
   pulisciFiltriLib(false);
   libArtist=name||'';
@@ -5550,6 +5599,7 @@ function renderLib(){
       (a.cover?'<img src="'+esc(a.cover)+'" alt="" loading="lazy" onerror="crateImgFail(this)">':'<div class="ph">&#127925;</div>')+
       '<div class="badges">'+(a.rating?'<span class="pill r">'+a.rating+'</span>':'')+
         (a.fav?'<span class="pill f">'+cuore(true,11)+'</span>':'')+
+        (a.vinile?'<span class="pill v">'+disco(true,11)+'</span>':'')+
         (a.pending?'<span class="pill q">?</span>':'')+
         (a.kind==='singolo'||a.kind==='EP'?'<span class="pill" style="color:var(--fg2)">'+a.kind+'</span>':'')+'</div>'+
       (a.listened?'<div class="lis">&#10003; ascoltato</div>':'')+
@@ -5899,7 +5949,8 @@ function renderRec(){
     d.innerHTML='<div class="cov">'+
       (a.cover?'<img src="'+esc(a.cover)+'" alt="" loading="lazy" onerror="crateImgFail(this)">':'<div class="ph">&#127925;</div>')+
       '<div class="badges">'+(a.rating?'<span class="pill r">'+a.rating+'</span>':'')+
-      (a.fav?'<span class="pill f">'+cuore(true,11)+'</span>':'')+'</div>'+
+      (a.fav?'<span class="pill f">'+cuore(true,11)+'</span>':'')+
+      (a.vinile?'<span class="pill v">'+disco(true,11)+'</span>':'')+'</div>'+
       (a.listened?'<div class="lis">&#10003; ascoltato</div>':'')+
       '</div><div class="t">'+esc(a.title)+'</div><div class="a">'+esc(a.artist||'—')+'</div>'+
       '<div class="tiny muted" style="margin-top:2px">'+
@@ -6353,11 +6404,10 @@ document.getElementById('btnSyncOff').onclick=()=>{
 /* --- preferenze della scheda --- */
 const PREF_LABELS={
   meta:['Anno, tipo e numero di tracce','sotto il nome dell\'artista'],
-  quick:['Riepilogo dei generi','i primi cinque, il resto sotto Dettagli'],
-  details:['Pulsante Dettagli','apre i tag completi e modificabili'],
-  about:['Descrizione dell\'album','testo da Last.fm, dentro Dettagli'],
+  details:['Generi','tutti, da toccare per vedere chi altro li ha'],
+  about:['Descrizione dell\'album','testo da Last.fm, si scarica al primo tocco'],
   listeners:['Numero di ascoltatori su Last.fm','spento: e\' un dato che sposta il giudizio'],
-  dates:['Date di aggiunta e ascolto','dentro Dettagli'],
+  dates:['Date di aggiunta e ascolto','una riga in fondo alla scheda'],
   listen:['Pulsante di ascolto','le piattaforme che hai scelto in &ldquo;Dove ascolti&rdquo;'],
   similar:['Pulsante Simili a questo','consigli a partire da quell\'album'],
   tracce:['Elenco delle tracce e durata','si scarica al primo tocco'],
