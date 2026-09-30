@@ -407,7 +407,7 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
     <div class="mchip" id="fDecMenu"></div>
     <div class="mchip" id="fSortMenu"></div>
   </div>
-  <div id="artistBox" style="margin-bottom:14px"></div>
+  <div id="artistBox" style="margin-bottom:14px;display:flex;gap:6px;flex-wrap:wrap;align-items:center"></div>
   <div class="grid" id="grid"></div>
 </section>
 
@@ -673,7 +673,7 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
 /* ==========================================================
    1. STATO
    ========================================================== */
-const APP_VER='126';
+const APP_VER='127';
 const LS='crate.v1', LSK='crate.lfmkey', LSG='crate.gh', LSS='crate.lastsync', LSP='crate.prefs';
 const LSSP='crate.spot';   /* accesso a Spotify: resta su QUESTO dispositivo */
 let DB={albums:[],deleted:[],cfg:{}};
@@ -5575,11 +5575,31 @@ function renderLib(){
     generi:[...SEL.fGen],sotto:[...SEL.fSub],
     dec:[...SEL.fDec],artist:libArtist};
   const ab=document.getElementById('artistBox');
-  if(libArtist){
-    ab.innerHTML='<span class="chip" style="border-color:var(--acc);color:var(--acc)">artista: '+
-      esc(libArtist)+' <button id="clrArt">&times;</button></span>';
-    document.getElementById('clrArt').onclick=()=>{libArtist='';renderLib()};
-  }else ab.innerHTML='';
+  /* La riga di quello che sta restringendo la libreria adesso, con la via
+     d'uscita accanto. C'era solo per l'artista, e arrivando da un genere si
+     restava senza: il genere era acceso dentro una tendina chiusa, e l'unica
+     uscita visibile era azzerare tutto. Le caselle dei filtri restano il
+     posto dove SCEGLI, questa riga e' il posto dove VEDI e dove esci. */
+  const inVista=[];
+  if(libArtist)inVista.push({et:'artista: '+libArtist,via:()=>{libArtist=''}});
+  [...SEL.fGen].forEach(v=>inVista.push({et:v,via:()=>SEL.fGen.delete(v)}));
+  [...SEL.fSub].forEach(v=>inVista.push({et:v,via:()=>SEL.fSub.delete(v)}));
+  [...SEL.fDec].forEach(v=>inVista.push({et:'anni '+String(v).slice(2),via:()=>SEL.fDec.delete(v)}));
+  ab.innerHTML='';
+  inVista.forEach(x=>{
+    const c=document.createElement('span');
+    c.className='chip';c.style.cssText='border-color:var(--acc);color:var(--acc)';
+    c.innerHTML=esc(x.et)+' <button aria-label="togli questo filtro">&times;</button>';
+    c.querySelector('button').onclick=()=>{x.via();renderLib();renderFiltri('f','')};
+    ab.appendChild(c);
+  });
+  if(inVista.length>1){
+    const t=document.createElement('button');
+    t.className='chip';t.style.cssText='border-style:dashed;cursor:pointer';
+    t.textContent='togli tutto';
+    t.onclick=()=>{pulisciFiltriLib(false);renderLib();renderFiltri('f','')};
+    ab.appendChild(t);
+  }
   const list=DB.albums.filter(a=>matches(a,f));
   const cmp=ordinatore(libSort);
   list.sort(cmp);
