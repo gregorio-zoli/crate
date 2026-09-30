@@ -384,6 +384,7 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
       <button data-s="todo">Da ascoltare</button>
       <button data-s="done">Ascoltati</button>
       <button data-s="fav" id="fFav"></button>
+      <button data-s="vinile" id="fVin"></button>
       <button data-s="pending" id="bPend" style="display:none">? Da identificare</button>
     </div>
     <div class="mchip" id="fGenreMenu"></div>
@@ -413,6 +414,7 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
     <button data-s="todo" class="on">Da ascoltare</button>
     <button data-s="done">Ascoltati</button>
     <button data-s="fav" id="rFav"></button>
+    <button data-s="vinile" id="rVin"></button>
     <button data-s="davotare">Senza voto</button>
   </div>
   <div class="filtgrid">
@@ -656,7 +658,7 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
 /* ==========================================================
    1. STATO
    ========================================================== */
-const APP_VER='123';
+const APP_VER='125';
 const LS='crate.v1', LSK='crate.lfmkey', LSG='crate.gh', LSS='crate.lastsync', LSP='crate.prefs';
 const LSSP='crate.spot';   /* accesso a Spotify: resta su QUESTO dispositivo */
 let DB={albums:[],deleted:[],cfg:{}};
@@ -729,6 +731,20 @@ function cuore(pieno,lato){
     'style="vertical-align:-2px;fill:'+(pieno?'currentColor':'none')+
     ';stroke:currentColor;stroke-width:'+(pieno?0:1.8)+';stroke-linejoin:round"><path d="'+d+'"/></svg>';
 }
+/* Il disco: cerchio, solco, foro. Da pieno il foro deve restare bucato
+   davvero, non tappato di un colore che poi stona sul fondo chiaro della
+   barra: un tracciato solo con la regola "evenodd" e il buco e' un buco. */
+function disco(pieno,lato){
+  const s=lato||16;
+  const anello='M12 3a9 9 0 1 0 0 18 9 9 0 1 0 0-18Zm0 6.35a2.65 2.65 0 1 1 0 5.3a2.65 2.65 0 1 1 0-5.3Z';
+  return '<svg viewBox="0 0 24 24" width="'+s+'" height="'+s+'" aria-hidden="true" '+
+    'style="vertical-align:-2px">'+
+    '<path d="'+anello+'" fill-rule="evenodd" fill="'+(pieno?'currentColor':'none')+'" '+
+      'stroke="currentColor" stroke-width="'+(pieno?0:1.6)+'"/>'+
+    (pieno?'':'<circle cx="12" cy="12" r="5.7" fill="none" stroke="currentColor" '+
+      'stroke-width="1.1" opacity=".55"/>')+
+    '</svg>';
+}
 /* Una stella disegnata invece del carattere ★, perche' serve poterla
    riempire a meta': con un carattere non si puo', e le mezze stelle sono il
    motivo per cui esiste questa funzione. Il taglio e' un gradiente fermo al
@@ -781,9 +797,18 @@ function saveLocal(){
   catch(e){toast('Memoria piena: esporta un JSON')}
   sizeHint();
 }
-/* ogni modifica passa da qui: aggiorna il timestamp e programma la sincronizzazione */
-function save(album){
-  if(album)album.updatedAt=now();
+/* ogni modifica passa da qui: aggiorna il timestamp e programma la sincronizzazione.
+   "toccatoAt" e' una cosa diversa da "updatedAt": updatedAt dice quando la
+   SCHEDA e' cambiata, e cambia anche quando sono io a rietichettare i generi
+   in blocco, a completare le durate o a verificare i link. toccatoAt dice
+   quando ci hai messo mano TU, ed e' quello che serve per ritrovare le cose
+   appena fatte. I lavori in sottofondo chiamano save(a,true) e non lo toccano;
+   quelli che non passano di qui non lo toccano comunque. */
+function save(album,zitto){
+  if(album){
+    album.updatedAt=now();
+    if(!zitto)album.toccatoAt=now();
+  }
   saveLocal();scheduleSync();
 }
 function removeAlbum(id){
@@ -2444,7 +2469,7 @@ function addAlbum(c,quiet){
     listenUrl:c.listenUrl||'',platform:c.platform||'',
     about:'',listeners:0,
     rating:null,comment:c.comment||'',fav:false,listened:false,listenedAt:null,
-    addedAt:now(),updatedAt:now(),src:c.src||'manual'};
+    addedAt:now(),updatedAt:now(),toccatoAt:now(),src:c.src||'manual'};
   if(c.pending){al.pending=true;al.link=c.link||''}
   /* dati che arrivano da un indirizzo preciso: me li porto dietro tutti */
   if(c.spotify){al.spotify=c.spotify;al.platName=c.platName||'Spotify'}
@@ -3179,7 +3204,7 @@ async function ensureSeed(a){
   if(m.deezerUrl&&!cur.deezerUrl)cur.deezerUrl=m.deezerUrl;
   if(m.tracks&&!cur.tracks)cur.tracks=m.tracks;
   if(m.cover&&!cur.cover)cur.cover=m.cover;
-  save(cur);
+  save(cur,true);        /* risolvo un link per conto mio: non l'hai chiesto tu */
   return cur.itunesUrl||cur.deezerUrl||'';
 }
 /* Prima strada: Odesli converte un indirizzo di catalogo in tutti gli altri.
@@ -3511,7 +3536,7 @@ async function resolveListen(a,forza){
   }
   const esito=[];
   const salva=L=>{const cur=DB.albums.find(x=>x.id===a.id)||a;
-    cur.spotify=L.url;cur.platName=L.name;save(cur);return L};
+    cur.spotify=L.url;cur.platName=L.name;save(cur,true);return L};
   /* Prima strada, quando c'e': l'account. Ma se mi ha messo in coda non
      resto fermo ad aspettarlo: le altre fonti sono piu' lente e meno precise,
      pero' rispondono. Meglio un album collegato via archivio adesso che uno
@@ -3563,7 +3588,7 @@ async function resolveListen(a,forza){
     if(W)return salva({url:W,name:'Spotify'});
     /* mi tengo l'aggancio: la prossima volta parto da qui senza ricercarlo */
     const cur=DB.albums.find(x=>x.id===a.id)||a;
-    if(!cur.mbid){cur.mbid=A.rgid;save(cur)}
+    if(!cur.mbid){cur.mbid=A.rgid;save(cur,true)}
   }
   /* ho un link ma non di Spotify: provo a convertirlo, invece di accontentarmi */
   if(A.altro){
@@ -4005,7 +4030,7 @@ function quietAdd(c){
     kind:c.kind||'album',itunesUrl:c.itunesUrl||'',deezerUrl:c.deezerUrl||'',mbid:c.mbid||'',
     listenUrl:c.listenUrl||'',platform:c.platform||'',
     about:'',listeners:0,rating:null,comment:'',fav:false,listened:false,listenedAt:null,
-    addedAt:now(),updatedAt:now(),src:c.src||'ocr'};
+    addedAt:now(),updatedAt:now(),toccatoAt:now(),src:c.src||'ocr'};
   if(c.spotify){al.spotify=c.spotify;al.platName=c.platName||'Spotify'}
   if(c.tracklist)al.tracklist=c.tracklist;
   if(c.durata)al.durata=c.durata;
@@ -4505,7 +4530,8 @@ function shareAVuoto(meta){
     '<b>Android non mi ha passato le immagini</b>'+
     '<div class="tiny muted" style="margin-top:6px">'+
     (vuotoBenFormato
-      ? 'La condivisione arriva vuota: è un difetto di Chrome, non tuo. Riprovare non cambia niente.'
+      ? 'La condivisione arriva vuota: è un difetto di Chrome 153, non tuo. '+
+        'Riprovare non cambia niente, ma è corretto dalla 154: aggiorna Chrome dal Play Store.'
       : 'Riprova, oppure scegli gli screenshot dal telefono.')+
     '</div>'+
     '<button class="btn sm" id="shareScegli" style="margin-top:10px">Scegli gli screenshot</button>'+
@@ -4827,6 +4853,7 @@ function openAlbum(id,keepScroll){
         (a.pending?'<button class="btn sm acc" id="bIdent">Identifica l\'album</button>':
         '<button class="btn sm '+(a.listened?'':'gh')+'" id="bLis">'+(a.listened?'&#10003; Ascoltato':'Segna ascoltato')+'</button>')+
         '<button class="btn sm gh" id="bFav" style="'+(a.fav?'border-color:var(--acc);color:var(--acc)':'')+'">'+cuore(a.fav)+' Preferito</button>'+
+        '<button class="btn sm gh" id="bVin" style="'+(a.vinile?'border-color:var(--acc);color:var(--acc)':'')+'">'+disco(a.vinile)+' Vinile</button>'+
         (a.pending||!vis('listen')?'':'<button class="btn sm gh" id="bSpot">&#9654; '+
           esc(a.listenUrl?(a.platform||'Ascolta'):(a.spotify?(a.platName||'Spotify'):'Spotify'))+'</button>')+
       '</div></div></div>'+
@@ -4938,6 +4965,8 @@ function openAlbum(id,keepScroll){
     document.getElementById('q').value=(a.title==='Da identificare'?'':a.title)||'';
     document.getElementById('q').focus()};
   document.getElementById('bFav').onclick=()=>{a.fav=!a.fav;save(a);openAlbum(id,true);renderAll()};
+  document.getElementById('bVin').onclick=()=>{a.vinile=!a.vinile;save(a);openAlbum(id,true);renderAll();
+    toast(a.vinile?'Ce l\u2019hai in vinile':'Non ce l\u2019hai piu\u2019 in vinile')};
   /* espandi i dettagli (i blocchi possono essere spenti dalle preferenze) */
   /* La descrizione si va a prendere solo quando apri i Dettagli, che e' dove
      si vede: chiederla all'apertura di ogni scheda sarebbe una richiesta a
@@ -5156,7 +5185,8 @@ const SEL={fGen:new Set(),fSub:new Set(),fDec:new Set(),fSort:new Set(['added'])
 const ORDINI=[
   ['added','Aggiunti di recente'],['alpha','Titolo A-Z'],['artist','Artista A-Z'],
   ['year','Anno (recenti)'],['yearold','Anno (vecchi)'],['rating','Voto pi\u00f9 alto'],
-  ['ascoltati','Ascoltati di recente'],['davotare','Ascoltati senza voto']
+  ['ascoltati','Ascoltati di recente'],['davotare','Ascoltati senza voto'],
+  ['toccati','Modificati di recente']
 ];
 const nomeOrdine=v=>(ORDINI.filter(x=>x[0]===v)[0]||['','?'])[1];
 /* Un sottogenere entra fra i filtri solo se ha abbastanza album alle spalle:
@@ -5363,6 +5393,7 @@ function matches(a,f){
      assente: lo zero e' un voto, e chi l'ha preso non torna in questa lista. */
   if(f.state==='davotare'&&(!a.listened||a.rating!=null))return false;
   if(f.state==='fav'&&!a.fav)return false;
+  if(f.state==='vinile'&&!a.vinile)return false;
   /* piu' generi selezionati = OR: basta che l'album ne abbia uno */
   if(f.generi&&f.generi.length){
     const mg=macroDiAlbum(a);
@@ -5474,6 +5505,11 @@ function ordinatore(quale){
     yearold:(x,y)=>(x.year||9999)-(y.year||9999),
     rating:(x,y)=>(y.rating||-1)-(x.rating||-1),
     added:(x,y)=>(y.addedAt||0)-(x.addedAt||0),
+    /* l'ultima volta che ci hai messo mano tu, qualunque cosa tu abbia fatto.
+       Chi e' nato prima di questo campo ripiega sulla data di aggiunta, che
+       e' l'ultimo gesto tuo di cui ho memoria: NON su updatedAt, che porta
+       dentro anche il lavoro fatto da me in sottofondo. */
+    toccati:(x,y)=>(+y.toccatoAt||+y.addedAt||0)-(+x.toccatoAt||+x.addedAt||0),
     /* ultimi ascoltati per primi */
     ascoltati:(x,y)=>primaGliAscoltati(x,y)||quando(y)-quando(x),
     /* ascoltati e non ancora votati per primi, poi gli altri ascoltati */
@@ -5528,8 +5564,9 @@ function renderStats(){
   const avg=r.length?(r.reduce((s,a)=>s+a.rating,0)/r.length).toFixed(1):'-';
   document.getElementById('stats').innerHTML=
     [[A.length,'in libreria',''],[A.filter(a=>!a.listened&&!a.pending).length,'da ascoltare',''],
-     [A.filter(a=>a.listened).length,'ascoltati',''],[A.filter(a=>a.fav).length,'preferiti',''],
-     [avg,'voto medio',r.length?' tap':'']]
+     [A.filter(a=>a.listened).length,'ascoltati',''],[A.filter(a=>a.fav).length,'preferiti','']]
+    .concat(A.some(a=>a.vinile)?[[A.filter(a=>a.vinile).length,'in vinile','']]:[])
+    .concat([[avg,'voto medio',r.length?' tap':'']])
     .map(x=>'<div class="stat'+x[2]+'"'+(x[2]?' id="statVoto"':'')+'><b>'+x[0]+'</b><span>'+x[1]+
       '</span>'+(x[2]?'<span class="tiny" style="text-transform:none;letter-spacing:0;color:var(--acc)">per genere &rsaquo;</span>':'')+'</div>').join('');
   const sv=document.getElementById('statVoto');
@@ -7021,9 +7058,12 @@ document.getElementById('btnAggiorna').onclick=async()=>{
   setTimeout(()=>{try{location.replace(location.pathname+'?fresh='+Date.now())}
     catch(e){location.reload()}},600);
 };
-(function(){['fFav','rFav'].forEach(id=>{
-  const f=document.getElementById(id);if(f)f.innerHTML=cuore(true,15);
-})})();
+(function(){
+  ['fFav','rFav'].forEach(id=>{const f=document.getElementById(id);if(f)f.innerHTML=cuore(true,15)});
+  ['fVin','rVin'].forEach(id=>{const v=document.getElementById(id);
+    if(v){v.innerHTML=disco(true,15);v.setAttribute('aria-label','solo quelli che hai in vinile');
+      v.setAttribute('title','solo quelli che hai in vinile')}});
+})();
 loadLocal();
 /* Riparazione locale, senza rete: sistema i generi gia' salvati che si erano
    rotti sulle virgole. Gira all'avvio, non costa niente ed e' innocua se non
