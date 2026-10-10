@@ -322,7 +322,9 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
 .rcor .row{margin-top:10px;gap:8px}
 .rcoll{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:2px;background:var(--bg2)}
 .rcoll>div,.rcoll>img{width:100%;height:100%;min-width:0;min-height:0;object-fit:cover;display:block;background:var(--bg3)}
-.rpin{position:absolute;top:7px;right:7px;display:flex;color:var(--fg)}
+/* la puntina sta in un tondo, non in una pillola: e' un segno, non un'etichetta */
+.rpin{position:absolute;top:7px;right:7px;width:30px;height:30px;padding:0;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;color:var(--fg)}
 .rnuova{aspect-ratio:1;border:1.5px dashed var(--line);border-radius:10px;display:flex;
   flex-direction:column;align-items:center;justify-content:center;gap:4px;color:var(--fg2);
   font-size:13.5px;font-weight:600;width:100%}
@@ -350,7 +352,7 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
 .piedeSel.on{display:block}
 .piedeSel .in{max-width:1240px;margin:0 auto;display:flex;align-items:center;gap:12px;font-size:14px;color:var(--fg2)}
 .piedeSel .btn{margin-left:auto}
-#v-lib.consel{padding-bottom:76px}
+#v-lib.consel,#v-racc.consel{padding-bottom:76px}
 .rvoci{margin-top:10px;border:1px solid var(--line);border-radius:10px;background:var(--bg3);padding:4px}
 .rvoce{display:flex;align-items:center;gap:10px;width:100%;padding:9px 9px;border-radius:7px;
   text-align:left;font-size:14px;color:var(--fg)}
@@ -371,7 +373,7 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
   header{backdrop-filter:none;-webkit-backdrop-filter:none;background:#101014}
   .hin{padding:9px 16px;gap:10px}
   h1{font-size:22px}
-  nav{position:fixed;left:0;right:0;bottom:0;z-index:60;margin:0;display:grid;grid-template-columns:repeat(4,1fr);gap:0;
+  nav{position:fixed;left:0;right:0;bottom:0;z-index:60;margin:0;display:grid;grid-template-columns:repeat(5,1fr);gap:0;
       background:rgba(16,16,20,.96);backdrop-filter:blur(16px);border-top:1px solid var(--line);
       padding:6px 4px calc(6px + var(--safeb))}
   nav button{border-radius:10px;padding:8px 2px;font-size:11px;display:flex;flex-direction:column;align-items:center;gap:3px;font-weight:700}
@@ -398,6 +400,7 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
     <nav>
       <button data-v="add" class="on"><i><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></i>Aggiungi</button>
       <button data-v="lib"><i><svg viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="7.2" height="7.2" rx="2.1"/><rect x="13.3" y="3.5" width="7.2" height="7.2" rx="2.1"/><rect x="3.5" y="13.3" width="7.2" height="7.2" rx="2.1"/><rect x="13.3" y="13.3" width="7.2" height="7.2" rx="2.1"/></svg></i>Libreria</button>
+      <button data-v="racc"><i><svg viewBox="0 0 24 24"><path d="M3.5 7.2a2 2 0 0 1 2-2h3.8l2 2.1h7.2a2 2 0 0 1 2 2v8.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2Z"/></svg></i>Raccolte</button>
       <button data-v="rand"><i><svg viewBox="0 0 24 24"><rect x="3.4" y="3.4" width="17.2" height="17.2" rx="4.4"/><circle cx="8.9" cy="8.9" r="1.5" fill="currentColor" stroke="none"/><circle cx="15.1" cy="15.1" r="1.5" fill="currentColor" stroke="none"/></svg></i>Random</button>
       <button data-v="set"><i><svg viewBox="0 0 24 24"><path d="M4 7.5h8M16.5 7.5H20M4 16.5h3.5M12 16.5h8"/><circle cx="14.2" cy="7.5" r="2.4"/><circle cx="9.7" cy="16.5" r="2.4"/></svg></i>Opzioni</button>
     </nav>
@@ -459,11 +462,13 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
   <div class="stats" id="stats"></div>
   <div class="row" style="margin-bottom:9px">
     <button class="btn gh sm" id="fReset">Tutta la libreria &mdash; azzera i filtri</button>
-    <button class="btn gh sm" id="bRacc" style="margin-left:auto"><span class="icona"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M3.5 7.2a2 2 0 0 1 2-2h3.8l2 2.1h7.2a2 2 0 0 1 2 2v8.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2Z"/></svg></span>Raccolte</button>
   </div>
   </div>
-  <!-- intestazione delle raccolte: la griglia, l'interno di una raccolta,
-       la scelta degli album. Vuota quando sei nella libreria normale. -->
+  <!-- Il "motore" della libreria: barra dei filtri, pastiglie, griglia.
+       Libreria e Raccolte lo usano tutte e due, quindi non e' copiato in due
+       posti: si sposta nella sezione che stai guardando, e ognuna delle due
+       si tiene i suoi filtri. -->
+  <div id="motore">
   <div id="raccTesta"></div>
   <div class="toolbar" id="libBarra">
     <input type="text" id="fq" placeholder="Filtra...">
@@ -484,7 +489,11 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
   <div id="selRiga"></div>
   <div class="grid" id="grid"></div>
   <div class="piedeSel" id="raccPiede"></div>
+  </div>
 </section>
+
+<!-- ============ RACCOLTE ============ -->
+<section class="view" id="v-racc"></section>
 
 <!-- ============ RANDOM ============ -->
 <section class="view" id="v-rand">
@@ -749,7 +758,7 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
 /* ==========================================================
    1. STATO
    ========================================================== */
-const APP_VER='128';
+const APP_VER='129';
 const LS='crate.v1', LSK='crate.lfmkey', LSG='crate.gh', LSS='crate.lastsync', LSP='crate.prefs';
 const LSSP='crate.spot';   /* accesso a Spotify: resta su QUESTO dispositivo */
 let DB={albums:[],deleted:[],cfg:{},raccolte:[]};
@@ -5233,7 +5242,7 @@ function openAlbum(id,keepScroll){
         const b=document.createElement('button');
         b.type='button';b.className='rvoce';b.dataset.r=r.id;
         b.innerHTML='<span class="box'+(inRaccolta(a,r.id)?' on':'')+'"></span>'+esc(r.nome)+
-          (r.pin?'<span class="pn">'+puntina(13)+'</span>':'');
+          (r.pin?'<span class="pn">'+puntina(15)+'</span>':'');
         b.onclick=()=>{
           if(inRaccolta(a,r.id))togliDaRaccolta([a.id],r.id);else mettiInRaccolta([a.id],r.id);
           openAlbum(id,true);renderAll();
@@ -5509,7 +5518,29 @@ const SEL={fGen:new Set(),fSub:new Set(),fDec:new Set(),fSort:new Set(['added'])
    Uscire vuol dire riprenderlo: cosi' entri in una raccolta pulito e,
    tornando indietro, ritrovi la libreria esattamente come l'avevi lasciata. */
 let LIB={vista:'album',racc:''};
+/* La pila e' tutta della sezione Raccolte: la griglia in fondo, poi la
+   raccolta, poi l'eventuale scelta. La Libreria non ne ha bisogno. */
 const pilaLib=[];
+/* Libreria e Raccolte usano lo stesso motore, ma ognuna ha i suoi filtri.
+   Quella che non stai guardando tiene il suo stato qui, e lo ritrova quando
+   ci torni: passare dall'una all'altra non mescola niente. */
+let tabViva='lib';
+const TAB={lib:null,racc:null};
+function statoIniziale(t){
+  return{vista:t==='racc'?'raccolte':'album',racc:'',q:'',state:'all',artist:'',
+    sort:'added',gen:[],sub:[],dec:[],scroll:0};
+}
+function attivaTab(t){
+  if(t!=='lib'&&t!=='racc')return;
+  const m=document.getElementById('motore'),sez=document.getElementById('v-'+t);
+  if(m&&sez&&m.parentNode!==sez&&typeof sez.appendChild==='function')sez.appendChild(m);
+  if(tabViva===t)return;
+  chiudiMenu();
+  TAB[tabViva]=statoLib();
+  rimettiLib(TAB[t]||statoIniziale(t));
+  scelti=new Set();
+  tabViva=t;
+}
 let scelti=new Set();
 let raccSort='recenti';
 /* Gli ordini della libreria: valore interno e nome che leggi, in un posto
@@ -5696,14 +5727,15 @@ function openArtist(name){
    libreria era rimasta dentro una raccolta, prima ne esco. */
 function daSchedaAFiltro(applica){
   const scheda=document.getElementById('mask').classList.contains('on');
-  if(vistaCorrente==='lib'&&LIB.vista==='dentro'&&raccolta(LIB.racc)){
-    if(scheda)closeModal();
-  }else if(pilaLib.length){
-    tornaAllaLibreria(scheda);
-  }else if(scheda)closeModal();
+  if(scheda)closeModal();
+  const qui=vistaCorrente==='racc'&&LIB.vista==='dentro'&&raccolta(LIB.racc);
+  /* da qualunque altra parte si va nella Libreria; la sezione Raccolte resta
+     com'era, e ci ritrovi la tua raccolta quando ci torni */
+  if(!qui)show('lib');
   pulisciFiltriLib(false);
   applica();
-  show('lib');renderLib();renderFiltri('f','');
+  renderLib();renderFiltri('f','');
+  window.scrollTo(0,0);
 }
 
 function statoLib(){
@@ -5734,6 +5766,9 @@ function dentroUnaRaccolta(){
    nuova. */
 function entraLivello(vista,opz){
   const o=opz||{};
+  /* prima porto davanti le Raccolte, cosi' quello che metto in pila e' lo
+     stato loro e non quello della Libreria */
+  if(vistaCorrente!=='racc')show('racc');
   chiudiMenu();
   pilaLib.push(statoLib());
   LIB.vista=vista;
@@ -5741,12 +5776,14 @@ function entraLivello(vista,opz){
   if(o.pulito)pulisciFiltriLib(true);
   scelti=new Set();
   if(!o.senzaTappa)apriTappa('lib-'+vista);
-  if(vistaCorrente!=='lib')show('lib');
   renderLib();renderFiltri('f','');
   window.scrollTo(0,0);
 }
 function esciLivelloLib(daIndietro){
   if(!pilaLib.length)return false;
+  /* il gesto indietro arrivato mentre guardi un'altra sezione: la tappa e'
+     delle Raccolte, quindi torna indietro la loro pila, senza portarti li' */
+  if(tabViva!=='racc'){TAB.racc=pilaLib.pop();return true}
   chiudiMenu();
   const st=pilaLib.pop();
   rimettiLib(st);
@@ -5759,36 +5796,51 @@ function esciLivelloLib(daIndietro){
 /* da qualunque profondita' alla libreria vera, in un colpo solo: un
    "indietro" solo di tante tappe, non tanti indietro uno dopo l'altro, che
    il browser potrebbe non eseguire tutti */
-function tornaAllaLibreria(conScheda){
+/* torna alla griglia delle raccolte da qualunque profondita'. "lascia"
+   e' quante tappe tenere nella cronologia: serve quando dalla scheda di un
+   album entri in una raccolta, e la tappa della scheda diventa la sua. */
+function tornaAllaBase(lascia){
   const n=pilaLib.length;
-  if(conScheda){
-    document.getElementById('mask').classList.remove('on');
-    openAlbum._id=null;document.body.style.overflow='';
+  if(n){
+    const base=pilaLib[0];pilaLib.length=0;scelti=new Set();
+    if(tabViva==='racc')rimettiLib(base);else TAB.racc=base;
   }
-  if(n){const base=pilaLib[0];pilaLib.length=0;rimettiLib(base);scelti=new Set()}
-  const k=Math.min(tappe,n+(conScheda?1:0));
+  const k=Math.min(tappe,Math.max(0,n-(lascia||0)));
   if(k>0){tappe-=k;tappeMie++;try{history.go(-k)}catch(e){}}
 }
-function apriRaccolte(opz){entraLivello('raccolte',opz)}
 function entraRaccolta(id,opz){
   if(!raccolta(id))return;
   entraLivello('dentro',Object.assign({racc:id,pulito:true},opz||{}));
 }
-/* "‹ Raccolte" porta sempre alla griglia: se ci eri arrivato da li' e'
-   un passo indietro, altrimenti la griglia prende il posto della raccolta */
+/* "‹ Raccolte" porta sempre alla griglia: un passo indietro se ci eri
+   arrivato da li', altrimenti tutti i passi in una volta */
 function indietroARaccolte(){
-  const sotto=pilaLib[pilaLib.length-1];
-  if(sotto&&sotto.vista==='raccolte'){esciLivelloLib(false);return}
-  esciLivelloLib(true);
-  apriRaccolte({senzaTappa:true});
+  if(pilaLib.length===1){esciLivelloLib(false);return}
+  tornaAllaBase(0);renderLib();renderFiltri('f','');window.scrollTo(0,0);
 }
 /* dalla pastiglia di una raccolta sulla scheda */
 function vaiInRaccolta(id){
   const m=document.getElementById('mask');
   const aperta=m.classList.contains('on');
-  if(vistaCorrente==='lib'&&LIB.vista==='dentro'&&LIB.racc===id){if(aperta)closeModal();return}
+  if(vistaCorrente==='racc'&&LIB.vista==='dentro'&&LIB.racc===id){if(aperta)closeModal();return}
   if(aperta){m.classList.remove('on');openAlbum._id=null;document.body.style.overflow=''}
-  entraRaccolta(id,{senzaTappa:aperta&&tappe>0});
+  /* aperta da dentro un'altra raccolta: un passo in piu', e indietro torni
+     li'. Aperta da un'altra sezione: la sezione Raccolte riparte dalla
+     griglia con dentro questa raccolta, e quello che c'era prima si chiude. */
+  let riuso=aperta&&tappe>0;
+  if(vistaCorrente!=='racc'){
+    /* Nella cronologia ci sono le tappe delle raccolte aperte prima, piu'
+       quella della scheda. Ne deve restare una, per questa raccolta: tolgo
+       le altre in un colpo e tengo l'ultima, senza aggiungerne una nuova
+       mentre il browser sta ancora tornando indietro. */
+    const n=pilaLib.length;
+    tornaAllaBase(aperta?0:1);
+    riuso=riuso||(n>0&&tappe>0);
+    if(tabViva!=='racc')TAB.racc=statoIniziale('racc');
+    else rimettiLib(statoIniziale('racc'));
+    show('racc');
+  }
+  entraRaccolta(id,{senzaTappa:riuso});
 }
 function collage(r){
   const scelta=r.cover&&DB.albums.find(a=>a.id===r.cover&&inRaccolta(a,r.id)&&a.cover);
@@ -5805,9 +5857,7 @@ const NOMI_ORD_RACC={recenti:'Modificate di recente',nome:'Nome A-Z',numero:'Pi\
 function renderGrigliaRaccolte(){
   const t=document.getElementById('raccTesta');
   t.innerHTML='<h1 style="margin-bottom:14px">Raccolte</h1>'+
-    '<div class="rtesta"><button class="btn gh sm" id="raccAlbum" '+
-    'style="height:38px;flex:none">&lsaquo; Album</button><div class="mchip" id="raccSortMenu"></div></div>';
-  document.getElementById('raccAlbum').onclick=()=>esciLivelloLib(false);
+    '<div class="rtesta"><div class="mchip" id="raccSortMenu"></div></div>';
   menuChip('raccSortMenu','Ordine',Object.keys(NOMI_ORD_RACC),SEL.raccSort,
     ()=>{raccSort=[...SEL.raccSort][0]||'recenti';renderLib()},
     {singola:true,nomi:v=>NOMI_ORD_RACC[v]});
@@ -5819,7 +5869,7 @@ function renderGrigliaRaccolte(){
     const n=membri(r.id).length;
     const d=document.createElement('div');d.className='cardalb';
     d.innerHTML='<div class="cov">'+collage(r)+
-      (r.pin?'<span class="pill rpin" title="fissata in alto">'+puntina(12)+'</span>':'')+'</div>'+
+      (r.pin?'<span class="pill rpin" title="fissata in alto">'+puntina(17)+'</span>':'')+'</div>'+
       '<div class="t">'+esc(r.nome)+'</div><div class="a">'+n+' album</div>';
     d.onclick=()=>entraRaccolta(r.id);
     g.appendChild(d);
@@ -5850,7 +5900,7 @@ function renderTestaRaccolta(lista){
         voceMenu('via','Elimina la raccolta',iconaCestino(16),'rossa')+
       '</div></div></div>'+
       '<div class="rcor"><div class="cov">'+collage(r)+'</div><div style="min-width:0">'+
-        '<h1>'+esc(r.nome)+(r.pin?' <span style="color:var(--fg3)">'+puntina(17)+'</span>':'')+'</h1>'+
+        '<h1>'+esc(r.nome)+(r.pin?' <span style="color:var(--fg3)">'+puntina(20)+'</span>':'')+'</h1>'+
         '<div class="tiny muted" style="margin-top:4px">'+tutti.length+' album'+
           (tutti.length?' &middot; '+asc+' ascoltati &middot; '+da+' da ascoltare':'')+'</div>'+
         '<div class="row"><button class="btn sm racc" id="raccAggiungi">+ Aggiungi album</button>'+
@@ -6130,14 +6180,15 @@ function ordinatore(quale){
 }
 function renderLib(){
   /* una raccolta cancellata da un altro dispositivo mentre ci eri dentro */
-  if(LIB.vista!=='album'&&LIB.vista!=='raccolte'&&!raccolta(LIB.racc))tornaAllaLibreria(false);
+  if(LIB.vista!=='album'&&LIB.vista!=='raccolte'&&!raccolta(LIB.racc))tornaAllaBase(0);
   const v=LIB.vista;
   const mostra=(id,on)=>{const e=document.getElementById(id);if(e)e.style.display=on?'':'none'};
   mostra('libTesta',v==='album');
   mostra('libBarra',v!=='raccolte');
   mostra('artistBox',v!=='raccolte');
-  const vl=document.getElementById('v-lib');
-  if(vl)vl.classList.toggle('consel',v==='scegli'||v==='togli');
+  /* spazio in fondo per il piede, nella sezione dove sta il motore */
+  ['lib','racc'].forEach(t=>{const e=document.getElementById('v-'+t);
+    if(e)e.classList.toggle('consel',t===tabViva&&(v==='scegli'||v==='togli'))});
   if(v==='raccolte'){renderGrigliaRaccolte();return}
   const f=filtriDi('f');
   const ab=document.getElementById('artistBox');
@@ -6598,7 +6649,7 @@ function recommendFrom(id){
 /* ==========================================================
    14. NAVIGAZIONE ED EVENTI
    ========================================================== */
-const VISTE=['add','lib','rand','set'];
+const VISTE=['add','lib','racc','rand','set'];
 let vistaCorrente='add';
 function show(v,verso){
   if(!VISTE.includes(v))v='add';
@@ -6617,6 +6668,7 @@ function show(v,verso){
   });
   window.scrollTo(0,0);
   if(v==='rand')updatePool();
+  if(v==='lib'||v==='racc'){attivaTab(v);renderLib();renderFiltri('f','')}
   if(typeof segnaPosto==='function')segnaPosto();
 }
 /* ---- riprendere da dove eri ----
@@ -6735,6 +6787,8 @@ function vaiA(delta){
   if(j!==i)show(VISTE[j],delta);
 }
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
+  /* toccare Raccolte quando ci sei gia' dentro ti riporta alla griglia */
+  if(b.dataset.v==='racc'&&vistaCorrente==='racc'&&pilaLib.length){indietroARaccolte();return}
   const verso=VISTE.indexOf(b.dataset.v)>VISTE.indexOf(vistaCorrente)?1:-1;
   show(b.dataset.v,verso);
 });
@@ -6918,7 +6972,6 @@ document.getElementById('fState').querySelectorAll('button').forEach(b=>b.onclic
   libSort=libState==='done'?'ascoltati':'added';
   SEL.fSort.clear();SEL.fSort.add(libSort);
   renderLib();renderFiltri('f','')});
-document.getElementById('bRacc').onclick=()=>apriRaccolte();
 document.getElementById('fReset').onclick=()=>{
   pulisciFiltriLib(true);
   renderLib();renderFiltri('f','');
