@@ -23,6 +23,7 @@
   --bg:#0d0d10; --bg2:#14141a; --bg3:#1b1b23; --line:#2a2a35;
   --fg:#eceaf0; --fg2:#9b98a8; --fg3:#6b6878;
   --acc:#e0533f; --acc2:#f0a03c; --ok:#4ec98a; --gold:#f0c040;
+  --viola:#9b6fd4; --viola2:#c3a6ec;
   --r:12px; --shadow:0 8px 30px rgba(0,0,0,.5);
   --safeb:env(safe-area-inset-bottom,0px);
 }
@@ -296,6 +297,72 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
 .deckbody{flex:1;overflow:auto;padding:16px 16px calc(28px + var(--safeb));max-width:640px;width:100%;margin:0 auto}
 .warn{background:#2a2015;border:1px solid #6a5020;border-radius:var(--r);padding:13px;margin-bottom:16px;font-size:13.5px;line-height:1.55}
 
+/* ---------- raccolte ----------
+   Il viola e' il loro colore e di nessun altro: pastiglia sulla scheda,
+   intestazione quando ci sei dentro, spunta quando scegli. Cosi' capisci di
+   essere dentro una raccolta senza leggere niente. */
+.chip.r{border-color:#4a3a6a;color:var(--viola2);background:#221a32}
+.btn.racc{background:var(--viola);color:#fff}
+.icona{display:inline-flex;vertical-align:-3px;margin-right:6px}
+.rhero{margin:-24px -18px 18px;padding:14px 18px 16px;
+  background:linear-gradient(180deg,rgba(155,111,212,.24),rgba(155,111,212,.05));
+  border-bottom:1px solid rgba(155,111,212,.32)}
+.rsu{display:flex;align-items:center;gap:8px;margin-bottom:12px}
+.rback{color:var(--viola2);font-weight:700;font-size:14px;padding:6px 0}
+.rmenu{margin-left:auto}
+.rmenu>.trigger{width:38px;padding:0;justify-content:center;font-size:20px;letter-spacing:1px}
+.rmenu .mpanel{left:auto;right:0;min-width:230px}
+.rmenu .voce{display:flex;align-items:center;gap:10px;width:100%;padding:10px 8px;
+  border-radius:8px;text-align:left;font-size:14px;color:var(--fg)}
+.rmenu .voce:hover{background:var(--bg3)}
+.rmenu .voce.rossa{color:var(--acc)}
+.rcor{display:flex;gap:14px;align-items:center}
+.rcor .cov{width:96px;flex:none}
+.rcor h1{margin:0;font-size:24px;line-height:1.15;overflow-wrap:anywhere}
+.rcor .row{margin-top:10px;gap:8px}
+.rcoll{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:2px;background:var(--bg2)}
+.rcoll>div,.rcoll>img{width:100%;height:100%;min-width:0;min-height:0;object-fit:cover;display:block;background:var(--bg3)}
+.rpin{position:absolute;top:7px;right:7px;display:flex;color:var(--fg)}
+.rnuova{aspect-ratio:1;border:1.5px dashed var(--line);border-radius:10px;display:flex;
+  flex-direction:column;align-items:center;justify-content:center;gap:4px;color:var(--fg2);
+  font-size:13.5px;font-weight:600;width:100%}
+.rnuova b{font-size:30px;font-weight:300;line-height:1}
+.rtesta{display:flex;gap:8px;align-items:flex-start;margin-bottom:16px}
+.rtesta>.mchip{flex:0 1 260px}
+.rseltit{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.rseltit h1{margin:0;font-size:22px;min-width:0;overflow-wrap:anywhere}
+.rseltit .btn{margin-left:auto;flex:none}
+.selRiga{display:flex;align-items:center;gap:10px;margin:-4px 0 14px;font-size:13px;color:var(--fg2)}
+.selRiga button{margin-left:auto;color:var(--viola2);font-weight:700;font-size:13px;padding:4px 0}
+.cardalb .spunta{position:absolute;top:7px;left:7px;width:26px;height:26px;border-radius:99px;
+  border:2px solid rgba(255,255,255,.9);background:rgba(0,0,0,.35);z-index:2}
+.cardalb.scelto .spunta{background:var(--viola);border-color:var(--viola)}
+.cardalb.scelto .spunta::after{content:"";position:absolute;left:7.5px;top:3.5px;width:5px;height:10px;
+  border:solid #fff;border-width:0 2.4px 2.4px 0;transform:rotate(42deg)}
+.cardalb.scelto .cov{outline:3px solid var(--viola);outline-offset:-3px}
+.cardalb.gia{opacity:.38;cursor:default}
+.cardalb.gia:active{transform:none}
+.cardalb .giaEt{position:absolute;left:0;right:0;bottom:0;padding:6px;background:rgba(0,0,0,.72);
+  font-size:11px;font-weight:700;text-align:center;color:var(--fg2);z-index:2}
+.piedeSel{display:none;position:fixed;left:0;right:0;bottom:0;z-index:65;
+  background:rgba(16,16,20,.97);border-top:1px solid var(--line);
+  padding:10px 18px calc(10px + var(--safeb))}
+.piedeSel.on{display:block}
+.piedeSel .in{max-width:1240px;margin:0 auto;display:flex;align-items:center;gap:12px;font-size:14px;color:var(--fg2)}
+.piedeSel .btn{margin-left:auto}
+#v-lib.consel{padding-bottom:76px}
+.rvoci{margin-top:10px;border:1px solid var(--line);border-radius:10px;background:var(--bg3);padding:4px}
+.rvoce{display:flex;align-items:center;gap:10px;width:100%;padding:9px 9px;border-radius:7px;
+  text-align:left;font-size:14px;color:var(--fg)}
+.rvoce:hover{background:var(--bg2)}
+.rvoce .box{width:18px;height:18px;flex:none;border:1.5px solid var(--fg3);border-radius:5px;position:relative}
+.rvoce .box.on{background:var(--viola);border-color:var(--viola)}
+.rvoce .box.on::after{content:"";position:absolute;left:5px;top:1.5px;width:4px;height:9px;
+  border:solid #fff;border-width:0 2px 2px 0;transform:rotate(42deg)}
+.rvoce .pn{margin-left:auto;color:var(--fg3);display:flex}
+.rvoce.nuova{color:var(--acc2);border-top:1px solid var(--line);border-radius:0 0 7px 7px}
+.filtgrid>#rRaccMenu{grid-column:1/-1}
+
 /* ---------- mobile: barra in basso ---------- */
 @media(max-width:700px){
   /* La sfocatura dell'intestazione creerebbe un blocco contenitore e la barra
@@ -386,13 +453,19 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
 
 <!-- ============ LIBRERIA ============ -->
 <section class="view" id="v-lib">
+  <div id="libTesta">
   <h1>Libreria</h1>
   <p class="sub" id="libcount"></p>
   <div class="stats" id="stats"></div>
   <div class="row" style="margin-bottom:9px">
     <button class="btn gh sm" id="fReset">Tutta la libreria &mdash; azzera i filtri</button>
+    <button class="btn gh sm" id="bRacc" style="margin-left:auto"><span class="icona"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M3.5 7.2a2 2 0 0 1 2-2h3.8l2 2.1h7.2a2 2 0 0 1 2 2v8.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2Z"/></svg></span>Raccolte</button>
   </div>
-  <div class="toolbar">
+  </div>
+  <!-- intestazione delle raccolte: la griglia, l'interno di una raccolta,
+       la scelta degli album. Vuota quando sei nella libreria normale. -->
+  <div id="raccTesta"></div>
+  <div class="toolbar" id="libBarra">
     <input type="text" id="fq" placeholder="Filtra...">
     <div class="tg" id="fState">
       <button data-s="all" class="on">Tutti</button>
@@ -408,7 +481,9 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
     <div class="mchip" id="fSortMenu"></div>
   </div>
   <div id="artistBox" style="margin-bottom:14px;display:flex;gap:6px;flex-wrap:wrap;align-items:center"></div>
+  <div id="selRiga"></div>
   <div class="grid" id="grid"></div>
+  <div class="piedeSel" id="raccPiede"></div>
 </section>
 
 <!-- ============ RANDOM ============ -->
@@ -437,6 +512,7 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
     <div class="mchip" id="rSubMenu"></div>
     <div class="mchip" id="rDecMenu"></div>
     <div class="mchip" id="rLenMenu"></div>
+    <div class="mchip" id="rRaccMenu" style="display:none"></div>
   </div>
   <div class="slot" id="slot">
     <div class="stage" id="slotStage">
@@ -673,10 +749,10 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
 /* ==========================================================
    1. STATO
    ========================================================== */
-const APP_VER='127';
+const APP_VER='128';
 const LS='crate.v1', LSK='crate.lfmkey', LSG='crate.gh', LSS='crate.lastsync', LSP='crate.prefs';
 const LSSP='crate.spot';   /* accesso a Spotify: resta su QUESTO dispositivo */
-let DB={albums:[],deleted:[],cfg:{}};
+let DB={albums:[],deleted:[],cfg:{},raccolte:[]};
 
 /* ---- preferenze di visualizzazione della scheda album ----
    Viaggiano con la libreria: le decidi una volta e le ritrovi ovunque.
@@ -767,6 +843,33 @@ function disco(pieno,lato){
       'stroke-width="1.1" opacity=".55"/>')+
     '</svg>';
 }
+/* La puntina delle raccolte fissate: una tinta sola, come il disco e il
+   cuore. L'emoji era rossa e grigia, e su una copertina urlava. */
+function puntina(lato){
+  const s=lato||14;
+  return '<svg viewBox="0 0 24 24" width="'+s+'" height="'+s+'" aria-hidden="true" '+
+    'style="vertical-align:-2px" fill="currentColor"><path d="M9 3h6a1 1 0 0 1 0 2h-.6v5.1'+
+    'l2.9 2.7a1 1 0 0 1 .3.7V15a1 1 0 0 1-1 1H13v5a1 1 0 0 1-2 0v-5H7.4a1 1 0 0 1-1-1v-1.5'+
+    'a1 1 0 0 1 .3-.7l2.9-2.7V5H9a1 1 0 0 1 0-2Z"/></svg>';
+}
+function cartella(lato){
+  const s=lato||16;
+  return '<svg viewBox="0 0 24 24" width="'+s+'" height="'+s+'" aria-hidden="true" '+
+    'fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round">'+
+    '<path d="M3.5 7.2a2 2 0 0 1 2-2h3.8l2 2.1h7.2a2 2 0 0 1 2 2v8.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2Z"/></svg>';
+}
+function iconaCestino(lato){
+  const s=lato||16;
+  return '<svg viewBox="0 0 24 24" width="'+s+'" height="'+s+'" aria-hidden="true" '+
+    'fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'+
+    '<path d="M4.5 7h15M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13"/></svg>';
+}
+function iconaImmagine(lato){
+  const s=lato||16;
+  return '<svg viewBox="0 0 24 24" width="'+s+'" height="'+s+'" aria-hidden="true" '+
+    'fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round">'+
+    '<rect x="3.5" y="5" width="17" height="14" rx="2"/><path d="M3.5 16l5-5 4 4 3-3 5 5"/></svg>';
+}
 /* Una stella disegnata invece del carattere ★, perche' serve poterla
    riempire a meta': con un carattere non si puo', e le mezze stelle sono il
    motivo per cui esiste questa funzione. Il taglio e' un gradiente fermo al
@@ -811,7 +914,8 @@ window.crateImgFail=function(img){img.style.visibility='hidden'};
 function loadLocal(){
   try{const raw=localStorage.getItem(LS);if(raw){const p=JSON.parse(raw);
     if(p&&Array.isArray(p.albums)){DB={albums:p.albums,deleted:Array.isArray(p.deleted)?p.deleted:[],
-      cfg:(p.cfg&&typeof p.cfg==='object')?p.cfg:{}};
+      cfg:(p.cfg&&typeof p.cfg==='object')?p.cfg:{},
+      raccolte:Array.isArray(p.raccolte)?p.raccolte:[]};
       DB.albums.forEach(a=>{if(!a.updatedAt)a.updatedAt=a.addedAt||now()})}}}catch(e){}
 }
 function saveLocal(){
@@ -837,6 +941,112 @@ function removeAlbum(id){
   DB.albums=DB.albums.filter(a=>a.id!==id);
   DB.deleted=DB.deleted.filter(d=>d.id!==id);
   DB.deleted.push({id:id,at:now()});
+  saveLocal();scheduleSync();
+}
+
+/* ---- le raccolte ----
+   Due pezzi, e il motivo per cui sono due. La raccolta in se' (nome,
+   puntina, copertina scelta) sta in un elenco suo, DB.raccolte: cosi' puo'
+   esistere vuota, si rinomina in un posto solo, e ha dove tenere le sue
+   impostazioni. Chi c'e' dentro invece sta scritto sull'ALBUM, in
+   a.raccolte = {idRaccolta: quando l'hai messo}. Sembra il giro lungo, ma e'
+   quello che va d'accordo con la sincronizzazione: due dispositivi che
+   aggiungono album diversi alla stessa raccolta toccano album diversi, e la
+   fusione, che lavora album per album, li tiene tutti e due. Se l'elenco dei
+   membri stesse sulla raccolta, vincerebbe l'ultimo e l'altro sparirebbe.
+   La data serve al collage (gli ultimi quattro arrivati) e all'ordine
+   "aggiunti di recente" quando sei dentro.
+   Cancellare una raccolta non la toglie dall'elenco: la segna come andata
+   (via:true) con la sua data, come le lapidi degli album, cosi' un
+   dispositivo rimasto indietro non la fa risorgere. */
+function raccolteVive(){return(DB.raccolte||[]).filter(r=>r&&!r.via)}
+function raccolta(id){return raccolteVive().find(r=>r.id===id)||null}
+function inRaccolta(a,id){return!!(a&&a.raccolte&&a.raccolte[id])}
+function membri(id){return DB.albums.filter(a=>inRaccolta(a,id))}
+/* gli ultimi arrivati per primi: e' l'ordine del collage */
+function perArrivo(id){return(x,y)=>(+y.raccolte[id]||0)-(+x.raccolte[id]||0)}
+/* "modificata" vuol dire che le hai cambiato nome o puntina, ma anche che ci
+   hai messo dentro un disco: la seconda cosa sta sugli album, quindi la
+   ricavo da li' invece di toccare la raccolta a ogni aggiunta */
+function ultimaModifica(r){
+  let t=+r.updatedAt||0;
+  DB.albums.forEach(a=>{const x=a.raccolte&&+a.raccolte[r.id];if(x>t)t=x});
+  return t;
+}
+/* fissate davanti, poi l'ordine scelto, che vale anche fra le fissate */
+function raccolteInOrdine(come){
+  const n=new Map();
+  DB.albums.forEach(a=>Object.keys(a.raccolte||{}).forEach(id=>n.set(id,(n.get(id)||0)+1)));
+  const cmp={
+    nome:(x,y)=>String(x.nome).localeCompare(String(y.nome),'it'),
+    numero:(x,y)=>(n.get(y.id)||0)-(n.get(x.id)||0)||String(x.nome).localeCompare(String(y.nome),'it'),
+    recenti:(x,y)=>ultimaModifica(y)-ultimaModifica(x)
+  }[come||'recenti']||((x,y)=>0);
+  return raccolteVive().slice().sort((x,y)=>(y.pin?1:0)-(x.pin?1:0)||cmp(x,y));
+}
+function salvaRaccolta(r){
+  if(r)r.updatedAt=now();
+  saveLocal();scheduleSync();
+}
+const NOME_RACC_MAX=40;
+function nomeRaccoltaValido(nome,tranne){
+  const t=String(nome||'').trim().replace(/\s+/g,' ');
+  if(!t)return{err:'Serve un nome'};
+  if(t.length>NOME_RACC_MAX)return{err:'Massimo '+NOME_RACC_MAX+' caratteri'};
+  if(raccolteVive().some(r=>r.id!==tranne&&String(r.nome).toLowerCase()===t.toLowerCase()))
+    return{err:'Hai gi\u00e0 una raccolta che si chiama cos\u00ec'};
+  return{nome:t};
+}
+function creaRaccolta(nome){
+  const v=nomeRaccoltaValido(nome);
+  if(v.err){toast(v.err);return null}
+  const t=now();
+  const r={id:uid(),nome:v.nome,pin:false,cover:'',creataAt:t,updatedAt:t};
+  (DB.raccolte=DB.raccolte||[]).push(r);
+  saveLocal();scheduleSync();
+  return r;
+}
+/* chiede il nome e la crea: la stessa domanda dalla griglia e dalla scheda */
+function chiediNuovaRaccolta(){
+  const v=prompt('Nome della nuova raccolta:');
+  if(v===null)return null;
+  return creaRaccolta(v);
+}
+/* mettere e togliere album: un giro solo e un salvataggio solo, anche quando
+   sono trenta. Conta come gesto tuo, quindi l'album sale fra i modificati. */
+function mettiInRaccolta(ids,id){
+  const t=now(),voglio=new Set(ids);let n=0;
+  DB.albums.forEach(a=>{
+    if(!voglio.has(a.id)||inRaccolta(a,id))return;
+    (a.raccolte=a.raccolte||{})[id]=t;a.updatedAt=t;a.toccatoAt=t;n++;
+  });
+  if(n){saveLocal();scheduleSync()}
+  return n;
+}
+function togliDaRaccolta(ids,id){
+  const t=now(),via=new Set(ids);let n=0;
+  DB.albums.forEach(a=>{
+    if(!via.has(a.id)||!inRaccolta(a,id))return;
+    delete a.raccolte[id];
+    if(!Object.keys(a.raccolte).length)delete a.raccolte;
+    a.updatedAt=t;a.toccatoAt=t;n++;
+  });
+  if(n){saveLocal();scheduleSync()}
+  return n;
+}
+/* Gli album restano dove sono: perdono solo quell'appartenenza. Toglierla
+   dagli album non e' un gesto tuo su quei dischi, quindi non li sposto fra i
+   modificati di recente. */
+function eliminaRaccolta(id){
+  const r=(DB.raccolte||[]).find(x=>x.id===id);if(!r)return;
+  const t=now();
+  r.via=true;r.cover='';r.pin=false;r.updatedAt=t;
+  DB.albums.forEach(a=>{
+    if(!inRaccolta(a,id))return;
+    delete a.raccolte[id];
+    if(!Object.keys(a.raccolte).length)delete a.raccolte;
+    a.updatedAt=t;
+  });
   saveLocal();scheduleSync();
 }
 
@@ -873,6 +1083,10 @@ function mergeDB(a,b){
     if(!(winner.moods||[]).length&&(loser.moods||[]).length)winner.moods=loser.moods;
     if(!winner.comment&&loser.comment)winner.comment=loser.comment;
     if(!winner.rating&&loser.rating)winner.rating=loser.rating;
+    /* lo stesso disco aggiunto su due dispositivi, e su ognuno messo in una
+       raccolta: resta in tutte e due */
+    if(loser.raccolte&&Object.keys(loser.raccolte).length)
+      winner.raccolte=Object.assign({},loser.raccolte,winner.raccolte||{});
     map.delete(loser.id);byKey.set(k,winner);
   });
   /* le lapidi pesano ~40 byte: le tengo un anno, cosi' un dispositivo
@@ -881,9 +1095,17 @@ function mergeDB(a,b){
   /* impostazioni condivise (per ora solo il Client ID di Spotify):
      vince la piu' recente, come per gli album */
   const cfg=fondiCfg(a.cfg,b.cfg);
+  /* le raccolte: vince la versione piu' recente di ognuna, come per gli
+     album. Quelle cancellate restano come lapide per un anno. */
+  const rm=new Map();
+  [...(a.raccolte||[]),...(b.raccolte||[])].forEach(r=>{
+    if(!r||!r.id)return;const c=rm.get(r.id);
+    if(!c||(r.updatedAt||0)>(c.updatedAt||0))rm.set(r.id,r);
+  });
   return{albums:[...map.values()].sort((x,y)=>(y.addedAt||0)-(x.addedAt||0)),
          deleted:[...del.values()].filter(d=>(d.at||0)>cutoff),
-         cfg:cfg};
+         cfg:cfg,
+         raccolte:[...rm.values()].filter(r=>!(r.via&&(r.updatedAt||0)<=cutoff))};
 }
 /* Le impostazioni condivise si fondono UNA PER UNA, con la loro data.
    Prima avevano una data sola per tutto il gruppo: scrivere il Client ID di
@@ -936,7 +1158,8 @@ function canon(db){
   const s=(x,y)=>x.id<y.id?-1:x.id>y.id?1:0;
   return JSON.stringify({a:(db.albums||[]).slice().sort(s).map(norm),
                          d:(db.deleted||[]).slice().sort(s).map(norm),
-                         c:norm(db.cfg||{})});
+                         c:norm(db.cfg||{}),
+                         r:(db.raccolte||[]).slice().sort(s).map(norm)});
 }
 
 /* ==========================================================
@@ -994,7 +1217,10 @@ async function ghGet(c){
      mentre nel repository c'era. */
   try{const p=JSON.parse(txt);
     if(p&&Array.isArray(p.albums))db={albums:p.albums,deleted:p.deleted||[],
-      cfg:(p.cfg&&typeof p.cfg==='object')?p.cfg:{}};
+      cfg:(p.cfg&&typeof p.cfg==='object')?p.cfg:{},
+      /* stesso errore di quello qui sopra, da non rifare: chi legge deve
+         sapere delle raccolte quanto chi scrive e chi fonde */
+      raccolte:Array.isArray(p.raccolte)?p.raccolte:[]};
   }catch(e){}
   return{db:db,sha:d.sha};
 }
@@ -4843,9 +5069,11 @@ let linksOpen=false,tracceAperte=false;
 /* "sto correggendo i generi": vale per la scheda che stai guardando e si
    spegne appena ne apri un'altra, come le altre sezioni aperte */
 let modGeneri=false,descAperta=false;
+/* l'elenco delle raccolte aperto sotto "+ aggiungi" sulla scheda */
+let listaRacc=false;
 function openAlbum(id,keepScroll){
   const a=DB.albums.find(x=>x.id===id);if(!a)return;
-  if(!keepScroll){linksOpen=false;tracceAperte=false;modGeneri=false;descAperta=false}
+  if(!keepScroll){linksOpen=false;tracceAperte=false;listaRacc=false;modGeneri=false;descAperta=false}
   const sc=keepScroll?document.getElementById('mask').scrollTop:0;
   openAlbum._id=id;
   /* Il mezzo punto si aggiunge al voto scelto: otto stelle piu' il mezzo
@@ -4892,6 +5120,12 @@ function openAlbum(id,keepScroll){
       'aria-label="'+(modGeneri?'ho finito di correggere':'correggi i generi')+'" '+
       'title="'+(modGeneri?'ho finito':'correggi')+'">'+matita()+'</button></div>'+
       '<div id="gz" style="display:flex;gap:6px;flex-wrap:wrap"></div></div>':'')+
+    /* Le raccolte: pastiglie viola che portano DENTRO la raccolta, e
+       "+ aggiungi" che apre l'elenco con le spunte. La matita qui non c'e':
+       l'elenco toglie e mette con lo stesso tocco, quindi una matita sarebbe
+       una seconda strada per fare la stessa cosa. */
+    (P.mode!=='min'?'<div class="sec"><label class="f">Raccolte</label>'+
+      '<div id="rz" style="display:flex;gap:6px;flex-wrap:wrap"></div><div id="rzLista"></div></div>':'')+
     /* La descrizione parte chiusa: aprirla e' anche il momento in cui la
        vado a chiedere a Last.fm, quindi chiusa non costa niente. */
     (vis('about')?'<div class="sec"><button id="bDesc" class="f" style="padding:0;letter-spacing:.7px">'+
@@ -4974,6 +5208,50 @@ function openAlbum(id,keepScroll){
     h.appendChild(add);
   };
   chips('gz',a.genres,'g','genres');
+  const rz=document.getElementById('rz');
+  if(rz&&P.mode!=='min'){
+    rz.innerHTML='';
+    const ordinate=raccolteInOrdine('nome');
+    ordinate.filter(r=>inRaccolta(a,r.id)).forEach(r=>{
+      const c=document.createElement('span');
+      c.className='chip r cliccabile';c.textContent=r.nome;
+      c.setAttribute('role','button');c.setAttribute('tabindex','0');
+      c.title='apri la raccolta';
+      c.onclick=()=>vaiInRaccolta(r.id);
+      rz.appendChild(c);
+    });
+    const add=document.createElement('span');
+    add.className='chip add';add.textContent=listaRacc?'fatto':'+ aggiungi';
+    add.setAttribute('role','button');add.setAttribute('tabindex','0');
+    add.onclick=()=>{listaRacc=!listaRacc;openAlbum(id,true)};
+    rz.appendChild(add);
+    const box=document.getElementById('rzLista');
+    box.innerHTML='';
+    if(listaRacc){
+      const l=document.createElement('div');l.className='rvoci';
+      ordinate.forEach(r=>{
+        const b=document.createElement('button');
+        b.type='button';b.className='rvoce';b.dataset.r=r.id;
+        b.innerHTML='<span class="box'+(inRaccolta(a,r.id)?' on':'')+'"></span>'+esc(r.nome)+
+          (r.pin?'<span class="pn">'+puntina(13)+'</span>':'');
+        b.onclick=()=>{
+          if(inRaccolta(a,r.id))togliDaRaccolta([a.id],r.id);else mettiInRaccolta([a.id],r.id);
+          openAlbum(id,true);renderAll();
+        };
+        l.appendChild(b);
+      });
+      const nu=document.createElement('button');
+      nu.type='button';nu.className='rvoce nuova';nu.textContent='+ Nuova raccolta\u2026';
+      nu.onclick=()=>{
+        const r=chiediNuovaRaccolta();if(!r)return;
+        mettiInRaccolta([a.id],r.id);
+        toast('Aggiunto a \u00ab'+r.nome+'\u00bb');
+        openAlbum(id,true);renderAll();
+      };
+      l.appendChild(nu);
+      box.appendChild(l);
+    }
+  }
   const bGen=document.getElementById('bGenMod');
   if(bGen)bGen.onclick=()=>{modGeneri=!modGeneri;openAlbum(id,true)};
 
@@ -5114,7 +5392,9 @@ function openAlbum(id,keepScroll){
   if(bSim)bSim.onclick=()=>{closeModal();recommendFrom(id)};
   /* tocca l'artista per vedere tutti i suoi album */
   const bArt=document.getElementById('bArt');
-  if(bArt)bArt.onclick=()=>{closeModal();openArtist(a.artist)};
+  /* la scheda la chiude openArtist: sa lui se va chiusa da sola o insieme
+     a una raccolta da cui uscire */
+  if(bArt)bArt.onclick=()=>openArtist(a.artist);
   /* link diretto all'album su Spotify */
   const bSpot=document.getElementById('bSpot');
   if(bSpot)bSpot.onclick=()=>apriAscolto(a,bSpot);
@@ -5216,7 +5496,22 @@ function closeModal(){chiudiModale(false)}
 let libState='all',libArtist='',libSort='added',randState='todo';
 /* filtri a selezione multipla: piu voci = ricerca piu larga, non piu stretta */
 const SEL={fGen:new Set(),fSub:new Set(),fDec:new Set(),fSort:new Set(['added']),
-  rGen:new Set(),rSub:new Set(),rLen:new Set(),rDec:new Set()};
+  rGen:new Set(),rSub:new Set(),rLen:new Set(),rDec:new Set(),rRacc:new Set(),
+  raccSort:new Set(['recenti'])};
+/* ---- dove sei, dentro la libreria ----
+   'album'     la libreria di sempre
+   'raccolte'  la griglia delle cartelle
+   'dentro'    dentro una raccolta: la stessa libreria, ristretta a lei
+   'scegli'    tutta la libreria, per scegliere cosa metterci dentro
+   'togli'     dentro la raccolta, per scegliere cosa togliere
+   'copertina' dentro la raccolta, per scegliere il disco da usare come copertina
+   Ogni passo verso l'interno mette in pila lo stato di prima, filtri compresi.
+   Uscire vuol dire riprenderlo: cosi' entri in una raccolta pulito e,
+   tornando indietro, ritrovi la libreria esattamente come l'avevi lasciata. */
+let LIB={vista:'album',racc:''};
+const pilaLib=[];
+let scelti=new Set();
+let raccSort='recenti';
 /* Gli ordini della libreria: valore interno e nome che leggi, in un posto
    solo, cosi' la tendina e chi ordina non possono dire cose diverse. */
 const ORDINI=[
@@ -5389,15 +5684,271 @@ function pulisciFiltriLib(ancheOrdine){
 function apriSottogenere(g){
   const t=String(g||'').trim().toLowerCase();
   if(!t)return;
-  closeModal();
-  pulisciFiltriLib(false);
-  SEL.fSub.add(t);
-  show('lib');renderLib();renderFiltri('f','');
+  daSchedaAFiltro(()=>SEL.fSub.add(t));
 }
 function openArtist(name){
+  daSchedaAFiltro(()=>{libArtist=name||''});
+}
+/* Toccare un genere o un artista sulla scheda ti lascia nel posto da cui
+   sei partito. Se la scheda l'hai aperta da dentro una raccolta, il filtro
+   vale dentro la raccolta: uscirne non avrebbe senso. Se l'hai aperta da
+   qualunque altra parte, vale per la libreria intera, come sempre; e se la
+   libreria era rimasta dentro una raccolta, prima ne esco. */
+function daSchedaAFiltro(applica){
+  const scheda=document.getElementById('mask').classList.contains('on');
+  if(vistaCorrente==='lib'&&LIB.vista==='dentro'&&raccolta(LIB.racc)){
+    if(scheda)closeModal();
+  }else if(pilaLib.length){
+    tornaAllaLibreria(scheda);
+  }else if(scheda)closeModal();
   pulisciFiltriLib(false);
-  libArtist=name||'';
-  show('lib');renderLib();
+  applica();
+  show('lib');renderLib();renderFiltri('f','');
+}
+
+function statoLib(){
+  const fq=document.getElementById('fq');
+  return{vista:LIB.vista,racc:LIB.racc,q:fq?fq.value:'',state:libState,
+    artist:libArtist,sort:libSort,gen:[...SEL.fGen],sub:[...SEL.fSub],dec:[...SEL.fDec],
+    scroll:window.scrollY||window.pageYOffset||0};
+}
+function rimettiLib(st){
+  LIB.vista=st.vista;LIB.racc=st.racc;
+  libState=st.state;libArtist=st.artist;libSort=st.sort;
+  const fq=document.getElementById('fq');if(fq)fq.value=st.q;
+  [['fGen','gen'],['fSub','sub'],['fDec','dec']].forEach(x=>{
+    SEL[x[0]].clear();st[x[1]].forEach(v=>SEL[x[0]].add(v));
+  });
+  SEL.fSort.clear();SEL.fSort.add(libSort);
+  document.getElementById('fState').querySelectorAll('button')
+    .forEach(x=>x.classList.toggle('on',x.dataset.s===libState));
+  aggiornaCrocette();
+}
+function dentroUnaRaccolta(){
+  return LIB.vista==='dentro'||LIB.vista==='togli'||LIB.vista==='copertina';
+}
+/* senzaTappa: la tappa nella cronologia c'e' gia' e la riuso. Succede
+   quando dalla scheda di un album entri in una raccolta: la tappa della
+   scheda diventa quella della raccolta. Chiuderla e riaprirla subito non si
+   puo', perche' il "indietro" del browser arriva dopo e si mangerebbe quella
+   nuova. */
+function entraLivello(vista,opz){
+  const o=opz||{};
+  chiudiMenu();
+  pilaLib.push(statoLib());
+  LIB.vista=vista;
+  if(o.racc!==undefined)LIB.racc=o.racc;
+  if(o.pulito)pulisciFiltriLib(true);
+  scelti=new Set();
+  if(!o.senzaTappa)apriTappa('lib-'+vista);
+  if(vistaCorrente!=='lib')show('lib');
+  renderLib();renderFiltri('f','');
+  window.scrollTo(0,0);
+}
+function esciLivelloLib(daIndietro){
+  if(!pilaLib.length)return false;
+  chiudiMenu();
+  const st=pilaLib.pop();
+  rimettiLib(st);
+  scelti=new Set();
+  if(!daIndietro)chiudiTappa();
+  renderLib();renderFiltri('f','');
+  window.scrollTo(0,st.scroll||0);
+  return true;
+}
+/* da qualunque profondita' alla libreria vera, in un colpo solo: un
+   "indietro" solo di tante tappe, non tanti indietro uno dopo l'altro, che
+   il browser potrebbe non eseguire tutti */
+function tornaAllaLibreria(conScheda){
+  const n=pilaLib.length;
+  if(conScheda){
+    document.getElementById('mask').classList.remove('on');
+    openAlbum._id=null;document.body.style.overflow='';
+  }
+  if(n){const base=pilaLib[0];pilaLib.length=0;rimettiLib(base);scelti=new Set()}
+  const k=Math.min(tappe,n+(conScheda?1:0));
+  if(k>0){tappe-=k;tappeMie++;try{history.go(-k)}catch(e){}}
+}
+function apriRaccolte(opz){entraLivello('raccolte',opz)}
+function entraRaccolta(id,opz){
+  if(!raccolta(id))return;
+  entraLivello('dentro',Object.assign({racc:id,pulito:true},opz||{}));
+}
+/* "‹ Raccolte" porta sempre alla griglia: se ci eri arrivato da li' e'
+   un passo indietro, altrimenti la griglia prende il posto della raccolta */
+function indietroARaccolte(){
+  const sotto=pilaLib[pilaLib.length-1];
+  if(sotto&&sotto.vista==='raccolte'){esciLivelloLib(false);return}
+  esciLivelloLib(true);
+  apriRaccolte({senzaTappa:true});
+}
+/* dalla pastiglia di una raccolta sulla scheda */
+function vaiInRaccolta(id){
+  const m=document.getElementById('mask');
+  const aperta=m.classList.contains('on');
+  if(vistaCorrente==='lib'&&LIB.vista==='dentro'&&LIB.racc===id){if(aperta)closeModal();return}
+  if(aperta){m.classList.remove('on');openAlbum._id=null;document.body.style.overflow=''}
+  entraRaccolta(id,{senzaTappa:aperta&&tappe>0});
+}
+function collage(r){
+  const scelta=r.cover&&DB.albums.find(a=>a.id===r.cover&&inRaccolta(a,r.id)&&a.cover);
+  const img=a=>'<img src="'+esc(a.cover)+'" alt="" loading="lazy" onerror="crateImgFail(this)">';
+  if(scelta)return img(scelta);
+  /* sempre due per due, anche con meno di quattro dischi: i posti vuoti
+     dicono subito quanto e' piena */
+  const q=membri(r.id).sort(perArrivo(r.id)).slice(0,4);
+  let h='<div class="rcoll" style="width:100%;height:100%">';
+  for(let i=0;i<4;i++)h+=q[i]&&q[i].cover?img(q[i]):'<div></div>';
+  return h+'</div>';
+}
+const NOMI_ORD_RACC={recenti:'Modificate di recente',nome:'Nome A-Z',numero:'Pi\u00f9 album'};
+function renderGrigliaRaccolte(){
+  const t=document.getElementById('raccTesta');
+  t.innerHTML='<h1 style="margin-bottom:14px">Raccolte</h1>'+
+    '<div class="rtesta"><button class="btn gh sm" id="raccAlbum" '+
+    'style="height:38px;flex:none">&lsaquo; Album</button><div class="mchip" id="raccSortMenu"></div></div>';
+  document.getElementById('raccAlbum').onclick=()=>esciLivelloLib(false);
+  menuChip('raccSortMenu','Ordine',Object.keys(NOMI_ORD_RACC),SEL.raccSort,
+    ()=>{raccSort=[...SEL.raccSort][0]||'recenti';renderLib()},
+    {singola:true,nomi:v=>NOMI_ORD_RACC[v]});
+  document.getElementById('artistBox').innerHTML='';
+  document.getElementById('selRiga').innerHTML='';
+  const pd=document.getElementById('raccPiede');pd.classList.remove('on');pd.innerHTML='';
+  const g=document.getElementById('grid');g.innerHTML='';
+  raccolteInOrdine(raccSort).forEach(r=>{
+    const n=membri(r.id).length;
+    const d=document.createElement('div');d.className='cardalb';
+    d.innerHTML='<div class="cov">'+collage(r)+
+      (r.pin?'<span class="pill rpin" title="fissata in alto">'+puntina(12)+'</span>':'')+'</div>'+
+      '<div class="t">'+esc(r.nome)+'</div><div class="a">'+n+' album</div>';
+    d.onclick=()=>entraRaccolta(r.id);
+    g.appendChild(d);
+  });
+  const nu=document.createElement('button');
+  nu.type='button';nu.className='rnuova';
+  nu.innerHTML='<b>+</b>Nuova raccolta';
+  nu.onclick=()=>{const r=chiediNuovaRaccolta();if(r)entraRaccolta(r.id)};
+  g.appendChild(nu);
+}
+function voceMenu(az,testo,icona,cls){
+  return '<button type="button" class="voce'+(cls?' '+cls:'')+'" data-az="'+az+'">'+icona+esc(testo)+'</button>';
+}
+function renderTestaRaccolta(lista){
+  const v=LIB.vista,r=raccolta(LIB.racc),t=document.getElementById('raccTesta');
+  if(v==='album'||!r){t.innerHTML='';return}
+  if(v==='dentro'){
+    const tutti=membri(r.id);
+    const asc=tutti.filter(a=>a.listened).length,da=tutti.filter(a=>!a.listened&&!a.pending).length;
+    t.innerHTML='<div class="rhero"><div class="rsu">'+
+      '<button class="rback" id="raccIndietro">&lsaquo; Raccolte</button>'+
+      '<div class="mchip rmenu" id="raccMenu"><button class="trigger" type="button" '+
+        'aria-label="altre azioni sulla raccolta">&#8943;</button><div class="mpanel">'+
+        voceMenu('pin',r.pin?'Togli dall\u2019alto':'Fissa in alto',puntina(16))+
+        voceMenu('nome','Rinomina',matita(16))+
+        (tutti.length?voceMenu('cop',r.cover?'Cambia la copertina':'Scegli la copertina',iconaImmagine(16)):'')+
+        (r.cover?voceMenu('collage','Torna al collage',iconaImmagine(16)):'')+
+        voceMenu('via','Elimina la raccolta',iconaCestino(16),'rossa')+
+      '</div></div></div>'+
+      '<div class="rcor"><div class="cov">'+collage(r)+'</div><div style="min-width:0">'+
+        '<h1>'+esc(r.nome)+(r.pin?' <span style="color:var(--fg3)">'+puntina(17)+'</span>':'')+'</h1>'+
+        '<div class="tiny muted" style="margin-top:4px">'+tutti.length+' album'+
+          (tutti.length?' &middot; '+asc+' ascoltati &middot; '+da+' da ascoltare':'')+'</div>'+
+        '<div class="row"><button class="btn sm racc" id="raccAggiungi">+ Aggiungi album</button>'+
+          (tutti.length?'<button class="btn gh sm" id="raccSeleziona">Seleziona</button>':'')+'</div>'+
+      '</div></div></div>';
+    document.getElementById('raccIndietro').onclick=indietroARaccolte;
+    document.getElementById('raccAggiungi').onclick=()=>entraLivello('scegli',{pulito:true});
+    const bs=document.getElementById('raccSeleziona');
+    if(bs)bs.onclick=()=>entraLivello('togli');
+    const m=document.getElementById('raccMenu');
+    m.querySelector('.trigger').onclick=e=>{
+      e.stopPropagation();
+      const era=m.classList.contains('aperto');
+      chiudiMenu();if(!era)m.classList.add('aperto');
+    };
+    m.querySelector('.mpanel').onclick=e=>e.stopPropagation();
+    m.querySelectorAll('[data-az]').forEach(b=>b.onclick=()=>azioneRaccolta(b.dataset.az));
+    return;
+  }
+  const tit={scegli:'Aggiungi a',togli:'Togli da',copertina:'Copertina di'}[v];
+  t.innerHTML='<div class="rseltit"><h1>'+tit+' &laquo;'+esc(r.nome)+'&raquo;</h1>'+
+    '<button class="btn gh sm" id="selAnnulla">Annulla</button></div>';
+  document.getElementById('selAnnulla').onclick=()=>esciLivelloLib(false);
+}
+function azioneRaccolta(az){
+  const r=raccolta(LIB.racc);if(!r)return;
+  chiudiMenu();
+  if(az==='pin'){
+    r.pin=!r.pin;salvaRaccolta(r);renderLib();
+    toast(r.pin?'Fissata in alto':'Non pi\u00f9 fissata');
+  }else if(az==='nome'){
+    const n=prompt('Nuovo nome della raccolta:',r.nome);
+    if(n===null)return;
+    const ok=nomeRaccoltaValido(n,r.id);
+    if(ok.err){toast(ok.err);return}
+    r.nome=ok.nome;salvaRaccolta(r);renderAll();
+  }else if(az==='cop'){
+    entraLivello('copertina');
+  }else if(az==='collage'){
+    r.cover='';salvaRaccolta(r);renderLib();
+  }else if(az==='via'){
+    if(!confirm('Eliminare la raccolta \u00ab'+r.nome+'\u00bb?\n\nGli album restano in libreria.'))return;
+    eliminaRaccolta(r.id);
+    esciLivelloLib(false);renderAll();
+    toast('Raccolta eliminata');
+  }
+}
+function posizionaPiede(p){
+  /* sul telefono la barra delle sezioni sta in basso: il piede le sta sopra */
+  let h=0;
+  try{
+    const nv=document.querySelector('nav');
+    if(window.innerWidth<=700&&nv&&nv.getBoundingClientRect)h=nv.getBoundingClientRect().height||0;
+  }catch(e){}
+  p.style.bottom=h+'px';
+  p.style.paddingBottom=h?'10px':'';
+}
+function conto(n,uno,tanti){return n+' '+(n===1?uno:tanti)}
+/* la riga "N album · Seleziona tutti" e il piede con il tasto: si
+   aggiornano a ogni tocco senza ridisegnare la griglia, che con 1600
+   copertine farebbe saltare lo scorrimento */
+function aggiornaScelta(){
+  const v=LIB.vista,sr=document.getElementById('selRiga'),pd=document.getElementById('raccPiede');
+  if(v!=='scegli'&&v!=='togli'&&v!=='copertina'){
+    sr.innerHTML='';pd.classList.remove('on');pd.innerHTML='';return;
+  }
+  if(v==='copertina'){
+    sr.innerHTML='<div class="selRiga"><span>Tocca il disco da usare come copertina.</span></div>';
+    pd.classList.remove('on');pd.innerHTML='';return;
+  }
+  const lista=(renderLib._lista||[]).filter(a=>!(v==='scegli'&&inRaccolta(a,LIB.racc)));
+  const tutti=lista.length>0&&lista.every(a=>scelti.has(a.id));
+  sr.innerHTML='<div class="selRiga"><span>'+conto((renderLib._lista||[]).length,'album','album')+'</span>'+
+    (lista.length?'<button type="button" id="selTutti">'+(tutti?'Togli la selezione':'Seleziona tutti')+'</button>':'')+'</div>';
+  const st=document.getElementById('selTutti');
+  if(st)st.onclick=()=>{
+    lista.forEach(a=>{if(tutti)scelti.delete(a.id);else scelti.add(a.id)});
+    renderLib();
+  };
+  const n=scelti.size;
+  pd.innerHTML='<div class="in"><span>'+(n?conto(n,'scelto','scelti'):'Tocca le copertine per sceglierle')+'</span>'+
+    '<button class="btn '+(v==='togli'?'acc':'racc')+'" id="selVai"'+(n?'':' disabled')+'>'+
+    (v==='togli'?'Togli':'Aggiungi')+(n?' '+n:'')+'</button></div>';
+  pd.classList.add('on');posizionaPiede(pd);
+  document.getElementById('selVai').onclick=confermaSelezione;
+}
+function confermaSelezione(){
+  const id=LIB.racc,ids=[...scelti],v=LIB.vista,r=raccolta(id);
+  if(!r||!ids.length)return;
+  const n=v==='togli'?togliDaRaccolta(ids,id):mettiInRaccolta(ids,id);
+  esciLivelloLib(false);renderAll();
+  toast(v==='togli'?conto(n,'tolto','tolti')+' da \u00ab'+r.nome+'\u00bb'
+                   :conto(n,'aggiunto','aggiunti')+' a \u00ab'+r.nome+'\u00bb');
+}
+function usaComeCopertina(aid){
+  const r=raccolta(LIB.racc);if(!r)return;
+  r.cover=aid;salvaRaccolta(r);
+  esciLivelloLib(false);toast('Copertina scelta');
 }
 function allValues(k){const s=new Set();DB.albums.forEach(a=>(a[k]||[]).forEach(v=>s.add(v)));return[...s].sort()}
 function decades(){const s=new Set();DB.albums.forEach(a=>{if(a.year)s.add(Math.floor(a.year/10)*10)});
@@ -5443,6 +5994,10 @@ function matches(a,f){
   if(f.state==='davotare'&&(!a.listened||a.rating!=null))return false;
   if(f.state==='fav'&&!a.fav)return false;
   if(f.state==='vinile'&&!a.vinile)return false;
+  /* dentro una raccolta: solo i suoi. Nel random invece se ne possono
+     scegliere piu' d'una, e basta stare in una qualsiasi. */
+  if(f.racc&&!inRaccolta(a,f.racc))return false;
+  if(f.raccIn&&f.raccIn.length&&!f.raccIn.some(id=>inRaccolta(a,id)))return false;
   /* piu' generi selezionati = OR: basta che l'album ne abbia uno */
   if(f.generi&&f.generi.length){
     const mg=macroDiAlbum(a);
@@ -5515,10 +6070,11 @@ function filtriDi(quale){
   if(quale==='r')return{state:randState,
     generi:[...SEL.rGen],sotto:[...SEL.rSub],len:[...SEL.rLen],
     q:(document.getElementById('rQ')||{}).value||'',
-    dec:[...SEL.rDec]};
+    dec:[...SEL.rDec],raccIn:[...SEL.rRacc]};
   return{state:libState,q:document.getElementById('fq').value.trim(),
     generi:[...SEL.fGen],sotto:[...SEL.fSub],
-    dec:[...SEL.fDec],artist:libArtist};
+    dec:[...SEL.fDec],artist:libArtist,
+    racc:dentroUnaRaccolta()?LIB.racc:''};
 }
 function poolSenza(quale,dim){
   const f=filtriDi(quale);
@@ -5526,6 +6082,7 @@ function poolSenza(quale,dim){
   if(dim==='sotto')f.sotto=[];
   if(dim==='dec')f.dec=[];
   if(dim==='len')f.len=[];
+  if(dim==='racc')f.raccIn=[];
   return DB.albums.filter(a=>!a.pending&&matches(a,f));
 }
 function vivi(quale,dim,tutte,scelte){
@@ -5534,6 +6091,7 @@ function vivi(quale,dim,tutte,scelte){
   if(dim==='sotto')pool.forEach(a=>(a.genres||[]).forEach(x=>ok.add(String(x).trim().toLowerCase())));
   if(dim==='dec')pool.forEach(a=>{if(a.year)ok.add(String(Math.floor(a.year/10)*10))});
   if(dim==='len')tutte.forEach(et=>{if(pool.some(a=>nellaFascia(a,et)))ok.add(et)});
+  if(dim==='racc')pool.forEach(a=>Object.keys(a.raccolte||{}).forEach(x=>ok.add(x)));
   return tutte.filter(v=>ok.has(v)||(scelte&&scelte.has(v)));
 }
 /* Due ordini nuovi guardano agli ascolti invece che alla scheda. Gli album
@@ -5571,9 +6129,17 @@ function ordinatore(quale){
   }[quale];
 }
 function renderLib(){
-  const f={state:libState,q:document.getElementById('fq').value.trim(),
-    generi:[...SEL.fGen],sotto:[...SEL.fSub],
-    dec:[...SEL.fDec],artist:libArtist};
+  /* una raccolta cancellata da un altro dispositivo mentre ci eri dentro */
+  if(LIB.vista!=='album'&&LIB.vista!=='raccolte'&&!raccolta(LIB.racc))tornaAllaLibreria(false);
+  const v=LIB.vista;
+  const mostra=(id,on)=>{const e=document.getElementById(id);if(e)e.style.display=on?'':'none'};
+  mostra('libTesta',v==='album');
+  mostra('libBarra',v!=='raccolte');
+  mostra('artistBox',v!=='raccolte');
+  const vl=document.getElementById('v-lib');
+  if(vl)vl.classList.toggle('consel',v==='scegli'||v==='togli');
+  if(v==='raccolte'){renderGrigliaRaccolte();return}
+  const f=filtriDi('f');
   const ab=document.getElementById('artistBox');
   /* La riga di quello che sta restringendo la libreria adesso, con la via
      d'uscita accanto. C'era solo per l'artista, e arrivando da un genere si
@@ -5601,8 +6167,12 @@ function renderLib(){
     ab.appendChild(t);
   }
   const list=DB.albums.filter(a=>matches(a,f));
-  const cmp=ordinatore(libSort);
+  /* dentro una raccolta "aggiunti di recente" vuol dire aggiunti a LEI */
+  const cmp=dentroUnaRaccolta()&&libSort==='added'?perArrivo(LIB.racc):ordinatore(libSort);
   list.sort(cmp);
+  renderLib._lista=list;
+  renderTestaRaccolta(list);
+  aggiornaScelta();
   const np=DB.albums.filter(a=>a.pending).length;
   const bp=document.getElementById('bPend');
   bp.style.display=np?'':'none';bp.textContent='? Da identificare ('+np+')';
@@ -5611,21 +6181,37 @@ function renderLib(){
   const g=document.getElementById('grid');
   if(!DB.albums.length){
     g.innerHTML='<div class="empty" style="grid-column:1/-1"><div class="big">&#128189;</div>La libreria è vuota.</div>';return}
+  if(v==='dentro'&&!membri(LIB.racc).length){
+    g.innerHTML='<div class="empty" style="grid-column:1/-1">La raccolta &egrave; vuota.<br>'+
+      'Riempila con <b>+ Aggiungi album</b>, oppure dalla scheda di un disco.</div>';return}
   if(!list.length){g.innerHTML='<div class="empty" style="grid-column:1/-1">Nessun album con questi filtri.</div>';return}
   g.innerHTML='';
+  const scelta=v==='scegli'||v==='togli';
   list.forEach(a=>{
     const d=document.createElement('div');d.className='cardalb';
-    d.innerHTML='<div class="cov">'+
+    const gia=v==='scegli'&&inRaccolta(a,LIB.racc);
+    d.innerHTML='<div class="cov">'+(scelta&&!gia?'<span class="spunta"></span>':'')+
+      (gia?'<div class="giaEt">gi&agrave; dentro</div>':'')+
       (a.cover?'<img src="'+esc(a.cover)+'" alt="" loading="lazy" onerror="crateImgFail(this)">':'<div class="ph">&#127925;</div>')+
       '<div class="badges">'+(a.rating?'<span class="pill r">'+a.rating+'</span>':'')+
         (a.fav?'<span class="pill f">'+cuore(true,11)+'</span>':'')+
         (a.vinile?'<span class="pill v">'+disco(true,11)+'</span>':'')+
         (a.pending?'<span class="pill q">?</span>':'')+
         (a.kind==='singolo'||a.kind==='EP'?'<span class="pill" style="color:var(--fg2)">'+a.kind+'</span>':'')+'</div>'+
-      (a.listened?'<div class="lis">&#10003; ascoltato</div>':'')+
+      (a.listened&&!gia?'<div class="lis">&#10003; ascoltato</div>':'')+
       '</div><div class="t">'+esc(a.title)+'</div><div class="a">'+esc(a.artist||'—')+
       (a.year?' &middot; '+a.year:'')+'</div>';
-    d.onclick=()=>openAlbum(a.id);
+    if(gia)d.classList.add('gia');
+    else if(scelta){
+      if(scelti.has(a.id))d.classList.add('scelto');
+      d.onclick=()=>{
+        if(scelti.has(a.id))scelti.delete(a.id);else scelti.add(a.id);
+        d.classList.toggle('scelto',scelti.has(a.id));
+        aggiornaScelta();
+      };
+    }
+    else if(v==='copertina')d.onclick=()=>usaComeCopertina(a.id);
+    else d.onclick=()=>openAlbum(a.id);
     g.appendChild(d);
   });
 }
@@ -5742,6 +6328,16 @@ function renderFiltri(quale,tranne){
   solo('dec',()=>menuChip(p+'DecMenu','Decenni',vivi(quale,'dec',dec,dSel),dSel,
     quale==='r'?()=>{updatePool();renderFiltri('r','dec')}
                :()=>{renderLib();renderFiltri('f','dec')}));
+  /* le raccolte nel random: la casella c'e' solo quando ne hai almeno una */
+  if(quale==='r')solo('racc',()=>{
+    const host=document.getElementById('rRaccMenu');
+    const vive=raccolteInOrdine('nome');
+    if(host)host.style.display=vive.length?'':'none';
+    if(!vive.length)return;
+    const nomi=new Map(vive.map(r=>[r.id,r.nome]));
+    menuChip('rRaccMenu','Raccolte',vivi('r','racc',vive.map(r=>r.id),SEL.rRacc),SEL.rRacc,
+      ()=>{updatePool();renderFiltri('r','racc')},{nomi:x=>nomi.get(x)||'?'});
+  });
   if(quale==='f')solo('ordine',()=>menuChip('fSortMenu','Ordine',ORDINI.map(x=>x[0]),
     SEL.fSort,()=>{libSort=[...SEL.fSort][0]||'added';renderLib()},
     {singola:true,nomi:nomeOrdine}));
@@ -5751,6 +6347,7 @@ function renderAll(){
   const sub=sottogeneri();
   [...SEL.fGen,...SEL.rGen].forEach(v=>{if(!macro.includes(v)){SEL.fGen.delete(v);SEL.rGen.delete(v)}});
   [...SEL.fSub,...SEL.rSub].forEach(v=>{if(!sub.includes(v)){SEL.fSub.delete(v);SEL.rSub.delete(v)}});
+  [...SEL.rRacc].forEach(id=>{if(!raccolta(id))SEL.rRacc.delete(id)});
   renderFiltri('f','');renderFiltri('r','');
   renderStats();renderLib();updatePool();sizeHint();fillSeeds();
   if(typeof renderSpotOra==='function')renderSpotOra();
@@ -5769,7 +6366,8 @@ function randPool(){
     generi:[...SEL.rGen],sotto:[...SEL.rSub],
     q:(document.getElementById('rQ')||{}).value||'',
     dec:[...SEL.rDec],
-    len:[...SEL.rLen]};
+    len:[...SEL.rLen],
+    raccIn:[...SEL.rRacc]};
   return DB.albums.filter(a=>!a.pending&&matches(a,f));
 }
 function updatePool(){
@@ -5787,6 +6385,7 @@ function updatePool(){
     const rq=document.getElementById('rQ');if(rq&&rq.value.trim())on.push('\u201c'+rq.value.trim()+'\u201d');
     SEL.rDec.forEach(v=>on.push(v));
     SEL.rLen.forEach(v=>on.push(v));
+    SEL.rRacc.forEach(id=>{const r=raccolta(id);if(r)on.push('\u00ab'+r.nome+'\u00bb')});
     act.textContent=on.length?'filtri attivi: '+on.join(', '):'nessun filtro: pesca da tutta la libreria';
   }
 }
@@ -6165,6 +6764,8 @@ window.addEventListener('popstate',()=>{
   if(chiudiLente(true))return;
   if(document.getElementById('mask').classList.contains('on')){chiudiModale(true);return}
   if(document.getElementById('deck').classList.contains('on')){closeDeck(true);return}
+  /* raccolte: la griglia, l'interno, la scelta degli album */
+  if(pilaLib.length){esciLivelloLib(true);return}
 });
 /* ---- scorrimento laterale fra le sezioni ---- */
 (()=>{
@@ -6317,6 +6918,7 @@ document.getElementById('fState').querySelectorAll('button').forEach(b=>b.onclic
   libSort=libState==='done'?'ascoltati':'added';
   SEL.fSort.clear();SEL.fSort.add(libSort);
   renderLib();renderFiltri('f','')});
+document.getElementById('bRacc').onclick=()=>apriRaccolte();
 document.getElementById('fReset').onclick=()=>{
   pulisciFiltriLib(true);
   renderLib();renderFiltri('f','');
@@ -6346,7 +6948,7 @@ document.getElementById('rReset').onclick=()=>{
     .forEach(x=>x.classList.toggle('on',x.dataset.s==='todo'));
   SEL.rDec.clear();
   SEL.rLen.clear();
-  SEL.rGen.clear();SEL.rSub.clear();
+  SEL.rGen.clear();SEL.rSub.clear();SEL.rRacc.clear();
   const rq=document.getElementById('rQ');if(rq)rq.value='';
   aggiornaCrocette();
   renderAll();
@@ -7039,7 +7641,8 @@ document.getElementById('importIn').onchange=e=>{
     const p=JSON.parse(r.result);if(!p||!Array.isArray(p.albums))throw 0;
     p.albums.forEach(a=>{if(!a.id)a.id=uid();if(!a.updatedAt)a.updatedAt=a.addedAt||now()});
     const n0=DB.albums.length;
-    DB=mergeDB(DB,{albums:p.albums,deleted:p.deleted||[]});
+    DB=mergeDB(DB,{albums:p.albums,deleted:p.deleted||[],
+      raccolte:Array.isArray(p.raccolte)?p.raccolte:[]});
     saveLocal();scheduleSync();renderAll();
     toast((DB.albums.length-n0)+' album importati');
   }catch(err){toast('File non valido')}};
