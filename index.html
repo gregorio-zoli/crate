@@ -758,7 +758,7 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
 /* ==========================================================
    1. STATO
    ========================================================== */
-const APP_VER='129';
+const APP_VER='130';
 const LS='crate.v1', LSK='crate.lfmkey', LSG='crate.gh', LSS='crate.lastsync', LSP='crate.prefs';
 const LSSP='crate.spot';   /* accesso a Spotify: resta su QUESTO dispositivo */
 let DB={albums:[],deleted:[],cfg:{},raccolte:[]};
@@ -2595,8 +2595,57 @@ const DISCOGS_COMPOSTI={
   'non-music':[],
   "children's":[]
 };
-function normalizzaGeneri(lista){
+/* Le regole di scrittura fisse: il punto fra due lettere vale come un
+   trattino ("p.funk" e' "p-funk"), poi il trattino segue le sue regole, poi i
+   sinonimi veri. */
+function formaGenere(v){
+  let x=String(v||'').trim().toLowerCase();
+  x=x.replace(/(?<=\p{L})\.(?=\p{L})/gu,'-');
+  x=unificaTrattini(x);
+  if(ALIAS_GENERI[x])x=ALIAS_GENERI[x];
+  return x;
+}
+/* Lo stesso genere scritto attaccato o staccato: "darkwave" e "dark wave",
+   "bossanova" e "bossa nova", "neofolk" e "neo folk". Non c'e' una regola
+   fissa che dica quale delle due e' giusta (si scrive "bossa nova" ma
+   "darkwave"), quindi decide la libreria: vince la grafia che usano piu'
+   album, e a parita' quella con gli spazi. Tolti spazi, trattini, punti e
+   apostrofi, due grafie uguali sono lo stesso genere.
+   Decidere sui dati condivisi e non su qualcosa di questo dispositivo e'
+   voluto: telefono e PC hanno la stessa libreria, quindi arrivano alla
+   stessa scelta e non si correggono a vicenda all'infinito. E una volta
+   unificati la scelta non si sposta piu', perche' quella grafia ce l'hanno
+   tutti. */
+/* "&", "and" e la "n" di "rock n roll" e "drum n bass" sono la stessa
+   congiunzione: "rhythm & blues" e "rhythm and blues" sono un genere solo */
+function schiacciaGenere(v){
+  return String(v||'').toLowerCase()
+    .replace(/\s*&\s*|(?<=[\s\-])(?:and|n|'n'|\u2019n\u2019)(?=[\s\-])/g,' and ')
+    .replace(/[\s\-.'\u2019_]+/g,'');
+}
+function mappaGrafie(){
+  const conta=new Map();
+  (DB.albums||[]).forEach(a=>(a.genres||[]).forEach(g=>{
+    const v=formaGenere(g);if(!v)return;
+    const k=schiacciaGenere(v);if(!k)return;
+    if(!conta.has(k))conta.set(k,new Map());
+    const m=conta.get(k);m.set(v,(m.get(v)||0)+1);
+  }));
+  const spazi=x=>(x.match(/ /g)||[]).length;
+  const out=new Map();
+  /* anche quando la libreria ne usa una sola: e' proprio il caso di un
+     "dark wave" nuovo che arriva dove tutti scrivono "darkwave" */
+  conta.forEach((forme,k)=>{
+    out.set(k,[...forme.entries()].sort((x,y)=>y[1]-x[1]||spazi(y[0])-spazi(x[0])||
+      (x[0]<y[0]?-1:1))[0][0]);
+  });
+  return out;
+}
+/* mappa: le grafie scelte dalla libreria. Chi sistema tutti gli album in un
+   colpo la calcola una volta e la passa; per un album solo la calcolo qui. */
+function normalizzaGeneri(lista,mappa){
   const out=[],visti=new Set();
+  const grafie=mappa||mappaGrafie();
   (lista||[]).forEach(g=>{
     const s=String(g||'').trim().toLowerCase();
     if(!s)return;
@@ -2604,8 +2653,9 @@ function normalizzaGeneri(lista){
     pezzi.forEach(x=>{
       /* i rottami di una separazione andata male: "& country", "world" nudo */
       let v=String(x).replace(/^[&,\/\s]+/,'').replace(/[&,\/\s]+$/,'').trim();
-      v=unificaTrattini(v);
-      if(ALIAS_GENERI[v])v=ALIAS_GENERI[v];
+      v=formaGenere(v);
+      const scelta=grafie.get(schiacciaGenere(v));
+      if(scelta)v=scelta;
       if(!v||v.length<2||v==='world'||v==='non-music')return;
       if(visti.has(v))return;visti.add(v);out.push(v);
     });
@@ -5212,8 +5262,19 @@ function openAlbum(id,keepScroll){
     });
     if(!modGeneri)return;
     const add=document.createElement('span');add.className='chip add';add.textContent='+ aggiungi';
+    /* un genere scritto a mano passa dalle stesse regole di quelli trovati
+       da me: "Post-Rock" diventa subito "post rock", e "dark wave" diventa
+       "darkwave" se e' cosi' che lo scrivono gli altri tuoi album */
     add.onclick=()=>{const v=prompt('Nuovo '+(k==='genres'?'genere':'mood')+':');
-      if(v&&v.trim()){(a[k]=a[k]||[]).push(v.trim().toLowerCase());save(a);openAlbum(id,true);renderAll()}};
+      if(!v||!v.trim())return;
+      let t=v.trim().toLowerCase();
+      if(k==='genres'){
+        const n=normalizzaGeneri([t]);
+        if(!n.length){toast('Questo non lo posso usare come genere');return}
+        t=n[0];
+      }
+      if((a[k]||[]).includes(t)){toast('C\u2019\u00e8 gi\u00e0: '+t);return}
+      (a[k]=a[k]||[]).push(t);save(a);openAlbum(id,true);renderAll()};
     h.appendChild(add);
   };
   chips('gz',a.genres,'g','genres');
@@ -7794,8 +7855,9 @@ loadLocal();
 /* Riparazione locale, senza rete: sistema i generi gia' salvati che si erano
    rotti sulle virgole. Gira all'avvio, non costa niente ed e' innocua se non
    c'e' niente da riparare. */
-(function(){
+function sistemaGeneriSalvati(){
   let tocchi=0;
+  const mappa=mappaGrafie();
   /* Le descrizioni salvate non servono piu': si leggono dalla scheda, intere,
      al momento. Toglierle alleggerisce il file sincronizzato di circa un
      terzo. Non si perde niente che non si possa rileggere in una richiesta. */
@@ -7812,11 +7874,13 @@ loadLocal();
       const s=String(g||'').trim().toLowerCase();
       if(!s||NOISE_TAGS.test(s))return false;
       return!(tit&&nucleoTitolo(s)===tit);
-    }));
+    }),mappa);
     if(dopo.join('|')!==prima){a.genres=dopo;a.updatedAt=now();tocchi++}
   });
   if(tocchi){saveLocal();scheduleSync();}
-})();
+  return tocchi;
+}
+sistemaGeneriSalvati();
 spotCarica();loadPrefs();
 /* Trasloco, una volta sola: quello che avevi impostato quando queste cose
    stavano solo qui dentro entra nella libreria, cosi' lo ritrovi anche sugli
