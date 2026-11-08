@@ -758,7 +758,7 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
 /* ==========================================================
    1. STATO
    ========================================================== */
-const APP_VER='133';
+const APP_VER='134';
 const LS='crate.v1', LSK='crate.lfmkey', LSG='crate.gh', LSS='crate.lastsync', LSP='crate.prefs';
 const LSSP='crate.spot';   /* accesso a Spotify: resta su QUESTO dispositivo */
 let DB={albums:[],deleted:[],cfg:{},raccolte:[]};
@@ -4337,7 +4337,26 @@ const UI_NOISE=/^(play|shuffle|save|saved|follow|following|download|share|more|a
    Sono il formato piu' comune nelle liste condivise. Vanno tenute intere:
    spezzarle sul trattino distrugge l'abbinamento, che e' il dato piu' utile. */
 const PAIR_RE=/^(.{2,60}?)\s+[-–—]\s+(.{2,90}?)$/;
-function looksLikePair(line){
+/* Due severita' diverse per due provenienze diverse. Il testo letto da uno
+   screenshot e' pieno di rumore - "Play", "Album", "3:45", lettere sparse -
+   e le regole qui sotto servono a buttarlo. Un elenco incollato invece
+   l'hai scritto o scelto tu: ogni riga con un trattino in mezzo e' un disco.
+   Applicargli le regole dell'OCR scartava album veri: "76:14" dei Global
+   Communication, "( )" dei Sigur Ros, "M" di Myrkur, "Y" del Pop Group,
+   "Play" di Moby, "Album" dei Girls, "A.S.O." degli A.S.O. */
+const PAIR_RE_ELENCO=/^(.{1,60}?)\s+[-–—]\s+(.{1,90}?)$/;
+function looksLikePair(line,elenco){
+  if(elenco){
+    const e=String(line||'').match(PAIR_RE_ELENCO);
+    if(!e)return null;
+    const artista=e[1].trim(),titolo=e[2].trim();
+    /* un artista fatto solo di simboli non e' un artista; il titolo invece
+       puo' esserlo, come "( )" */
+    if(!/[\p{L}\p{N}]/u.test(artista)||!titolo)return null;
+    /* restano fuori solo i conteggi di una playlist: "12 brani - 48 min" */
+    if(/\b\d+\s*(songs?|tracks?|min|brani|tracce)\b/i.test(titolo))return null;
+    return{artist:artista,title:titolo,raw:artista+' - '+titolo};
+  }
   const m=String(line||'').match(PAIR_RE);
   if(!m)return null;
   const artist=m[1].trim(),title=m[2].trim();
@@ -4417,7 +4436,7 @@ function righeDaTesto(txt){
     const l=riga.replace(/^\s*[\d]+[.)\]]\s*/,'')      /* via "1." o "3)" davanti */
                 .replace(/\s+/g,' ').trim();
     if(l.length<5)return;
-    const p=looksLikePair(l);
+    const p=looksLikePair(l,true);
     if(!p)return;
     const k=p.raw.toLowerCase();
     if(visti.has(k))return;
