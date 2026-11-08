@@ -583,7 +583,7 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
       <button class="btn gh sm" id="bulkReset" style="border-color:var(--acc);color:var(--acc)">Rifai da zero</button>
       <button class="btn gh" id="bulkDurate">Completa le durate</button>
     </div>
-    <div class="hint">&ldquo;Rifai da zero&rdquo; cancella anche i generi messi da te.</div>
+    <div class="hint">Nessuno dei tre tocca i generi che aggiungi o togli a mano. Vale per quelli corretti da questa versione in poi.</div>
     <div id="bulkBox" style="display:none;margin-top:14px">
       <div class="bar"><i id="bulkBar"></i></div>
       <div class="tiny muted" id="bulkTxt" style="margin-top:8px"></div>
@@ -758,7 +758,7 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
 /* ==========================================================
    1. STATO
    ========================================================== */
-const APP_VER='131';
+const APP_VER='133';
 const LS='crate.v1', LSK='crate.lfmkey', LSG='crate.gh', LSS='crate.lastsync', LSP='crate.prefs';
 const LSSP='crate.spot';   /* accesso a Spotify: resta su QUESTO dispositivo */
 let DB={albums:[],deleted:[],cfg:{},raccolte:[]};
@@ -1096,6 +1096,10 @@ function mergeDB(a,b){
        raccolta: resta in tutte e due */
     if(loser.raccolte&&Object.keys(loser.raccolte).length)
       winner.raccolte=Object.assign({},loser.raccolte,winner.raccolte||{});
+    ['generiMiei','generiTolti'].forEach(k=>{
+      if((loser[k]||[]).length)winner[k]=[...new Set([...(winner[k]||[]),...loser[k]])];
+    });
+    if(!winner.uscita&&loser.uscita)winner.uscita=loser.uscita;
     map.delete(loser.id);byKey.set(k,winner);
   });
   /* le lapidi pesano ~40 byte: le tengo un anno, cosi' un dispositivo
@@ -1653,6 +1657,7 @@ function spotVerso(al){
     title:cleanTitle(al.name||''),
     artist:(al.artists||[]).map(x=>x&&x.name).filter(Boolean).join(', '),
     year:al.release_date?+String(al.release_date).slice(0,4)||null:null,
+    uscita:dataUscita(al.release_date),
     cover:img?img.url:'',
     tracks:+al.total_tracks||tr.length||null,
     tracklist:tr.length?tr:null,
@@ -1668,6 +1673,7 @@ function spotLeggero(x){
   return{title:cleanTitle(x.name||''),
     artist:(x.artists||[]).map(a=>a&&a.name).filter(Boolean).join(', '),
     year:x.release_date?+String(x.release_date).slice(0,4)||null:null,
+    uscita:dataUscita(x.release_date),
     cover:img?img.url:'',genre:'',tracks:+x.total_tracks||null,
     kind:tipo==='single'?(+x.total_tracks>=3?'EP':'singolo')
         :tipo==='compilation'?'raccolta':'album',
@@ -1745,6 +1751,7 @@ async function spotCerca(titolo,artista,esito,soloLink){
       artist:(x.artists||[]).map(a=>a&&a.name).filter(Boolean).join(', '),
       tracks:+x.total_tracks||null,
       year:x.release_date?+String(x.release_date).slice(0,4)||null:null,
+      uscita:dataUscita(x.release_date),
       kind:t==='single'?(+x.total_tracks>=3?'EP':'singolo'):t==='compilation'?'raccolta':'album'}};
   };
   const visti=new Set(),tutti=[];
@@ -1954,6 +1961,7 @@ async function searchArchive(term){
       const sec=(rg['secondary-types']||[]).map(String);
       out.push({title:cleanTitle(rg.title),artist:art,
         year:rg['first-release-date']?+rg['first-release-date'].slice(0,4)||null:null,
+        uscita:dataUscita(rg['first-release-date']),
         cover:'https://coverartarchive.org/release-group/'+rg.id+'/front-500',
         genre:'',tracks:null,
         kind:pt==='ep'?'EP':pt==='single'?'singolo':
@@ -2011,7 +2019,8 @@ async function cercaPerTitolo(titolo,artista){
     const d=await jsonp('https://itunes.apple.com/search?media=music&entity=album'+
       '&attribute=albumTerm&limit=25&term='+encodeURIComponent(titolo));
     (d.results||[]).forEach(r=>out.push({title:cleanTitle(r.collectionName),artist:r.artistName,
-      year:r.releaseDate?+r.releaseDate.slice(0,4):null,cover:bigCover(r.artworkUrl100),
+      year:r.releaseDate?+r.releaseDate.slice(0,4):null,uscita:dataUscita(r.releaseDate),
+      cover:bigCover(r.artworkUrl100),
       genre:r.primaryGenreName||'',tracks:r.trackCount||null,
       kind:detectKind(r.collectionName,r.trackCount,r.collectionType),
       itunesUrl:r.collectionViewUrl||'',src:'itunes'}));
@@ -2054,7 +2063,8 @@ async function cercaItunes(term,limite,soloTitolo){
       (soloTitolo?'&attribute=albumTerm':'')+'&limit='+(limite||12)+
       '&term='+encodeURIComponent(term));
     (d.results||[]).forEach(r=>out.push({title:cleanTitle(r.collectionName),artist:r.artistName,
-      year:r.releaseDate?+r.releaseDate.slice(0,4):null,cover:bigCover(r.artworkUrl100),
+      year:r.releaseDate?+r.releaseDate.slice(0,4):null,uscita:dataUscita(r.releaseDate),
+      cover:bigCover(r.artworkUrl100),
       genre:r.primaryGenreName||'',tracks:r.trackCount||null,
       kind:detectKind(r.collectionName,r.trackCount,r.collectionType),
       itunesUrl:r.collectionViewUrl||'',src:'itunes'}));
@@ -2335,7 +2345,7 @@ async function fetchMusicBrainz(artist,titoloGrezzo){
   return{tags:[],year:null};
 }
 async function mbUno(artist,title,severo){
-  const tags=[];let year=null;
+  const tags=[];let year=null,uscita='';
   try{
     /* niente parentesi nella ricerca: le edizioni speciali non hanno un
      gruppo di pubblicazione a parte, e cercandole non si trova niente */
@@ -2343,12 +2353,13 @@ async function mbUno(artist,title,severo){
   const q='releasegroup:'+JSON.stringify(tp)+
     (artist?' AND artist:'+JSON.stringify(artist):'');
     const r=await fetch('https://musicbrainz.org/ws/2/release-group/?fmt=json&limit=1&query='+encodeURIComponent(q));
-    if(!r.ok)return{tags,year};
+    if(!r.ok)return{tags,year,uscita};
     const rg=((await r.json())['release-groups']||[])[0];
-    if(!rg)return{tags,year};
+    if(!rg)return{tags,year,uscita};
     /* cercato senza artista: accetto solo se il titolo e' identico */
-    if(severo&&nucleoTitolo(rg.title||'')!==nucleoTitolo(tp))return{tags,year};
+    if(severo&&nucleoTitolo(rg.title||'')!==nucleoTitolo(tp))return{tags,year,uscita};
     if(rg['first-release-date'])year=+rg['first-release-date'].slice(0,4)||null;
+    uscita=dataUscita(rg['first-release-date']);
     /* Solo "genres", non "tags". MusicBrainz tiene le due cose separate: i
        generi sono un vocabolario curato e votato, i tag sono testo libero
        dove chiunque scrive "irish" o "bryan adams". Prendendo tutti e due
@@ -2361,11 +2372,25 @@ async function mbUno(artist,title,severo){
     if(r2.ok){const d2=await r2.json();
       (d2.genres||[]).filter(g=>(+g.count||0)>=1).forEach(g=>tags.push(g.name));}
   }catch(e){}
-  return{tags,year};
+  return{tags,year,uscita};
 }
 /* ---- elenco tracce e durata ----
    iTunes le da' in una chiamata sola a partire dall'identificativo che sta
    dentro l'indirizzo dell'album. Le scarico solo quando le chiedi. */
+/* La data di uscita come la danno le fonti, tagliata alla precisione che
+   hanno davvero: "2026-10-24", "2026-10" o "2026". Non si vede da nessuna
+   parte: serve a mettere davanti, nell'ordine per anno, i dischi appena
+   usciti, e a sapere quando riprovarne i tag. */
+function dataUscita(v){
+  const m=/^(\d{4})(?:-(\d{2}))?(?:-(\d{2}))?/.exec(String(v||'').trim());
+  if(!m||m[1]==='0000')return'';
+  return m[1]+(m[2]&&m[2]!=='00'?'-'+m[2]+(m[3]&&m[3]!=='00'?'-'+m[3]:''):'');
+}
+/* tengo la piu' precisa delle due: "2026-10-24" batte "2026" */
+function uscitaMigliore(a,b){
+  const x=dataUscita(a),y=dataUscita(b);
+  return y.length>x.length?y:x;
+}
 function itunesId(url){
   const m=String(url||'').match(/\/id(\d+)/)||String(url||'').match(/\/(\d{6,})(\?|$)/);
   return m?m[1]:'';
@@ -2782,6 +2807,7 @@ function addAlbum(c,quiet){
   if(c.spotify){al.spotify=c.spotify;al.platName=c.platName||'Spotify'}
   if(c.tracklist)al.tracklist=c.tracklist;
   if(c.durata)al.durata=c.durata;
+  if(dataUscita(c.uscita))al.uscita=dataUscita(c.uscita);
   if(c.linkFissato){al.linkFissato=true;al.daLink=true}
   DB.albums.unshift(al);saveLocal();scheduleSync();renderAll();
   if(c.pending){toast('Salvato da identificare');return al}
@@ -2795,10 +2821,38 @@ function addAlbum(c,quiet){
 /* MusicBrainz ammette una richiesta al secondo: le metto in fila
    invece di sparargliele in parallelo quando aggiungo piu album insieme */
 let enrichQ=Promise.resolve();
-function queueEnrich(id,genre){
-  enrichQ=enrichQ.then(()=>enrich(id,genre)).catch(()=>{})
+function queueEnrich(id,genre,merge,zitto){
+  enrichQ=enrichQ.then(()=>enrich(id,genre,merge,zitto)).catch(()=>{})
     .then(()=>new Promise(r=>setTimeout(r,1100)));
   return enrichQ;
+}
+/* ---- i generi tuoi ----
+   Due elenchi sull'album, invisibili: quelli che hai aggiunto tu
+   (generiMiei) e quelli che hai tolto tu (generiTolti). Nessuna riprova
+   automatica tocca i primi, e nessuna rimette i secondi: senza questo, la
+   prima riprova ti ridava il tag sbagliato che avevi tolto apposta.
+   Vale da quando esiste: le correzioni fatte prima non sono segnate. */
+function segnaGenereMio(a,g){
+  a.generiMiei=[...new Set([...(a.generiMiei||[]),g])];
+  a.generiTolti=(a.generiTolti||[]).filter(x=>x!==g);
+  if(!a.generiTolti.length)delete a.generiTolti;
+}
+function segnaGenereTolto(a,g){
+  a.generiTolti=[...new Set([...(a.generiTolti||[]),g])];
+  a.generiMiei=(a.generiMiei||[]).filter(x=>x!==g);
+  if(!a.generiMiei.length)delete a.generiMiei;
+}
+/* Il risultato di una riprova: i tuoi sempre, quelli trovati adesso se non
+   li hai scartati tu, e - se non e' "da capo" - quelli che c'erano gia'.
+   Il tetto di 14 taglia solo quelli automatici, mai i tuoi. */
+const GENERI_MAX=14;
+function generiAggiornati(a,trovati,daCapo){
+  const miei=a.generiMiei||[],via=new Set(a.generiTolti||[]);
+  const tuoi=new Set(miei);
+  const tutti=[...new Set([...(daCapo?[]:(a.genres||[])),...(trovati||[]),...miei])]
+    .filter(g=>tuoi.has(g)||!via.has(g));
+  let posto=GENERI_MAX-tuoi.size;
+  return tutti.filter(g=>tuoi.has(g)||(posto-->0));
 }
 /* ---- completamento di un album scritto a mano ----
    Gli archivi di metadati non hanno le copertine. Quindi dopo il salvataggio
@@ -2807,6 +2861,7 @@ function queueEnrich(id,genre){
 /* i dati che arrivano da un indirizzo preciso battono quelli indovinati
    con una ricerca a testo libero: sovrascrivono, non riempiono i buchi */
 function applicaDati(a,d){
+  if(d.uscita)a.uscita=uscitaMigliore(a.uscita,d.uscita);
   ['title','artist','cover','year','tracks','tracklist','durata','mbid','kind',
    'itunesUrl','deezerUrl','spotify','platName','listenUrl','platform'].forEach(k=>{if(d[k])a[k]=d[k]});
   a.linkFissato=true;a.daLink=true;
@@ -2938,7 +2993,7 @@ async function generiDiRipiego(a){
   }catch(e){}
   return[];
 }
-async function enrich(id,itunesGenre,merge){
+async function enrich(id,itunesGenre,merge,zitto){
   const a0=DB.albums.find(a=>a.id===id);if(!a0)return;
   /* Tre fonti, ognuna per quello che sa fare: Discogs per generi e
      sottogeneri curati, MusicBrainz per i suoi generi votati (che aggiungono
@@ -2967,12 +3022,20 @@ async function enrich(id,itunesGenre,merge){
      e' dello stesso genere degli altri loro dischi. */
   if(!generi.length)generi=await generiDiRipiego(a0);
   const a=DB.albums.find(x=>x.id===id);if(!a)return;
-  if(merge){
-    a.genres=[...new Set([...(a.genres||[]),...generi])].slice(0,14);
+  /* "daCapo": rifaccio quelli automatici, ma solo se le fonti hanno
+     risposto - con la rete giu' non butto via niente. Le altre riprove
+     aggiungono soltanto. In tutti i casi i tuoi restano e gli scartati non
+     tornano. */
+  if(merge==='daCapo'){
+    if(generi.length)a.genres=generiAggiornati(a,generi,true);
+  }else if(merge){
+    a.genres=generiAggiornati(a,generi,false);
   }else{
-    if(!(a.genres||[]).length)a.genres=generi;
+    if(!(a.genres||[]).length)a.genres=generiAggiornati(a,generi,false);
   }
   if(!a.year&&mb.year)a.year=mb.year;
+  if(mb.uscita&&(!a.year||String(mb.uscita).slice(0,4)===String(a.year)))
+    a.uscita=uscitaMigliore(a.uscita,mb.uscita);
   /* la descrizione non viene piu' salvata: era un terzo del file, e per di
      piu' nella versione tagliata. Si legge dalla scheda, intera, al momento */
   if(lfm.listeners)a.listeners=lfm.listeners;
@@ -2997,7 +3060,8 @@ async function enrich(id,itunesGenre,merge){
     const cur=DB.albums.find(x=>x.id===id);
     if(cur&&tc&&!cur.tracks)cur.tracks=tc;
   }
-  save(a);renderAll();
+  /* zitto: i lavori in sottofondo non spostano l'album fra i modificati */
+  save(a,zitto);renderAll();
   if(openAlbum._id===id)openAlbum(id,true);
   return cl;
 }
@@ -3011,7 +3075,9 @@ async function bulkEnrich(mode){
   const list=DB.albums.filter(a=>!a.pending&&(mode==='missing'
     ? !(a.genres||[]).length : true));
   if(!list.length){toast('Niente da aggiornare');return}
-  if(mode==='reset'&&!confirm('Rifare i tag da zero per '+list.length+' album?\n\nI tag che hai aggiunto o corretto a mano andranno persi.'))return;
+  if(mode==='reset'&&!confirm('Rifare i tag da zero per '+list.length+' album?\n\n'+
+    'I generi che aggiungi o togli a mano da questa versione in poi restano come li hai lasciati. '+
+    'Quelli corretti prima non sono segnati e possono cambiare.'))return;
   bulkRunning=true;bulkStop=false;
   const box=document.getElementById('bulkBox'),bar=document.getElementById('bulkBar'),
         txt=document.getElementById('bulkTxt');
@@ -3022,8 +3088,8 @@ async function bulkEnrich(mode){
     txt.innerHTML='<b>'+(done+1)+' / '+list.length+'</b> &middot; '+esc(a.title);
     bar.style.width=Math.round(done/list.length*100)+'%';
     const before=(a.genres||[]).slice().sort().join('|');
-    if(mode==='reset'){a.genres=[];a.moods=[];a.about=''}
-    try{await enrich(a.id,'',true)}catch(e){}
+    if(mode==='reset'){a.moods=[];delete a.about}
+    try{await enrich(a.id,'',mode==='reset'?'daCapo':true,true)}catch(e){}
     if((a.genres||[]).slice().sort().join('|')!==before)changed++;
     if(!(a.genres||[]).length)vuoti++;
     done++;
@@ -3037,6 +3103,101 @@ async function bulkEnrich(mode){
     (vuoti?', <b>'+vuoti+' rimasti senza</b>':', nessuno rimasto senza generi')+'.';
   bulkRunning=false;bulkStop=false;
   renderAll();scheduleSync();
+}
+/* ---- date di uscita degli album recenti ----
+   Gli album entrati prima di questa versione hanno solo l'anno. Per quelli
+   degli ultimi due anni la data vera conta (ordine, riprove dei tag),
+   quindi la recupero una volta, in sottofondo: da Spotify venti alla volta,
+   se no da iTunes, che ne accetta molte insieme. Ogni album lo provo una
+   volta al mese al massimo, cosi' quelli che non si trovano non tornano a
+   ogni apertura. */
+const USCITE_MESE=30*864e5;
+function uscitaDaCercare(a){
+  const anno=new Date().getFullYear();
+  return !a.pending&&(!a.year||a.year>=anno-1)&&dataUscita(a.uscita).length<10&&
+    !(+a.uscitaCercata&&now()-a.uscitaCercata<USCITE_MESE);
+}
+async function completaUscite(){
+  const lista=DB.albums.filter(uscitaDaCercare);
+  if(!lista.length||!navigator.onLine)return 0;
+  let trovate=0;
+  const metti=(a,d)=>{
+    const u=dataUscita(d);
+    if(u&&(!a.year||u.slice(0,4)===String(a.year))&&u.length>dataUscita(a.uscita).length){
+      a.uscita=u;trovate++;
+    }
+  };
+  const conSp=lista.filter(a=>idSpotify(a.spotify||a.listenUrl));
+  if(conSp.length&&spotCollegato()){
+    try{
+      for(let i=0;i<conSp.length;i+=20){
+        const gruppo=conSp.slice(i,i+20);
+        const d=await spotChiama('/albums?ids='+gruppo.map(a=>idSpotify(a.spotify||a.listenUrl)).join(','));
+        const per=new Map(((d&&d.albums)||[]).filter(Boolean).map(x=>[x.id,x]));
+        gruppo.forEach(a=>{const x=per.get(idSpotify(a.spotify||a.listenUrl));if(x)metti(a,x.release_date)});
+        await sleep(600);
+      }
+    }catch(e){}
+  }
+  const conIt=lista.filter(a=>dataUscita(a.uscita).length<10&&itunesId(a.itunesUrl));
+  for(let i=0;i<conIt.length;i+=100){
+    const gruppo=conIt.slice(i,i+100);
+    try{
+      const d=await jsonp('https://itunes.apple.com/lookup?id='+gruppo.map(a=>itunesId(a.itunesUrl)).join(','));
+      const per=new Map(((d&&d.results)||[]).map(x=>[String(x.collectionId),x]));
+      gruppo.forEach(a=>{const x=per.get(itunesId(a.itunesUrl));if(x)metti(a,x.releaseDate)});
+    }catch(e){}
+    await sleep(600);
+  }
+  const t=now();
+  lista.forEach(a=>{a.uscitaCercata=t;a.updatedAt=t});
+  saveLocal();scheduleSync();
+  if(trovate&&(libSort==='year'||libSort==='yearold'))renderLib();
+  return trovate;
+}
+/* ---- i tag dei dischi appena usciti ----
+   Un disco nuovo ci mette un po' a ricevere i generi. Invece di riprovarlo
+   tu, lo ripasso io a una settimana, un mese e tre mesi dall'uscita, poi
+   basta. Le riprove aggiungono soltanto, quindi non c'e' niente da perdere.
+   Le soglie gia' passate quando l'hai aggiunto non contano: l'album e'
+   appena stato cercato. Se ha solo l'anno, conto dal giorno dell'aggiunta. */
+const RIPROVE_GIORNI=[7,30,90];
+const RIPROVE_PER_VOLTA=5;
+function baseRiprova(a){
+  const u=dataUscita(a.uscita);
+  if(u.length>=7&&(!a.year||u.slice(0,4)===String(a.year))){
+    const t=Date.parse((u+'-01').slice(0,10)+'T12:00:00Z');
+    if(t)return t;
+  }
+  if(a.year&&a.year>=new Date().getFullYear())return +a.addedAt||0;
+  return 0;
+}
+function soglieDa(giorni){return RIPROVE_GIORNI.filter(g=>giorni>=g).length}
+function riprovaDovuta(a){
+  if(a.pending)return false;
+  const b=baseRiprova(a);if(!b)return false;
+  const giorni=(now()-b)/864e5;
+  if(giorni<RIPROVE_GIORNI[0]||giorni>RIPROVE_GIORNI[RIPROVE_GIORNI.length-1]+30)return false;
+  const gia=Math.max(+a.tagRiprove||0,soglieDa(((+a.addedAt||0)-b)/864e5));
+  return soglieDa(giorni)>gia;
+}
+let riprovaInCorso=false;
+async function riprovaTagNuovi(quanti){
+  if(riprovaInCorso||bulkRunning||!navigator.onLine)return 0;
+  const lista=DB.albums.filter(riprovaDovuta).slice(0,quanti||RIPROVE_PER_VOLTA);
+  if(!lista.length)return 0;
+  riprovaInCorso=true;let n=0;
+  try{
+    for(const a of lista){
+      if(bulkRunning)break;
+      await queueEnrich(a.id,'',true,true);
+      const cur=DB.albums.find(x=>x.id===a.id);
+      if(cur){cur.tagRiprove=soglieDa((now()-baseRiprova(cur))/864e5);cur.updatedAt=now();n++}
+      await sleep(discogsKey()?400:1400);
+    }
+  }finally{riprovaInCorso=false}
+  saveLocal();scheduleSync();
+  return n;
 }
 /* ---- durate mancanti ----
    La durata si prende una volta sola, quando l'album entra in libreria. Se
@@ -3568,6 +3729,7 @@ async function albumDeezer(id){
   const lista=((d.tracks&&d.tracks.data)||[]).map((t,i)=>({n:i+1,t:t.title,ms:(+t.duration||0)*1000}));
   return{title:cleanTitle(d.title),artist:(d.artist&&d.artist.name)||'',
     year:d.release_date?+String(d.release_date).slice(0,4)||null:null,
+    uscita:dataUscita(d.release_date),
     cover:d.cover_xl||d.cover_big||'',tracks:d.nb_tracks||lista.length||null,
     tracklist:lista.length?lista:null,durata:(+d.duration||0)*1000||null,
     kind:detectKind(d.title,d.nb_tracks,d.record_type),
@@ -3584,6 +3746,7 @@ async function albumItunes(id){
     .sort((a,b)=>a.n-b.n);
   return{title:cleanTitle(col.collectionName),artist:col.artistName||'',
     year:col.releaseDate?+col.releaseDate.slice(0,4):null,
+    uscita:dataUscita(col.releaseDate),
     cover:bigCover(col.artworkUrl100),tracks:col.trackCount||lista.length||null,
     tracklist:lista.length?lista:null,
     durata:lista.reduce((x,t)=>x+(t.ms||0),0)||null,
@@ -3741,7 +3904,7 @@ async function mbDaUrl(url){
   const data=rg['first-release-date']||d.date||'';
   const ms=lista.reduce((x,t)=>x+(t.ms||0),0);
   return{title:cleanTitle(d.title||rel.title||''),artist:creditoDi(d)||'',
-    year:data?+String(data).slice(0,4)||null:null,mbid:rg.id||'',
+    year:data?+String(data).slice(0,4)||null:null,uscita:dataUscita(data),mbid:rg.id||'',
     tracks:lista.length||null,tracklist:lista.length?lista:null,durata:ms||null,
     cover:rg.id?'https://coverartarchive.org/release-group/'+rg.id+'/front-500':''};
 }
@@ -4341,6 +4504,7 @@ function quietAdd(c){
   if(c.spotify){al.spotify=c.spotify;al.platName=c.platName||'Spotify'}
   if(c.tracklist)al.tracklist=c.tracklist;
   if(c.durata)al.durata=c.durata;
+  if(dataUscita(c.uscita))al.uscita=dataUscita(c.uscita);
   if(c.linkFissato){al.linkFissato=true;al.daLink=true}
   DB.albums.unshift(al);saveLocal();scheduleSync();renderAll();
   queueEnrich(al.id,c.genre||'');
@@ -5250,7 +5414,10 @@ function openAlbum(id,keepScroll){
       const s=document.createElement('span');s.className='chip '+cls;
       if(modGeneri){
         s.innerHTML=esc(t)+' <button aria-label="togli questo genere">&times;</button>';
-        s.querySelector('button').onclick=()=>{a[k].splice(i,1);save(a);openAlbum(id,true);renderAll()};
+        s.querySelector('button').onclick=()=>{
+          const via=a[k].splice(i,1)[0];
+          if(k==='genres'&&via)segnaGenereTolto(a,via);
+          save(a);openAlbum(id,true);renderAll()};
       }else{
         s.classList.add('cliccabile');
         s.textContent=t;
@@ -5274,7 +5441,9 @@ function openAlbum(id,keepScroll){
         t=n[0];
       }
       if((a[k]||[]).includes(t)){toast('C\u2019\u00e8 gi\u00e0: '+t);return}
-      (a[k]=a[k]||[]).push(t);save(a);openAlbum(id,true);renderAll()};
+      (a[k]=a[k]||[]).push(t);
+      if(k==='genres')segnaGenereMio(a,t);
+      save(a);openAlbum(id,true);renderAll()};
     h.appendChild(add);
   };
   chips('gz',a.genres,'g','genres');
@@ -5530,7 +5699,17 @@ function openAlbum(id,keepScroll){
   };
   const cd=document.getElementById('bCovDel');
   if(cd)cd.onclick=()=>setCover('');
-  document.getElementById('bRe').onclick=()=>{a.genres=[];a.moods=[];save(a);toast('Cerco i generi...');queueEnrich(id,'')};
+  /* La riprova aggiunge, non cancella piu': serve proprio per i dischi
+     usciti da poco, che i tag li ricevono col tempo. */
+  document.getElementById('bRe').onclick=()=>{
+    const prima=new Set(a.genres||[]);
+    toast('Cerco altri generi...');
+    queueEnrich(id,'',true).then(()=>{
+      const cur=DB.albums.find(x=>x.id===id);if(!cur)return;
+      const nuovi=(cur.genres||[]).filter(g=>!prima.has(g)).length;
+      toast(nuovi?(nuovi===1?'1 genere nuovo':nuovi+' generi nuovi'):'Per ora niente di nuovo');
+    });
+  };
   document.getElementById('bDel').onclick=()=>{
     if(!confirm('Eliminare "'+a.title+'"?'))return;
     removeAlbum(id);closeModal();renderAll();toast('Eliminato');
@@ -5608,7 +5787,7 @@ let raccSort='recenti';
    solo, cosi' la tendina e chi ordina non possono dire cose diverse. */
 const ORDINI=[
   ['added','Aggiunti di recente'],['alpha','Titolo A-Z'],['artist','Artista A-Z'],
-  ['year','Anno (recenti)'],['yearold','Anno (vecchi)'],['rating','Voto pi\u00f9 alto'],
+  ['year','Anno (recente)'],['yearold','Anno (vecchio)'],['rating','Voto pi\u00f9 alto'],
   ['ascoltati','Ascoltati di recente'],['davotare','Ascoltati senza voto'],
   ['toccati','Modificati di recente']
 ];
@@ -6209,6 +6388,13 @@ function vivi(quale,dim,tutte,scelte){
    non ancora ascoltati non hanno una data di ascolto da usare, quindi non me
    la invento: restano in fondo, nel loro ordine di sempre, cioe' gli ultimi
    arrivati per primi. */
+/* la data dice il giorno, l'anno dice chi comanda: se una fonte ha una
+   data di un anno diverso da quello della scheda, vale la scheda */
+function chiaveUscita(a){
+  const u=dataUscita(a.uscita);
+  if(u&&(!a.year||u.slice(0,4)===String(a.year)))return(u+'-00-00').slice(0,10);
+  return a.year?String(a.year)+'-00-00':'';
+}
 function ordinatore(quale){
   const quando=a=>+a.listenedAt||0;
   const primaGliAscoltati=(x,y)=>{
@@ -6219,8 +6405,11 @@ function ordinatore(quale){
   return{
     alpha:(x,y)=>(x.title||'').localeCompare(y.title||''),
     artist:(x,y)=>(x.artist||'').localeCompare(y.artist||''),
-    year:(x,y)=>(y.year||0)-(x.year||0),
-    yearold:(x,y)=>(x.year||9999)-(y.year||9999),
+    /* per data di uscita quando c'e', se no per anno. Nello stesso anno
+       quelli con la data esatta vengono prima, dal piu' nuovo; quelli con
+       l'anno solo stanno in fondo all'anno */
+    year:(x,y)=>{const a=chiaveUscita(x)||'0',b=chiaveUscita(y)||'0';return a<b?1:a>b?-1:0},
+    yearold:(x,y)=>{const a=chiaveUscita(x)||'9',b=chiaveUscita(y)||'9';return a<b?-1:a>b?1:0},
     rating:(x,y)=>(y.rating||-1)-(x.rating||-1),
     added:(x,y)=>(y.addedAt||0)-(x.addedAt||0),
     /* l'ultima volta che ci hai messo mano tu, qualunque cosa tu abbia fatto.
@@ -7877,6 +8066,11 @@ function sistemaGeneriSalvati(){
     }),mappa);
     if(dopo.join('|')!==prima){a.genres=dopo;a.updatedAt=now();tocchi++}
   });
+  (DB.albums||[]).forEach(a=>['generiMiei','generiTolti'].forEach(k=>{
+    if(!(a[k]||[]).length)return;
+    const dopo=normalizzaGeneri(a[k],mappa);
+    if(dopo.join('|')!==a[k].join('|')){a[k]=dopo;a.updatedAt=now();tocchi++}
+  }));
   if(tocchi){saveLocal();scheduleSync();}
   return tocchi;
 }
@@ -7927,6 +8121,22 @@ window.addEventListener('focus',()=>{consumeShare(false).catch(()=>{})});
 if(ghCfg())syncNow().catch(()=>{});
 /* le schede rimaste senza artista le ripasso in sottofondo, senza fretta */
 setTimeout(()=>{completaSenzaArtista().catch(()=>{})},4000);
+/* Poi le date dei dischi recenti e i tag di quelli appena usciti. Non solo
+   all'apertura: sul PC l'app resta aperta per giorni, e un giro solo
+   all'avvio voleva dire cinque album e poi piu' niente. Quindi un giro
+   ogni mezz'ora finche' resta aperta, e uno quando torni sull'app dopo
+   averla lasciata in secondo piano, ma mai due a meno di mezz'ora. */
+const GIRO_TAG_OGNI=30*60000;
+let ultimoGiroTag=0;
+function giroTag(){
+  if(now()-ultimoGiroTag<GIRO_TAG_OGNI)return false;
+  ultimoGiroTag=now();
+  completaUscite().catch(()=>0).then(()=>riprovaTagNuovi()).catch(()=>{});
+  return true;
+}
+setTimeout(giroTag,20000);
+setInterval(giroTag,GIRO_TAG_OGNI+5000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)setTimeout(giroTag,5000)});
 </script>
 </body>
 </html>
