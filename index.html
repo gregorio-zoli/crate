@@ -758,7 +758,7 @@ details.hint[open]>summary::after{transform:rotate(90deg)}
 /* ==========================================================
    1. STATO
    ========================================================== */
-const APP_VER='134';
+const APP_VER='135';
 const LS='crate.v1', LSK='crate.lfmkey', LSG='crate.gh', LSS='crate.lastsync', LSP='crate.prefs';
 const LSSP='crate.spot';   /* accesso a Spotify: resta su QUESTO dispositivo */
 let DB={albums:[],deleted:[],cfg:{},raccolte:[]};
@@ -5824,12 +5824,59 @@ function topMacroAttivo(){
      piccoli si raggiungono col contenitore. La spunta e' li' se cambi idea. */
   return (DB.cfg||{}).topMacro==='si';
 }
+/* ---- i generi dentro i generi ----
+   "atmospheric black metal" e' black metal, anche se "black metal" da solo
+   non c'e' scritto: filtrando per black metal quel disco deve uscire. La
+   regola guarda la coda del nome, parola per parola: "atmospheric black
+   metal" sta sotto "black metal", "deep house" sotto "house", "midwest emo"
+   sotto "emo", "garage rock revival" sotto "garage rock".
+   Un'eccezione sola, ed e' voluta: "post" davanti a una parola sola non
+   eredita. Il post-punk non e' punk, il post-hardcore non e' hardcore, il
+   post-rock non e' rock: sono generi nati per andarsene da quello di prima.
+   Davanti a un nome di due parole invece si': il "post black metal" resta
+   black metal. E "post punk revival" sta sotto "post punk". */
+const PADRI=new Map();
+function generiPadre(g){
+  const t=String(g||'').trim().toLowerCase();
+  if(PADRI.has(t))return PADRI.get(t);
+  const out=[];
+  let base=t;
+  if(/ revival$/.test(base)){base=base.replace(/ revival$/,'');out.push(base)}
+  const p=base.split(' ');
+  for(let i=1;i<p.length;i++){
+    if(p[i-1]==='post'&&i===p.length-1)continue;
+    out.push(p.slice(i).join(' '));
+  }
+  const r=[...new Set(out)].filter(x=>x&&x!==t);
+  PADRI.set(t,r);
+  return r;
+}
+/* i generi di un album con dentro anche quelli di cui sono un ramo. Se c'e'
+   "reali", tengo solo i padri che esistono davvero come generi nella
+   libreria: "hip hop" si', "hop" no. */
+function generiConPadri(lista,reali){
+  const s=new Set();
+  (lista||[]).forEach(g=>{
+    const t=String(g||'').trim().toLowerCase();if(!t)return;
+    s.add(t);
+    generiPadre(t).forEach(x=>{if(!reali||reali.has(x))s.add(x)});
+  });
+  return s;
+}
+function generiReali(){
+  const s=new Set();
+  DB.albums.forEach(a=>(a.genres||[]).forEach(g=>{const t=String(g||'').trim().toLowerCase();if(t)s.add(t)}));
+  return s;
+}
 function sottogeneri(){
   const conta=new Map(),macro=new Set(MACRO.map(m=>m[0]));
+  const reali=generiReali();
   DB.albums.forEach(a=>{
     if(a.pending)return;
-    [...new Set(a.genres||[])].forEach(g=>{
-      const s=String(g||'').trim().toLowerCase();
+    /* contano anche i rami: le 3 schede "atmospheric black metal" fanno
+       crescere la pastiglia "black metal" */
+    generiConPadri(a.genres,reali).forEach(g=>{
+      const s=g;
       /* fuori i termini ombrello: "electronic" e "experimental" hanno gia'
          la loro voce nella riga sopra, qui sarebbero un doppione */
       if(!s||macro.has(s)||OMBRELLO_DOPPIO.has(s))return;
@@ -5861,7 +5908,7 @@ function contoPastiglie(){
   const l=new Set(sottogeneri());
   let n=0;
   DB.albums.forEach(a=>{if(a.pending)return;
-    if((a.genres||[]).some(g=>l.has(String(g||'').trim().toLowerCase())))n++});
+    if([...generiConPadri(a.genres)].some(g=>l.has(g)))n++});
   const tot=DB.albums.filter(a=>!a.pending).length;
   return{pastiglie:l.size,album:n,tot,perc:tot?Math.round(n*100/tot):0};
 }
@@ -6314,8 +6361,10 @@ function matches(a,f){
   }
   /* sottogeneri: come i generi, piu' voci = ricerca piu' larga */
   if(f.sotto&&f.sotto.length){
-    const ag=(a.genres||[]).map(x=>String(x).toLowerCase());
-    if(!f.sotto.some(x=>ag.includes(x)))return false;
+    /* un genere trova anche i suoi rami: "black metal" trova "atmospheric
+       black metal" e "depressive black metal" */
+    const ag=generiConPadri(a.genres);
+    if(!f.sotto.some(x=>ag.has(x)))return false;
   }
   /* piu' decenni = piu' fette di tempo, esattamente come piu' fasce di durata */
   if(f.dec&&f.dec.length&&(!a.year||
@@ -6397,7 +6446,7 @@ function poolSenza(quale,dim){
 function vivi(quale,dim,tutte,scelte){
   const pool=poolSenza(quale,dim),ok=new Set();
   if(dim==='generi')pool.forEach(a=>macroDiAlbum(a).forEach(x=>ok.add(x)));
-  if(dim==='sotto')pool.forEach(a=>(a.genres||[]).forEach(x=>ok.add(String(x).trim().toLowerCase())));
+  if(dim==='sotto')pool.forEach(a=>generiConPadri(a.genres).forEach(x=>ok.add(x)));
   if(dim==='dec')pool.forEach(a=>{if(a.year)ok.add(String(Math.floor(a.year/10)*10))});
   if(dim==='len')tutte.forEach(et=>{if(pool.some(a=>nellaFascia(a,et)))ok.add(et)});
   if(dim==='racc')pool.forEach(a=>Object.keys(a.raccolte||{}).forEach(x=>ok.add(x)));
@@ -6554,10 +6603,10 @@ function renderStats(){
    per mood, ordinata dal migliore. */
 function mediePer(quali){
   const m=new Map();
+  const pastiglie=new Set(quali==='generi'?[]:sottogeneri());
   DB.albums.forEach(a=>{
     if(!a.rating||a.pending)return;
-    const vals=quali==='generi'?macroDiAlbum(a):[...new Set((a.genres||[])
-      .map(g=>String(g).toLowerCase()))].filter(g=>sottogeneri().includes(g));
+    const vals=quali==='generi'?macroDiAlbum(a):[...generiConPadri(a.genres)].filter(g=>pastiglie.has(g));
     [...new Set(vals)].forEach(v=>{
       if(!v)return;
       const c=m.get(v)||{n:0,s:0};
